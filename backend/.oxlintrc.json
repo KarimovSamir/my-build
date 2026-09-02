@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+  "ignorePatterns": ["src/generated/**", "dist/**", "node_modules/**"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "rules": {
+    "no-unused-vars": [
+      "error",
+      { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
+    ],
+    // Модули NestJS — это классы без тела с декоратором @Module. Так устроен
+    // фреймворк, а не небрежность.
+    "typescript/no-extraneous-class": ["error", { "allowWithDecorator": true }]
+  }
+}

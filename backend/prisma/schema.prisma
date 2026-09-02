@@ -1,0 +1,19 @@
+// Схема базы данных MyBuild.
+//
+// Фаза 0 — только подключение: datasource и генератор клиента.
+// Доменная модель (User, Order, Offer, OrderFile, Notification) появится
+// в Фазе 1 по ТЗ §3.
+//
+// Строки подключения здесь не задаются: начиная с Prisma 7 они живут
+// в backend/prisma.config.ts, а приложение подключается через драйвер-адаптер
+// (см. src/prisma/prisma.service.ts).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
