@@ -1,15 +1,32 @@
 import { Module } from '@nestjs/common';
 
+import { OwnershipGuard } from '../../common/guards/ownership.guard.js';
+import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
+import { FilesModule } from '../files/files.module.js';
 import { OrderStateMachine } from './order-state-machine.js';
 import { OrderTransitionService } from './order-transition.service.js';
+import { OrdersController } from './orders.controller.js';
+import { OrdersService } from './orders.service.js';
 
 /**
- * Модуль заказов. Пока в нём только ядро — state-машина и её транзакционная
- * обёртка. Контроллеры и CRUD появятся в Фазе 3, модуль предложений будет
- * ходить в переходы через `OrderTransitionService` (ТЗ §10).
+ * Заказы: CRUD клиента (ТЗ §5) плюс ядро переходов, которым в Фазе 4
+ * воспользуется модуль предложений.
+ *
+ * `OwnershipGuard` и `ThrottleGuard` объявлены провайдерами: они висят
+ * на отдельных маршрутах через `@UseGuards`, и Nest берёт их экземпляры
+ * из этого модуля. Экземпляр один на модуль — счётчик частоты запросов
+ * общий для всех маршрутов контроллера, как и должно быть.
  */
 @Module({
-  providers: [OrderStateMachine, OrderTransitionService],
+  imports: [FilesModule],
+  controllers: [OrdersController],
+  providers: [
+    OrderStateMachine,
+    OrderTransitionService,
+    OrdersService,
+    OwnershipGuard,
+    ThrottleGuard,
+  ],
   exports: [OrderStateMachine, OrderTransitionService],
 })
 export class OrdersModule {}

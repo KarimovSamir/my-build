@@ -91,12 +91,29 @@ export function formatOrderNumber(orderNumber: number): string {
 }
 
 /**
+ * Наибольший возможный номер заказа.
+ *
+ * `Order.orderNumber` — колонка типа `Int` (32-разрядное целое со знаком),
+ * и число больше этого в неё не помещается. Граница нужна не для красоты:
+ * без неё поиск по длинной строке цифр доходил бы до базы и падал там
+ * с «value out of range for type integer», то есть на 500.
+ */
+export const MAX_ORDER_NUMBER = 2_147_483_647;
+
+/**
  * Разбор поискового запроса по номеру заказа.
- * Принимает и `ORD-7829`, и `7829` (ТЗ §4.1). Возвращает null, если это не номер.
+ * Принимает и `ORD-7829`, и `7829` (ТЗ §4.1). Возвращает null, если это
+ * не номер или если такого номера не может существовать.
  */
 export function parseOrderNumber(query: string): number | null {
   const match = /^\s*(?:ORD-)?(\d+)\s*$/i.exec(query);
   if (!match?.[1]) return null;
+
   const parsed = Number.parseInt(match[1], 10);
-  return Number.isSafeInteger(parsed) ? parsed : null;
+
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > MAX_ORDER_NUMBER) {
+    return null;
+  }
+
+  return parsed;
 }

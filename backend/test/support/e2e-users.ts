@@ -57,6 +57,23 @@ export async function createE2eUser(
 }
 
 /**
+ * Войти паролем и получить access-токен — тем же способом, каким это делает
+ * браузер. Токен нужен тестам, которые ходят в API через HTTP.
+ */
+export async function signInE2eUser(user: E2eUser): Promise<string> {
+  const { data, error } = await createSupabaseAdminClient().auth.signInWithPassword({
+    email: user.email,
+    password: user.password,
+  });
+
+  if (error || !data.session) {
+    throw new Error(`Не удалось войти как ${user.email}: ${error?.message}`);
+  }
+
+  return data.session.access_token;
+}
+
+/**
  * Удалить все учётные записи домена @e2e.test.
  * Профили, заказы, предложения и уведомления уходят каскадом.
  */

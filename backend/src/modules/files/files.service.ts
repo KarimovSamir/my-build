@@ -7,10 +7,11 @@
  */
 
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { FileOwnerType, OfferStatus, type OrderFileDto } from '@mybuild/shared';
+import { FileOwnerType, type OrderFileDto } from '@mybuild/shared';
 
 import type { OrderFile } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { EXECUTOR_OFFER_STATUSES } from '../orders/order-participation.js';
 import {
   prepareFile,
   sanitizeFileName,
@@ -20,19 +21,16 @@ import {
 import { StorageService } from './storage.service.js';
 
 /**
- * Статусы предложения, при которых компания — участник заказа и видит его файлы.
+ * Статусы предложения, при которых компания видит файлы заказа: она его
+ * исполнитель. Компания с `SENT`-предложением файлов не видит — она ещё
+ * не выбрана (ТЗ §4.1, приватность).
  *
- * Отличается от `EXECUTING_OFFER_STATUSES` в `OrderTransitionService`: там речь
- * про заказ в работе, а здесь добавлен `COMPLETED` — после сдачи компания
- * должна сохранять доступ к тому, что сама загружала, и к заданию клиента.
- * Компания с `SENT`-предложением файлов не видит: она ещё не выбрана.
+ * Список общий с модулем заказов: два независимых перечня одних и тех же
+ * статусов рано или поздно разошлись бы. Он шире, чем `EXECUTING_OFFER_STATUSES`
+ * в `OrderTransitionService`: там речь про заказ в работе, а доступ к файлам
+ * сохраняется и после завершения.
  */
-const PARTICIPATING_OFFER_STATUSES: OfferStatus[] = [
-  OfferStatus.ACCEPTED,
-  OfferStatus.WORK_SUBMITTED,
-  OfferStatus.BACK_FOR_OVERRIDE,
-  OfferStatus.COMPLETED,
-];
+const PARTICIPATING_OFFER_STATUSES = EXECUTOR_OFFER_STATUSES;
 
 export interface AttachFilesParams {
   orderId: string;
@@ -174,18 +172,31 @@ export class FilesService {
   }
 
   /**
-   * Убрать из бакета всё, что относится к заказу.
+   * Ключи объектов заказа в хранилище.
    *
-   * Нужно перед удалением заказа: строки `OrderFile` уходят каскадом,
-   * а объекты в хранилище — нет, и остались бы навсегда.
+   * Читаются до удаления заказа: строки `OrderFile` уходят каскадом,
+   * и после этого узнать, что убирать из бакета, уже неоткуда.
    */
-  async removeStorageObjectsForOrder(orderId: string): Promise<void> {
+  async listStorageKeys(orderId: string): Promise<string[]> {
     const files = await this.prisma.orderFile.findMany({
       where: { orderId },
       select: { storageKey: true },
     });
 
-    await this.storage.remove(files.map((file) => file.storageKey));
+    return files.map((file) => file.storageKey);
+  }
+
+  /** Убрать объекты из бакета. Ошибку не бросает: уборка не должна ронять операцию. */
+  removeStorageObjects(storageKeys: string[]): Promise<void> {
+    return this.storage.remove(storageKeys);
+  }
+
+  /**
+   * Убрать из бакета всё, что относится к заказу, пока его строки ещё на месте.
+   * Для случаев, когда сам заказ не удаляется, — например, уборка за тестом.
+   */
+  async removeStorageObjectsForOrder(orderId: string): Promise<void> {
+    await this.storage.remove(await this.listStorageKeys(orderId));
   }
 
   /**

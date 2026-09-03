@@ -2,14 +2,18 @@ import 'dotenv/config';
 
 import { Controller, Get, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { createClient } from '@supabase/supabase-js';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Role } from '@mybuild/shared';
 
 import { Roles } from '../src/common/decorators/roles.decorator.js';
-import { createE2eUser, dropE2eUsers, type E2eUser } from './support/e2e-users.js';
+import {
+  createE2eUser,
+  dropE2eUsers,
+  signInE2eUser,
+  type E2eUser,
+} from './support/e2e-users.js';
 
 /**
  * Проверяет модель доступа целиком, на живом Supabase (ТЗ §10, DoD Фазы 2):
@@ -28,26 +32,6 @@ class CompanyOnlyController {
   read(): { ok: boolean } {
     return { ok: true };
   }
-}
-
-/** Вход по паролю — тем же способом, каким это делает браузер. */
-async function signIn(user: E2eUser): Promise<string> {
-  const supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SECRET_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: user.email,
-    password: user.password,
-  });
-
-  if (error || !data.session) {
-    throw new Error(`Не удалось войти как ${user.email}: ${error?.message}`);
-  }
-
-  return data.session.access_token;
 }
 
 describe('Аутентификация и доступ (e2e)', () => {
@@ -87,7 +71,10 @@ describe('Аутентификация и доступ (e2e)', () => {
     configureApp(app);
     await app.init();
 
-    [clientToken, companyToken] = await Promise.all([signIn(client), signIn(company)]);
+    [clientToken, companyToken] = await Promise.all([
+      signInE2eUser(client),
+      signInE2eUser(company),
+    ]);
   });
 
   afterAll(async () => {
