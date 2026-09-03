@@ -1,12 +1,28 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
 
-import { ComingSoon, PageHeader } from "@/components/page-shell";
+import { OrdersList } from "@/components/orders/orders-list";
+import { OrdersListSkeleton } from "@/components/orders/orders-list-skeleton";
+import { OrdersSearch } from "@/components/orders/orders-search";
+import { OrdersStatusTabs } from "@/components/orders/orders-status-tabs";
+import { PageHeader } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ordersFilterKey, parseOrdersFilter } from "@/lib/orders-filter";
 
 export const metadata = { title: "Все заказы" };
 
-export default function OrdersPage() {
+/**
+ * Все заказы клиента (ТЗ §7).
+ *
+ * Поиск и вкладки рендерятся сразу, а сам список — под `<Suspense>` с ключом
+ * по фильтру: при смене выборки скелет показывается только на месте таблицы,
+ * поэтому поле поиска не перерисовывается и не теряет фокус при наборе.
+ */
+export default async function OrdersPage({ searchParams }: PageProps<"/orders">) {
+  const filter = parseOrdersFilter(await searchParams);
+
   return (
     <>
       <PageHeader
@@ -21,9 +37,17 @@ export default function OrdersPage() {
           </Button>
         }
       />
-      <ComingSoon phase="Фазе 3">
-        Список заказов с поиском, вкладками по статусам и пагинацией
-      </ComingSoon>
+
+      <Card>
+        <CardContent className="flex flex-col gap-3">
+          <OrdersSearch filter={filter} />
+          <OrdersStatusTabs filter={filter} />
+        </CardContent>
+      </Card>
+
+      <Suspense key={ordersFilterKey(filter)} fallback={<OrdersListSkeleton />}>
+        <OrdersList filter={filter} />
+      </Suspense>
     </>
   );
 }
