@@ -14,6 +14,7 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 
 import {
+  MAX_FILES_PER_REQUEST,
   MAX_FILE_SIZE_BYTES,
   Role,
   type OrderDetail,
@@ -47,9 +48,6 @@ import { OrdersService } from './orders.service.js';
  * он. Детали открыты обеим ролям, но состав ответа зависит от того, кто
  * смотрит (ТЗ §4.1) — этим занимается `order-view`, а не контроллер.
  */
-
-/** Сколько файлов можно приложить к заказу за один раз. */
-const MAX_FILES_PER_REQUEST = 10;
 
 /**
  * То, что multer кладёт в запрос. Пакет `@types/multer` не ставим: из всего

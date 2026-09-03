@@ -15,7 +15,7 @@ import {
   type ValidatorConstraintInterface,
 } from 'class-validator';
 
-import { ObjectType, OrderCategory } from '@mybuild/shared';
+import { MONEY_PATTERN, ORDER_LIMITS, ObjectType, OrderCategory } from '@mybuild/shared';
 
 /**
  * Создание заказа (`POST /orders`, ТЗ §4.1).
@@ -44,9 +44,6 @@ const optionalField = () =>
     const trimmed = value.trim();
     return trimmed === '' ? undefined : trimmed;
   });
-
-/** Сумма в формате колонки БД: Decimal(12, 2). */
-const MONEY = /^\d{1,10}(\.\d{1,2})?$/;
 
 /**
  * Сегодняшний день по UTC.
@@ -97,7 +94,9 @@ const IsNotPastDate =
 export class CreateOrderDto {
   @IsString()
   @trim()
-  @Length(3, 200, { message: 'Название заказа — от 3 до 200 символов' })
+  @Length(ORDER_LIMITS.title.min, ORDER_LIMITS.title.max, {
+    message: `Название заказа — от ${ORDER_LIMITS.title.min} до ${ORDER_LIMITS.title.max} символов`,
+  })
   title!: string;
 
   @IsEnum(OrderCategory, { message: 'Выберите категорию заказа' })
@@ -108,24 +107,33 @@ export class CreateOrderDto {
 
   @IsString()
   @trim()
-  @Length(10, 5000, { message: 'Описание работ — от 10 до 5000 символов' })
+  @Length(ORDER_LIMITS.description.min, ORDER_LIMITS.description.max, {
+    message: `Описание работ — от ${ORDER_LIMITS.description.min} до ${ORDER_LIMITS.description.max} символов`,
+  })
   description!: string;
 
   @IsString()
   @trim()
-  @Length(5, 300, { message: 'Адрес объекта — от 5 до 300 символов' })
+  @Length(ORDER_LIMITS.address.min, ORDER_LIMITS.address.max, {
+    message: `Адрес объекта — от ${ORDER_LIMITS.address.min} до ${ORDER_LIMITS.address.max} символов`,
+  })
   address!: string;
 
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Площадь — число, не более двух знаков после запятой' })
+  @IsNumber(
+    { maxDecimalPlaces: ORDER_LIMITS.squareMeters.maxDecimals },
+    { message: 'Площадь — число, не более двух знаков после запятой' },
+  )
   @IsPositive({ message: 'Площадь должна быть больше нуля' })
-  @Max(1_000_000, { message: 'Площадь не может быть больше 1 000 000 м²' })
+  @Max(ORDER_LIMITS.squareMeters.max, {
+    message: 'Площадь не может быть больше 1 000 000 м²',
+  })
   squareMeters!: number;
 
   /** Ожидание клиента, а не цена сделки. Строкой — чтобы не терять копейки. */
   @IsOptional()
   @optionalField()
-  @Matches(MONEY, { message: 'Бюджет — сумма вида 150000 или 150000.50' })
+  @Matches(MONEY_PATTERN, { message: 'Бюджет — сумма вида 150000 или 150000.50' })
   clientBudget?: string;
 
   /** Дата в формате ISO-8601 (`2026-10-01`). В `Date` превращает сервис. */

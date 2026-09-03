@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
-import { Field, FormError, FormSuccess } from "@/components/auth/form-parts";
+import { Field, FormError, FormSuccess } from "@/components/form-parts";
 import { Button } from "@/components/ui/button";
 import {
   Select,

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { FormError } from "@/components/auth/form-parts";
+import { FormError } from "@/components/form-parts";
 import { LoginForm } from "@/components/auth/login-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { safeNextPath } from "@/lib/redirects";

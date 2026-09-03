@@ -2,10 +2,13 @@ import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-import { ALLOWED_FILE_MIME_TYPES, MAX_FILE_SIZE_BYTES } from '@mybuild/shared';
+import {
+  ALLOWED_FILE_MIME_TYPES,
+  FILE_EXTENSION_MIME,
+  MAX_FILE_SIZE_BYTES,
+} from '@mybuild/shared';
 
 import {
-  EXTENSION_MIME,
   MIME_ALIASES,
   prepareFile,
   resolveMimeType,
@@ -29,7 +32,7 @@ describe('allowlist из shared/', () => {
   });
 
   it('каждому каноническому типу соответствует расширение', () => {
-    const byExtension = new Set(Object.values(EXTENSION_MIME));
+    const byExtension = new Set(Object.values(FILE_EXTENSION_MIME));
     const canonical = new Set(Object.values(MIME_ALIASES));
 
     expect([...canonical].filter((mime) => !byExtension.has(mime))).toEqual([]);

@@ -9,7 +9,10 @@ import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 
 import {
+  ALLOWED_FILE_EXTENSIONS_HINT,
+  FILE_EXTENSION_MIME,
   MAX_FILE_SIZE_BYTES,
+  fileExtension,
   type AllowedFileMimeType,
 } from '@mybuild/shared';
 
@@ -33,24 +36,6 @@ export interface PreparedFile {
 }
 
 /**
- * Расширение → тип, который мы записываем в базу.
- *
- * Расширение здесь главнее заголовка запроса: браузеры для DWG/DXF в половине
- * случаев присылают `application/octet-stream`, а для остальных типов
- * заголовок легко подделать. Так в `mimeType` всегда лежит одно из значений
- * allowlist'а, а не то, что назвал клиент.
- */
-export const EXTENSION_MIME: Record<string, AllowedFileMimeType> = {
-  '.pdf': 'application/pdf',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.dwg': 'image/vnd.dwg',
-  '.dxf': 'application/dxf',
-};
-
-/**
  * Синонимы MIME: один и тот же тип разные браузеры и CAD-программы называют
  * по-разному. Приводим к каноническому значению, чтобы сравнить с расширением.
  */
@@ -70,8 +55,6 @@ export const MIME_ALIASES: Record<string, AllowedFileMimeType> = {
 
 /** Тип, которым браузер помечает файл, когда не смог его опознать. */
 const UNKNOWN_MIME_TYPES = new Set(['', 'application/octet-stream', 'binary/octet-stream']);
-
-const ALLOWED_EXTENSIONS_HINT = 'PDF, DWG, DXF, PNG, JPEG, WEBP';
 
 /** Максимальная длина имени в ключе хранилища: сам ключ ограничен ~1024 байтами. */
 const MAX_SAFE_NAME_LENGTH = 80;
@@ -125,12 +108,12 @@ export function resolveMimeType(
   originalName: string,
   declaredMimeType: string,
 ): AllowedFileMimeType {
-  const extension = extractExtension(originalName);
-  const expected = EXTENSION_MIME[extension];
+  const extension = fileExtension(originalName);
+  const expected = FILE_EXTENSION_MIME[extension];
 
   if (!expected) {
     throw new BadRequestException(
-      `Файл «${originalName}»: такой тип загрузить нельзя. Разрешены ${ALLOWED_EXTENSIONS_HINT}`,
+      `Файл «${originalName}»: такой тип загрузить нельзя. Разрешены ${ALLOWED_FILE_EXTENSIONS_HINT}`,
     );
   }
 
@@ -161,7 +144,7 @@ export function sanitizeFileName(originalName: string): string {
   // «C:\Users\...\plan.pdf» целиком, а «/» и «..» в ключе — это выход
   // за пределы папки заказа.
   const baseName = (originalName.split(/[/\\]/).pop() ?? '').trim();
-  const extension = extractExtension(baseName);
+  const extension = fileExtension(baseName);
   const stem = extension ? baseName.slice(0, -extension.length) : baseName;
 
   const transliterated = stem
@@ -176,14 +159,4 @@ export function sanitizeFileName(originalName: string): string {
     .slice(0, MAX_SAFE_NAME_LENGTH);
 
   return `${safeStem || 'file'}${extension}`;
-}
-
-/**
- * Расширение в нижнем регистре, вместе с точкой. Пустая строка, если его нет.
- * Пробелы по краям отрезаются: иначе «plan.pdf » дало бы расширение «.pdf ».
- */
-function extractExtension(name: string): string {
-  const trimmed = name.trim();
-  const dot = trimmed.lastIndexOf('.');
-  return dot > 0 ? trimmed.slice(dot).toLowerCase() : '';
 }
