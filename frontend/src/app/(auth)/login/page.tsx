@@ -1,21 +1,41 @@
 import Link from "next/link";
 
+import { FormError } from "@/components/auth/form-parts";
+import { LoginForm } from "@/components/auth/login-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { safeNextPath } from "@/lib/redirects";
 
 export const metadata = { title: "Вход" };
 
-export default function LoginPage() {
+export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  const { next, error } = await searchParams;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Вход</CardTitle>
-        <CardDescription>Форма входа появится в Фазе 2 вместе с Supabase Auth.</CardDescription>
+        <CardDescription>Войдите, чтобы продолжить работу с заказами</CardDescription>
       </CardHeader>
-      <CardContent className="text-muted-foreground text-sm">
-        Нет аккаунта?{" "}
-        <Link href="/register" className="text-primary font-medium hover:underline">
-          Зарегистрироваться
-        </Link>
+      <CardContent className="flex flex-col gap-4">
+        {error === "link" ? (
+          <FormError>
+            Ссылка из письма не сработала: она уже использована или устарела.
+          </FormError>
+        ) : null}
+
+        <LoginForm next={safeNextPath(next)} />
+
+        <div className="text-muted-foreground flex flex-col gap-1 text-sm">
+          <Link href="/forgot-password" className="text-primary hover:underline">
+            Забыли пароль?
+          </Link>
+          <p>
+            Нет аккаунта?{" "}
+            <Link href="/register" className="text-primary font-medium hover:underline">
+              Зарегистрироваться
+            </Link>
+          </p>
+        </div>
       </CardContent>
     </Card>
   );

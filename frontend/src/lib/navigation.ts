@@ -71,9 +71,18 @@ export function getNavigation(role: Role): NavSection[] {
   return role === "COMPANY" ? companyNavigation : clientNavigation;
 }
 
-/** Куда отправляем пользователя сразу после входа. */
-export function getHomeHref(role: Role): string {
-  return role === "COMPANY" ? "/available" : "/orders";
+/**
+ * Куда отправляем пользователя сразу после входа.
+ *
+ * Роли может не быть, если в проекте Supabase не включён хук, добавляющий
+ * claim `user_role`. Тогда ведём в настройки: там профиль виден целиком
+ * и понятно, что с ним не так.
+ */
+export function getHomeHref(role: Role | null): string {
+  if (role === "COMPANY") return "/available";
+  if (role === "CLIENT") return "/orders";
+
+  return "/settings";
 }
 
 /**

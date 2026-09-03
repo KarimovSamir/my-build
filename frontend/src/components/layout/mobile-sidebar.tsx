@@ -6,10 +6,10 @@ import { useState } from "react";
 import { SidebarContent } from "@/components/layout/app-sidebar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import type { CurrentUserPreview } from "@/lib/session";
+import type { CurrentUser } from "@/lib/session";
 
 /** На мобильном боковое меню сворачивается в бургер (ТЗ §7, адаптивность). */
-export function MobileSidebar({ user }: { user: CurrentUserPreview }) {
+export function MobileSidebar({ user }: { user: CurrentUser }) {
   const [open, setOpen] = useState(false);
 
   return (

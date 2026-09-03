@@ -1,19 +1,23 @@
-/**
+﻿/**
  * Тестовые данные для разработки: один клиент, три компании и по заказу
  * в каждом статусе state-машины (ТЗ §10, Фаза 1).
  *
  * Запуск: `npm run db:seed`.
  *
- * Скрипт идемпотентен: сначала удаляет своих пользователей по фиксированным
- * id, а вместе с ними каскадом уходят их заказы, предложения, файлы и
+ * Пользователи заводятся как настоящие учётные записи Supabase Auth: профиль
+ * в public.User создаёт триггер, напрямую в таблицу писать нельзя — на ней
+ * внешний ключ на auth.users (Фаза 2).
+ *
+ * Скрипт идемпотентен: сначала удаляет учётные записи со своими адресами,
+ * а вместе с ними каскадом уходят профили, заказы, предложения, файлы и
  * уведомления. Чужие данные не трогает.
  *
- * Два ограничения, о которых стоит помнить:
- * — Файлы существуют только строками в БД; в бакете Supabase Storage их нет,
- *   поэтому скачивание по signed URL на них не сработает.
- * — Пользователи создаются напрямую в public.User. В Фазе 2 появится внешний
- *   ключ на auth.users, и скрипт придётся переписать на создание учётных
- *   записей через Admin API.
+ * Все тестовые пользователи входят с паролем SEED_PASSWORD и подтверждённым
+ * email — письма при seed не отправляются.
+ *
+ * Ограничение, о котором стоит помнить: файлы существуют только строками
+ * в БД; в бакете Supabase Storage их нет, поэтому скачивание по signed URL
+ * на seed-данных не сработает.
  */
 
 import 'dotenv/config';
@@ -32,6 +36,12 @@ import {
   PrismaClient,
   Role,
 } from '../src/generated/prisma/client.js';
+import {
+  createAuthUser,
+  createSupabaseAdminClient,
+  deleteAuthUsersByEmail,
+  type AuthUserMetadata,
+} from '../src/supabase/supabase-admin.js';
 
 const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 
@@ -44,19 +54,84 @@ if (!connectionString) {
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
-// Фиксированные id — чтобы повторный запуск заменял те же данные,
-// а не плодил новые.
-const CLIENT_ID = '00000000-0000-4000-8000-000000000001';
-const COMPANY_STROYGRAD = '00000000-0000-4000-8000-000000000002';
-const COMPANY_REMONT = '00000000-0000-4000-8000-000000000003';
-const COMPANY_ARCH = '00000000-0000-4000-8000-000000000004';
+/**
+ * Пароль тестовых учётных записей. Годится только для локальной разработки;
+ * на реальных данных seed не запускают.
+ */
+const SEED_PASSWORD = process.env.SEED_PASSWORD ?? 'MyBuild-seed-2026';
 
-const SEED_USER_IDS = [
-  CLIENT_ID,
-  COMPANY_STROYGRAD,
-  COMPANY_REMONT,
-  COMPANY_ARCH,
+type UserKey = 'client' | 'stroygrad' | 'remont' | 'arch';
+
+interface SeedUser {
+  key: UserKey;
+  email: string;
+  metadata: AuthUserMetadata;
+}
+
+// Постоянные адреса вместо постоянных id: id теперь выдаёт Supabase Auth,
+// а повторный запуск находит прежние учётные записи по email и удаляет их.
+const seedUsers: SeedUser[] = [
+  {
+    key: 'client',
+    email: 'anna.client@mybuild.test',
+    metadata: {
+      role: Role.CLIENT,
+      firstName: 'Анна',
+      lastName: 'Смирнова',
+      phone: '+7 900 100-10-01',
+      city: 'Москва',
+      country: 'Россия',
+    },
+  },
+  {
+    key: 'stroygrad',
+    email: 'info@stroygrad.mybuild.test',
+    metadata: {
+      role: Role.COMPANY,
+      firstName: 'Иван',
+      lastName: 'Петров',
+      phone: '+7 900 200-20-02',
+      companyName: 'ООО «СтройГрад»',
+      city: 'Москва',
+      country: 'Россия',
+    },
+  },
+  {
+    key: 'remont',
+    email: 'info@remontplus.mybuild.test',
+    metadata: {
+      role: Role.COMPANY,
+      firstName: 'Пётр',
+      lastName: 'Козлов',
+      phone: '+7 900 300-30-03',
+      companyName: 'ООО «Ремонт Плюс»',
+      city: 'Санкт-Петербург',
+      country: 'Россия',
+    },
+  },
+  {
+    key: 'arch',
+    email: 'info@archproject.mybuild.test',
+    metadata: {
+      role: Role.COMPANY,
+      firstName: 'Ольга',
+      lastName: 'Новикова',
+      phone: '+7 900 400-40-04',
+      companyName: 'ООО «АрхПроект»',
+      city: 'Казань',
+      country: 'Россия',
+    },
+  },
 ];
+
+const userIds = new Map<UserKey, string>();
+
+/** id созданной учётной записи. Доступен только после `seedUsers()`. */
+function userId(key: UserKey): string {
+  const id = userIds.get(key);
+  if (!id) throw new Error(`Пользователь «${key}» ещё не создан`);
+  return id;
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -103,54 +178,29 @@ function companyFile(
   };
 }
 
-async function seedUsers(): Promise<void> {
-  await prisma.user.createMany({
-    data: [
-      {
-        id: CLIENT_ID,
-        email: 'anna.client@mybuild.test',
-        role: Role.CLIENT,
-        firstName: 'Анна',
-        lastName: 'Смирнова',
-        phone: '+7 900 100-10-01',
-        city: 'Москва',
-        country: 'Россия',
-      },
-      {
-        id: COMPANY_STROYGRAD,
-        email: 'info@stroygrad.mybuild.test',
-        role: Role.COMPANY,
-        firstName: 'Иван',
-        lastName: 'Петров',
-        phone: '+7 900 200-20-02',
-        companyName: 'ООО «СтройГрад»',
-        city: 'Москва',
-        country: 'Россия',
-      },
-      {
-        id: COMPANY_REMONT,
-        email: 'info@remontplus.mybuild.test',
-        role: Role.COMPANY,
-        firstName: 'Пётр',
-        lastName: 'Козлов',
-        phone: '+7 900 300-30-03',
-        companyName: 'ООО «Ремонт Плюс»',
-        city: 'Санкт-Петербург',
-        country: 'Россия',
-      },
-      {
-        id: COMPANY_ARCH,
-        email: 'info@archproject.mybuild.test',
-        role: Role.COMPANY,
-        firstName: 'Ольга',
-        lastName: 'Новикова',
-        phone: '+7 900 400-40-04',
-        companyName: 'ООО «АрхПроект»',
-        city: 'Казань',
-        country: 'Россия',
-      },
-    ],
-  });
+/**
+ * Создаёт учётные записи. Профили в public.User пишет триггер — здесь
+ * остаётся только запомнить выданные Supabase идентификаторы.
+ */
+async function createSeedUsers(): Promise<void> {
+  const admin = createSupabaseAdminClient();
+
+  const removed = await deleteAuthUsersByEmail(
+    admin,
+    seedUsers.map((user) => user.email),
+  );
+  if (removed > 0) {
+    console.log(`Удалены прежние тестовые учётные записи: ${removed}`);
+  }
+
+  for (const user of seedUsers) {
+    const created = await createAuthUser(admin, {
+      email: user.email,
+      password: SEED_PASSWORD,
+      metadata: user.metadata,
+    });
+    userIds.set(user.key, created.id);
+  }
 }
 
 interface SeedOrder {
@@ -178,8 +228,12 @@ interface SeedOrder {
   }[];
 }
 
-/** По одному заказу на каждый статус — чтобы экраны было чем наполнить. */
-const orders: SeedOrder[] = [
+/**
+ * По одному заказу на каждый статус — чтобы экраны было чем наполнить.
+ * Функция, а не константа: идентификаторы компаний известны только после
+ * создания учётных записей.
+ */
+const buildOrders = (): SeedOrder[] => [
   {
     title: 'Ремонт квартиры 100 м²',
     category: OrderCategory.PLAN_IMPLEMENTATION,
@@ -213,14 +267,14 @@ const orders: SeedOrder[] = [
     ],
     offers: [
       {
-        companyId: COMPANY_STROYGRAD,
+        companyId: userId('stroygrad'),
         status: OfferStatus.SENT,
         proposedPrice: '49500.00',
         proposedDeadline: daysFromNow(75),
         comment: 'Своя бригада, работаем без выходных. Гарантия 2 года.',
       },
       {
-        companyId: COMPANY_REMONT,
+        companyId: userId('remont'),
         status: OfferStatus.SENT,
         proposedPrice: '56000.00',
         proposedDeadline: daysFromNow(60),
@@ -229,7 +283,7 @@ const orders: SeedOrder[] = [
       {
         // Отозванное предложение: заказ должен снова быть виден этой компании
         // в ленте доступных (ТЗ §4.1).
-        companyId: COMPANY_ARCH,
+        companyId: userId('arch'),
         status: OfferStatus.WITHDRAWN,
         proposedPrice: '61000.00',
         proposedDeadline: daysFromNow(90),
@@ -255,14 +309,14 @@ const orders: SeedOrder[] = [
     files: [clientFile('Проект дома.pdf', 'application/pdf', 5_112_774)],
     offers: [
       {
-        companyId: COMPANY_STROYGRAD,
+        companyId: userId('stroygrad'),
         status: OfferStatus.ACCEPTED,
         proposedPrice: '204000.00',
         proposedDeadline: daysFromNow(150),
         comment: 'Начинаем с фундамента, поэтапная приёмка.',
       },
       {
-        companyId: COMPANY_REMONT,
+        companyId: userId('remont'),
         status: OfferStatus.NOT_ACCEPTED,
         proposedPrice: '228000.00',
         proposedDeadline: daysFromNow(130),
@@ -289,7 +343,7 @@ const orders: SeedOrder[] = [
     ],
     offers: [
       {
-        companyId: COMPANY_ARCH,
+        companyId: userId('arch'),
         status: OfferStatus.WORK_SUBMITTED,
         proposedPrice: '2800.00',
         proposedDeadline: daysFromNow(5),
@@ -317,7 +371,7 @@ const orders: SeedOrder[] = [
     ],
     offers: [
       {
-        companyId: COMPANY_REMONT,
+        companyId: userId('remont'),
         status: OfferStatus.BACK_FOR_OVERRIDE,
         proposedPrice: '4300.00',
         proposedDeadline: daysFromNow(-2),
@@ -345,7 +399,7 @@ const orders: SeedOrder[] = [
     ],
     offers: [
       {
-        companyId: COMPANY_STROYGRAD,
+        companyId: userId('stroygrad'),
         status: OfferStatus.COMPLETED,
         proposedPrice: '1400.00',
         proposedDeadline: daysFromNow(-10),
@@ -355,10 +409,10 @@ const orders: SeedOrder[] = [
 ];
 
 async function seedOrders(): Promise<void> {
-  for (const order of orders) {
+  for (const order of buildOrders()) {
     await prisma.order.create({
       data: {
-        clientId: CLIENT_ID,
+        clientId: userId('client'),
         title: order.title,
         category: order.category,
         objectType: order.objectType,
@@ -398,7 +452,7 @@ async function seedNotifications(): Promise<void> {
   const byTitle = new Map(
     (
       await prisma.order.findMany({
-        where: { clientId: CLIENT_ID },
+        where: { clientId: userId('client') },
         select: { id: true, orderNumber: true, title: true },
       })
     ).map((order) => [order.title, order]),
@@ -415,7 +469,7 @@ async function seedNotifications(): Promise<void> {
   await prisma.notification.createMany({
     data: [
       {
-        userId: CLIENT_ID,
+        userId: userId('client'),
         type: NotificationType.OFFER_RECEIVED,
         orderId: orderId('Отделка офиса открытого типа'),
         title: 'Новое предложение',
@@ -423,7 +477,7 @@ async function seedNotifications(): Promise<void> {
         isRead: false,
       },
       {
-        userId: CLIENT_ID,
+        userId: userId('client'),
         type: NotificationType.OFFER_RECEIVED,
         orderId: orderId('Отделка офиса открытого типа'),
         title: 'Новое предложение',
@@ -431,7 +485,7 @@ async function seedNotifications(): Promise<void> {
         isRead: false,
       },
       {
-        userId: CLIENT_ID,
+        userId: userId('client'),
         type: NotificationType.AREA_VERIFIED,
         orderId: orderId('Строительство частного дома'),
         title: 'Уточнена площадь',
@@ -439,7 +493,7 @@ async function seedNotifications(): Promise<void> {
         isRead: true,
       },
       {
-        userId: CLIENT_ID,
+        userId: userId('client'),
         type: NotificationType.WORK_SUBMITTED,
         orderId: orderId('Проект перепланировки квартиры'),
         title: 'Работа сдана',
@@ -447,7 +501,7 @@ async function seedNotifications(): Promise<void> {
         isRead: false,
       },
       {
-        userId: COMPANY_STROYGRAD,
+        userId: userId('stroygrad'),
         type: NotificationType.OFFER_ACCEPTED,
         orderId: orderId('Строительство частного дома'),
         title: 'Предложение принято',
@@ -455,7 +509,7 @@ async function seedNotifications(): Promise<void> {
         isRead: true,
       },
       {
-        userId: COMPANY_STROYGRAD,
+        userId: userId('stroygrad'),
         type: NotificationType.WORK_CONFIRMED,
         orderId: orderId('Дизайн-проект кухни'),
         title: 'Работа принята',
@@ -463,7 +517,7 @@ async function seedNotifications(): Promise<void> {
         isRead: false,
       },
       {
-        userId: COMPANY_REMONT,
+        userId: userId('remont'),
         type: NotificationType.WORK_DISPUTED,
         orderId: orderId('Ремонт санузла'),
         title: 'Работа отправлена на доработку',
@@ -471,7 +525,7 @@ async function seedNotifications(): Promise<void> {
         isRead: false,
       },
       {
-        userId: COMPANY_REMONT,
+        userId: userId('remont'),
         type: NotificationType.OFFER_RECEIVED,
         orderId: orderId('Строительство частного дома'),
         title: 'Новое предложение',
@@ -483,30 +537,28 @@ async function seedNotifications(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  // Каскад по внешним ключам уносит заказы, предложения, файлы и уведомления.
-  const { count } = await prisma.user.deleteMany({
-    where: { id: { in: SEED_USER_IDS } },
-  });
-  if (count > 0) {
-    console.log(`Удалены прежние тестовые пользователи: ${count}`);
-  }
-
-  await seedUsers();
+  // Удаление прежних учётных записей — внутри: каскад от auth.users уносит
+  // профили, заказы, предложения, файлы и уведомления.
+  await createSeedUsers();
   await seedOrders();
   await seedNotifications();
 
+  const ids = [...userIds.values()];
+  const clientId = userId('client');
+
   const [users, ordersCount, offers, files, notifications] = await Promise.all([
-    prisma.user.count({ where: { id: { in: SEED_USER_IDS } } }),
-    prisma.order.count({ where: { clientId: CLIENT_ID } }),
-    prisma.offer.count({ where: { companyId: { in: SEED_USER_IDS } } }),
-    prisma.orderFile.count({ where: { order: { clientId: CLIENT_ID } } }),
-    prisma.notification.count({ where: { userId: { in: SEED_USER_IDS } } }),
+    prisma.user.count({ where: { id: { in: ids } } }),
+    prisma.order.count({ where: { clientId } }),
+    prisma.offer.count({ where: { companyId: { in: ids } } }),
+    prisma.orderFile.count({ where: { order: { clientId } } }),
+    prisma.notification.count({ where: { userId: { in: ids } } }),
   ]);
 
   console.log(
     `Готово: пользователей ${users}, заказов ${ordersCount}, ` +
       `предложений ${offers}, файлов ${files}, уведомлений ${notifications}`,
   );
+  console.log(`Вход в тестовые аккаунты: пароль ${SEED_PASSWORD}`);
 }
 
 main()

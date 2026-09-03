@@ -1,6 +1,7 @@
 import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common';
 import type { Response } from 'express';
 
+import { Public } from '../../common/decorators/public.decorator.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 
 export interface HealthResponse {
@@ -15,7 +16,10 @@ export interface HealthResponse {
  *
  * Отдаёт 200, когда всё живо, и 503, когда база недоступна — так падение
  * заметно и мониторингу, и разработчику, а не только в логах.
+ *
+ * Единственный публичный маршрут API: мониторинг ходит сюда без токена.
  */
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}

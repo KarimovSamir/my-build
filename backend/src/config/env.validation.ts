@@ -3,7 +3,6 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
-  IsOptional,
   IsString,
   IsUrl,
   Max,
@@ -61,19 +60,17 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   SUPABASE_SECRET_KEY!: string;
 
-  // Проверка JWT подключается в Фазе 2 — до неё поля необязательны,
-  // чтобы Фаза 0 поднималась на неполном .env.
-  @IsOptional()
+  // Без этих трёх значений не проверить ни один токен, то есть API целиком
+  // неработоспособен. Лучше не подняться на старте, чем отдавать 401 на всё.
   @IsUrl(URL_OPTIONS)
-  SUPABASE_JWKS_URL?: string;
+  SUPABASE_JWKS_URL!: string;
 
-  @IsOptional()
   @IsUrl(URL_OPTIONS)
-  SUPABASE_JWT_ISSUER?: string;
+  SUPABASE_JWT_ISSUER!: string;
 
-  @IsOptional()
   @IsString()
-  SUPABASE_JWT_AUDIENCE?: string;
+  @IsNotEmpty()
+  SUPABASE_JWT_AUDIENCE: string = 'authenticated';
 
   @IsString()
   @IsNotEmpty()

@@ -7,6 +7,8 @@ const minimalEnv = {
   DIRECT_URL: 'postgresql://user:pass@host:5432/postgres',
   SUPABASE_URL: 'https://example.supabase.co',
   SUPABASE_SECRET_KEY: 'sb_secret_example',
+  SUPABASE_JWKS_URL: 'https://example.supabase.co/auth/v1/.well-known/jwks.json',
+  SUPABASE_JWT_ISSUER: 'https://example.supabase.co/auth/v1',
 };
 
 describe('validateEnv', () => {
@@ -17,6 +19,7 @@ describe('validateEnv', () => {
     expect(config.PORT).toBe(4000);
     expect(config.CORS_ORIGINS).toBe('http://localhost:3000');
     expect(config.SUPABASE_STORAGE_BUCKET).toBe('order-files');
+    expect(config.SUPABASE_JWT_AUDIENCE).toBe('authenticated');
   });
 
   it('приводит PORT из строки к числу', () => {
@@ -43,8 +46,16 @@ describe('validateEnv', () => {
     ).toThrowError(/NODE_ENV/);
   });
 
-  it('не требует переменных проверки JWT до Фазы 2', () => {
-    expect(() => validateEnv({ ...minimalEnv })).not.toThrow();
+  it('падает без адреса JWKS: без него не проверить ни один токен', () => {
+    const { SUPABASE_JWKS_URL: _omitted, ...withoutJwks } = minimalEnv;
+
+    expect(() => validateEnv(withoutJwks)).toThrowError(/SUPABASE_JWKS_URL/);
+  });
+
+  it('падает без издателя токена', () => {
+    const { SUPABASE_JWT_ISSUER: _omitted, ...withoutIssuer } = minimalEnv;
+
+    expect(() => validateEnv(withoutIssuer)).toThrowError(/SUPABASE_JWT_ISSUER/);
   });
 });
 

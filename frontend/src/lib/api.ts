@@ -3,10 +3,13 @@ import type { ApiError } from "@mybuild/shared";
 /**
  * Типизированный клиент к NestJS API.
  *
- * Фаза 0 — транспорт и обработка ошибок. Access-токен пока никто не выдаёт:
- * в Фазе 2 сюда подставится токен Supabase, и место для этого уже размечено
- * (`getAccessToken`). Прямых обращений к Supabase за данными здесь не будет
- * никогда — всё идёт через наш API (ТЗ §2).
+ * Транспорт и обработка ошибок, без знания о том, откуда берётся токен: его
+ * передают явно. На сервере это делает `api.server.ts`; браузерная обёртка
+ * появится в Фазе 3, когда из браузера начнут ходить запросы. Так один и тот
+ * же модуль работает по обе стороны и не тащит за собой `next/headers`.
+ *
+ * Прямых обращений к Supabase за данными здесь не будет никогда — всё идёт
+ * через наш API (ТЗ §2).
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -30,25 +33,13 @@ export class ApiRequestError extends Error {
   }
 }
 
-/**
- * Источник access-токена.
- *
- * В Фазе 2 сюда подставится сессия Supabase. Пока возвращает null —
- * запросы уходят без заголовка Authorization.
- */
-let getAccessToken: () => Promise<string | null> = async () => null;
-
-export function setAccessTokenProvider(
-  provider: () => Promise<string | null>,
-): void {
-  getAccessToken = provider;
-}
-
 export interface RequestOptions extends Omit<RequestInit, "body"> {
   /** Тело запроса. Объект уйдёт как JSON, FormData — как есть (загрузка файлов). */
   body?: unknown;
   /** Параметры строки запроса. Пустые значения отбрасываются. */
   query?: Record<string, string | number | boolean | undefined | null>;
+  /** Access-токен Supabase. Без него запрос уйдёт без заголовка Authorization. */
+  token?: string | null;
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -80,9 +71,8 @@ async function parseError(response: Response): Promise<ApiRequestError> {
 
 export async function apiFetch<T>(
   path: string,
-  { body, query, headers, ...init }: RequestOptions = {},
+  { body, query, headers, token, ...init }: RequestOptions = {},
 ): Promise<T> {
-  const token = await getAccessToken();
   const isFormData = body instanceof FormData;
 
   const response = await fetch(buildUrl(path, query), {

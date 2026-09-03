@@ -3,7 +3,6 @@ import 'dotenv/config';
 import { ConfigModule } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { OfferStatus, OrderStatus } from '@mybuild/shared';
-import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -17,6 +16,7 @@ import { OrderEventType } from '../src/modules/orders/order-state-machine.js';
 import { OrderTransitionService } from '../src/modules/orders/order-transition.service.js';
 import { PrismaModule } from '../src/prisma/prisma.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
+import { createE2eUser, dropE2eUsers } from './support/e2e-users.js';
 
 /**
  * Проверяет обёртку state-машины на настоящей базе: что переход не только
@@ -25,18 +25,18 @@ import { PrismaService } from '../src/prisma/prisma.service.js';
  * Логика самих переходов покрыта unit-тестами без базы
  * (`src/modules/orders/order-state-machine.spec.ts`). Здесь важна запись.
  *
- * Тест работает с реальным подключением из backend/.env и создаёт своих
- * пользователей со случайными id, а в конце удаляет их — каскад уносит
- * заказы, предложения и уведомления.
+ * Тест работает с реальным подключением из backend/.env и заводит своих
+ * пользователей через Supabase Auth, а в конце удаляет их — каскад уносит
+ * профили, заказы, предложения и уведомления.
  */
 describe('OrderTransitionService (e2e)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let transitions: OrderTransitionService;
 
-  const clientId = randomUUID();
-  const companyAId = randomUUID();
-  const companyBId = randomUUID();
+  let clientId: string;
+  let companyAId: string;
+  let companyBId: string;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -54,41 +54,25 @@ describe('OrderTransitionService (e2e)', () => {
 
     // Следы прерванных прогонов: тест, упавший по таймауту, до afterAll
     // не доходит и оставляет своих пользователей в базе.
-    await prisma.user.deleteMany({ where: { email: { endsWith: '@e2e.test' } } });
+    await dropE2eUsers();
 
-    await prisma.user.createMany({
-      data: [
-        {
-          id: clientId,
-          email: `client-${clientId}@e2e.test`,
-          role: Role.CLIENT,
-          firstName: 'Тест',
-          phone: '+7 900 000-00-01',
-        },
-        {
-          id: companyAId,
-          email: `company-a-${companyAId}@e2e.test`,
-          role: Role.COMPANY,
-          firstName: 'Тест',
-          phone: '+7 900 000-00-02',
-          companyName: 'ООО «Тест А»',
-        },
-        {
-          id: companyBId,
-          email: `company-b-${companyBId}@e2e.test`,
-          role: Role.COMPANY,
-          firstName: 'Тест',
-          phone: '+7 900 000-00-03',
-          companyName: 'ООО «Тест Б»',
-        },
-      ],
-    });
+    clientId = (await createE2eUser('client', { role: Role.CLIENT })).id;
+    companyAId = (
+      await createE2eUser('company-a', {
+        role: Role.COMPANY,
+        companyName: 'ООО «Тест А»',
+      })
+    ).id;
+    companyBId = (
+      await createE2eUser('company-b', {
+        role: Role.COMPANY,
+        companyName: 'ООО «Тест Б»',
+      })
+    ).id;
   });
 
   afterAll(async () => {
-    await prisma?.user.deleteMany({
-      where: { id: { in: [clientId, companyAId, companyBId] } },
-    });
+    await dropE2eUsers();
     await moduleRef?.close();
   });
 

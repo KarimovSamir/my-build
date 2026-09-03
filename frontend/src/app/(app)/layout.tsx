@@ -1,7 +1,6 @@
 import { AppHeader } from "@/components/layout/app-header";
 import { AppSidebar } from "@/components/layout/app-sidebar";
-import { getPreviewUser } from "@/lib/session";
-import { getPreviewRole } from "@/lib/session.server";
+import { getCurrentUser } from "@/lib/session.server";
 
 /**
  * Каркас кабинета: боковое меню + шапка + область контента (ТЗ §7).
@@ -12,8 +11,9 @@ import { getPreviewRole } from "@/lib/session.server";
  * живут в составе меню (`lib/navigation.ts`).
  */
 export default async function AppLayout({ children }: LayoutProps<"/">) {
-  const role = await getPreviewRole();
-  const user = getPreviewUser(role);
+  // Без сессии `getCurrentUser` уводит на вход. Это удобство, а не защита:
+  // права проверяет backend, а до рендера — proxy.ts.
+  const user = await getCurrentUser();
 
   return (
     <div className="flex min-h-screen">

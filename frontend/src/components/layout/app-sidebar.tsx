@@ -1,7 +1,8 @@
 import { Logo } from "@/components/brand/logo";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
+import { SignOutButton } from "@/components/layout/sign-out-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import type { CurrentUserPreview } from "@/lib/session";
+import type { CurrentUser } from "@/lib/session";
 
 /**
  * Содержимое бокового меню: логотип сверху, разделы в середине,
@@ -14,7 +15,7 @@ export function SidebarContent({
   user,
   onNavigate,
 }: {
-  user: CurrentUserPreview;
+  user: CurrentUser;
   onNavigate?: () => void;
 }) {
   return (
@@ -33,16 +34,17 @@ export function SidebarContent({
             {user.initial}
           </AvatarFallback>
         </Avatar>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{user.displayName}</p>
           <p className="text-muted-foreground truncate text-xs">{user.roleLabel}</p>
         </div>
+        <SignOutButton />
       </div>
     </div>
   );
 }
 
-export function AppSidebar({ user }: { user: CurrentUserPreview }) {
+export function AppSidebar({ user }: { user: CurrentUser }) {
   return (
     <aside className="bg-sidebar border-border hidden w-64 shrink-0 border-r lg:block">
       <div className="sticky top-0 h-screen">

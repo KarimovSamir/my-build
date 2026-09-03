@@ -1,50 +1,42 @@
-import type { Role } from "@mybuild/shared";
+import { Role, roleLabels, type UserProfile } from "@mybuild/shared";
 
 /**
- * Временное представление текущего пользователя — часть, общая для сервера
- * и браузера. Ничего серверного здесь быть не должно: этот модуль тянут
- * и клиентские компоненты (`next/headers` в них не работает).
+ * Текущий пользователь в том виде, в каком его показывает интерфейс.
  *
- * В Фазе 2 всё это заменит реальная сессия Supabase. До тех пор каркас
- * кабинета должен что-то показывать, поэтому роль хранится в cookie,
- * которую переключает виджет в шапке (виден только в разработке).
+ * Это профиль из нашего API плюс несколько производных полей, чтобы шапка
+ * и боковое меню не считали одно и то же по-разному.
  *
- * ВАЖНО: это не авторизация и никаких прав не даёт. Настоящие данные придут
- * из API только после проверки токена на backend'е.
+ * Здесь не должно быть ничего серверного: файл тянут и клиентские компоненты.
  */
-export const PREVIEW_ROLE_COOKIE = "mybuild_preview_role";
-
-export interface CurrentUserPreview {
-  role: Role;
+export interface CurrentUser extends UserProfile {
+  /** Компанию узнают по названию, клиента — по имени. */
   displayName: string;
   roleLabel: string;
+  /** Буква для аватара. */
   initial: string;
-  city: string | null;
-  country: string | null;
 }
 
-export function getPreviewUser(role: Role): CurrentUserPreview {
-  if (role === "COMPANY") {
-    return {
-      role,
-      displayName: "Название компании",
-      roleLabel: "Компания",
-      initial: "К",
-      city: "Город",
-      country: "Страна",
-    };
-  }
+export function toCurrentUser(profile: UserProfile): CurrentUser {
+  const displayName =
+    profile.role === Role.COMPANY && profile.companyName
+      ? profile.companyName
+      : [profile.firstName, profile.lastName].filter(Boolean).join(" ");
 
   return {
-    role,
-    displayName: "Имя",
-    roleLabel: "Заказчик",
-    initial: "И",
-    city: "Город",
-    country: "Страна",
+    ...profile,
+    displayName,
+    roleLabel: roleLabels[profile.role],
+    initial: displayName.trim().charAt(0).toUpperCase() || "?",
   };
 }
 
-export function parseRole(value: string | undefined): Role {
-  return value?.toUpperCase() === "COMPANY" ? "COMPANY" : "CLIENT";
+/**
+ * Роль из claim'а `user_role` (ТЗ §6).
+ *
+ * Хук Supabase может быть не включён или вернуть неожиданное значение —
+ * тогда роли нет. Проверять её надо всё равно на backend'е: здесь она нужна
+ * только чтобы не показать компании клиентские разделы.
+ */
+export function readRoleClaim(claim: unknown): Role | null {
+  return claim === Role.CLIENT || claim === Role.COMPANY ? claim : null;
 }

@@ -3,9 +3,8 @@ import Link from "next/link";
 
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
-import { RolePreviewSwitch } from "@/components/layout/role-preview-switch";
 import { Button } from "@/components/ui/button";
-import type { CurrentUserPreview } from "@/lib/session";
+import type { CurrentUser } from "@/lib/session";
 
 /**
  * Шапка кабинета: крошки слева, колокольчик и город/страна справа (ТЗ §7).
@@ -13,7 +12,7 @@ import type { CurrentUserPreview } from "@/lib/session";
  * Счётчик непрочитанных появится в Фазе 5 вместе с WebSocket — пока точка
  * над колокольчиком не рисуется, чтобы не показывать выдуманные данные.
  */
-export function AppHeader({ user }: { user: CurrentUserPreview }) {
+export function AppHeader({ user }: { user: CurrentUser }) {
   const location = [user.city, user.country].filter(Boolean).join(", ");
 
   return (
@@ -23,10 +22,6 @@ export function AppHeader({ user }: { user: CurrentUserPreview }) {
       <div className="min-w-0 flex-1">
         <Breadcrumbs />
       </div>
-
-      {process.env.NODE_ENV === "development" ? (
-        <RolePreviewSwitch role={user.role} />
-      ) : null}
 
       <Button variant="ghost" size="icon" asChild aria-label="Уведомления">
         <Link href="/notifications">

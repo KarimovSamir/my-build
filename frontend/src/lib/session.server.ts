@@ -1,19 +1,64 @@
 import "server-only";
 
-import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { cache } from "react";
 
-import type { Role } from "@mybuild/shared";
+import type { Role, UserProfile } from "@mybuild/shared";
 
-import { PREVIEW_ROLE_COOKIE, parseRole } from "./session";
+import { serverApi } from "./api.server";
+import { readRoleClaim, toCurrentUser, type CurrentUser } from "./session";
+import { createSupabaseServerClient } from "./supabase/server";
 
 /**
- * Серверная часть временной сессии: чтение роли из cookie.
+ * Сессия и профиль на сервере.
  *
- * Отделено от `session.ts`, потому что `next/headers` доступен только
- * в серверных компонентах, а константы и типы нужны и в браузере.
- * В Фазе 2 этот файл заменит чтение сессии Supabase.
+ * Проверка идёт по проверенным claim'ам токена (`getClaims` сверяет подпись
+ * по JWKS), а не по содержимому cookie: cookie можно подделать, подпись — нет.
  */
-export async function getPreviewRole(): Promise<Role> {
-  const store = await cookies();
-  return parseRole(store.get(PREVIEW_ROLE_COOKIE)?.value);
+
+export interface SessionClaims {
+  userId: string;
+  role: Role | null;
 }
+
+/**
+ * Claim'ы текущей сессии или null, если пользователь не вошёл.
+ * `cache` — чтобы за один рендер страницы проверка выполнилась один раз.
+ */
+export const getSessionClaims = cache(async (): Promise<SessionClaims | null> => {
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims;
+
+  if (typeof claims?.sub !== "string") {
+    return null;
+  }
+
+  return { userId: claims.sub, role: readRoleClaim(claims.user_role) };
+});
+
+/** Access-токен для запросов к нашему API. */
+export const getAccessToken = cache(async (): Promise<string | null> => {
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase.auth.getSession();
+
+  return data.session?.access_token ?? null;
+});
+
+/**
+ * Профиль текущего пользователя из API.
+ *
+ * Без сессии отправляет на вход: страницы кабинета без пользователя показывать
+ * нечего. Настоящая проверка доступа всё равно на backend'е — здесь только UI.
+ */
+export const getCurrentUser = cache(async (): Promise<CurrentUser> => {
+  const claims = await getSessionClaims();
+
+  if (!claims) {
+    redirect("/login");
+  }
+
+  const profile = await serverApi.get<UserProfile>("/profile");
+
+  return toCurrentUser(profile);
+});

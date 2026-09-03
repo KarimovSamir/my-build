@@ -22,6 +22,9 @@ describe('Health (e2e)', () => {
       DIRECT_URL: 'postgresql://user:pass@127.0.0.1:1/postgres',
       SUPABASE_URL: 'https://example.supabase.co',
       SUPABASE_SECRET_KEY: 'sb_secret_test',
+      SUPABASE_JWKS_URL: 'https://example.supabase.co/auth/v1/.well-known/jwks.json',
+      SUPABASE_JWT_ISSUER: 'https://example.supabase.co/auth/v1',
+      SUPABASE_JWT_AUDIENCE: 'authenticated',
       SUPABASE_STORAGE_BUCKET: 'order-files',
     });
 

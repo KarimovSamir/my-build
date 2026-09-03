@@ -9,16 +9,17 @@ import {
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getHomeHref } from "@/lib/navigation";
+import { getSessionClaims } from "@/lib/session.server";
 
 /**
  * Лендинг (ТЗ §7). Публичная страница, доступна без авторизации.
- *
- * Редирект авторизованного пользователя на его кабинет добавится в Фазе 2,
- * когда появится настоящая сессия.
+ * Вошедшего пользователя сразу отправляем в его кабинет.
  */
 
 const clientSteps = [
@@ -57,7 +58,13 @@ const companySteps = [
   },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const claims = await getSessionClaims();
+
+  if (claims) {
+    redirect(getHomeHref(claims.role));
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-border bg-background/80 sticky top-0 z-10 border-b backdrop-blur">
