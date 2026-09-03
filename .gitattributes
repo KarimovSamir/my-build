@@ -1,0 +1,19 @@
+# Единый перевод строки во всём репозитории.
+#
+# Без этого Git на машинах с core.autocrlf=true подставляет CRLF в рабочую
+# копию и предупреждает об этом на каждом файле, а один и тот же файл
+# выглядит по-разному на Windows и Linux.
+* text=auto eol=lf
+
+# Бинарные файлы Git не должен трогать.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.pdf binary
+*.pptx binary
+*.woff binary
+*.woff2 binary
+
+# Lock-файл генерируется инструментом: в diff его читать бессмысленно.
+package-lock.json linguist-generated=true -diff

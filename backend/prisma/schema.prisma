@@ -1,8 +1,7 @@
-// Схема базы данных MyBuild.
+// Схема базы данных MyBuild — доменная модель из ТЗ §3.
 //
-// Фаза 0 — только подключение: datasource и генератор клиента.
-// Доменная модель (User, Order, Offer, OrderFile, Notification) появится
-// в Фазе 1 по ТЗ §3.
+// Имена таблиц и колонок оставлены как в моделях (User, "companyName"):
+// ТЗ и SQL-ограничения из Фазы 2 написаны именно в таком виде.
 //
 // Строки подключения здесь не задаются: начиная с Prisma 7 они живут
 // в backend/prisma.config.ts, а приложение подключается через драйвер-адаптер
@@ -16,4 +15,260 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ─── Перечисления ───────────────────────────────────────────
+// Значения обязаны совпадать с shared/src/enums.ts (ТЗ §2).
+
+enum Role {
+  CLIENT
+  COMPANY
+}
+
+enum OrderCategory {
+  PLAN_CREATION
+  PLAN_IMPLEMENTATION
+}
+
+enum ObjectType {
+  APARTMENT
+  HOUSE
+  COMMERCIAL
+  GOVERNMENT
+}
+
+enum OrderStatus {
+  WAITING
+  AWAITING_CONFIRMATION
+  IN_PROGRESS
+  AWAITING_COMPLETION_CONFIRMATION
+  COMPLETED
+  COMPLETION_DISPUTED
+}
+
+enum OfferStatus {
+  SENT
+  ACCEPTED
+  REJECTED
+  NOT_ACCEPTED
+  WITHDRAWN
+  WORK_SUBMITTED
+  COMPLETED
+  BACK_FOR_OVERRIDE
+}
+
+enum FileOwnerType {
+  CLIENT
+  COMPANY
+}
+
+enum NotificationType {
+  OFFER_RECEIVED
+  OFFER_ACCEPTED
+  OFFER_REJECTED
+  WORK_SUBMITTED
+  WORK_CONFIRMED
+  WORK_DISPUTED
+  FILES_UPDATED
+  AREA_VERIFIED
+}
+
+/// Статусы платежа. Платежи вне MVP (ТЗ §11) — enum нужен только схеме,
+/// в shared/ он не выносится, потому что frontend его пока не видит.
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+// ─── Сущности ───────────────────────────────────────────────
+
+/// Профиль пользователя, а не учётная запись: пароли и сессии живут
+/// в auth.users на стороне Supabase. Внешний ключ id → auth.users.id
+/// и триггер, создающий строку профиля, добавляются в Фазе 2 (ТЗ §10).
+model User {
+  id          String  @id @db.Uuid
+  email       String  @unique
+  role        Role
+  firstName   String
+  lastName    String?
+  phone       String
+  /// Обязателен для роли COMPANY, пуст для CLIENT.
+  /// CHECK-ограничение ставится в Фазе 2 вместе с триггером профиля.
+  companyName String?
+  city        String?
+  country     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders        Order[]        @relation("ClientOrders")
+  offers        Offer[]
+  notifications Notification[]
+  cards         UserCard[]
+  payments      Payment[]
+
+  @@index([role])
+}
+
+/// Заказ клиента. clientBudget — ожидание клиента, задаётся при создании;
+/// price и deadline появляются только в момент принятия предложения (ТЗ §3).
+model Order {
+  id          String @id @default(uuid()) @db.Uuid
+  /// Показывается пользователю как ORD-{orderNumber}.
+  orderNumber Int    @unique @default(autoincrement())
+
+  clientId String @db.Uuid
+  client   User   @relation("ClientOrders", fields: [clientId], references: [id], onDelete: Cascade)
+
+  title       String
+  category    OrderCategory
+  objectType  ObjectType
+  description String
+  address     String
+
+  /// Площадь, указанная клиентом. Не перезаписывается уточнением исполнителя.
+  squareMeters Float
+  /// Площадь, уточнённая компанией-исполнителем (ТЗ §4.1).
+  verifiedSquareMeters Float?
+
+  clientBudget     Decimal?  @db.Decimal(12, 2)
+  desiredStartDate DateTime?
+
+  /// Цена сделки = proposedPrice принятого предложения.
+  price    Decimal?  @db.Decimal(12, 2)
+  /// Срок из принятого предложения.
+  deadline DateTime?
+
+  status                  OrderStatus @default(WAITING)
+  clientCompletionComment String?
+  correctionComment       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  offers        Offer[]
+  files         OrderFile[]
+  notifications Notification[]
+  payments      Payment[]
+
+  @@index([clientId, status])
+  @@index([status, createdAt])
+}
+
+/// Файл заказа. Файлы компании версионируются по сдачам: каждая сдача
+/// увеличивает submissionRound, прежние файлы не удаляются (ТЗ §4.1).
+model OrderFile {
+  id      String @id @default(uuid()) @db.Uuid
+  orderId String @db.Uuid
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// Путь объекта в приватном бакете Supabase Storage.
+  storageKey String
+  ownerType  FileOwnerType
+  /// Номер сдачи. У файлов клиента всегда 0.
+  submissionRound Int    @default(0)
+  /// SHA-256 содержимого — дедупликация в пределах одной сдачи.
+  fileHash        String
+
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+
+  createdAt DateTime @default(now())
+
+  /// Дедупликация действует внутри сдачи, а не по всему заказу:
+  /// тот же файл в новой сдаче — это новая версия, её надо сохранить.
+  @@unique([orderId, submissionRound, fileHash])
+  @@index([orderId, ownerType, submissionRound])
+}
+
+/// Предложение компании по заказу. Одна компания — одно предложение
+/// на заказ; повторная отправка обновляет существующее (ТЗ §4.1).
+model Offer {
+  id      String @id @default(uuid()) @db.Uuid
+  orderId String @db.Uuid
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  companyId String @db.Uuid
+  company   User   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  status           OfferStatus @default(SENT)
+  comment          String?
+  proposedPrice    Decimal     @db.Decimal(12, 2)
+  proposedDeadline DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orderId, companyId])
+  @@index([companyId, status])
+  @@index([orderId, status])
+}
+
+/// Уведомление. Создаётся в той же транзакции, что и переход статуса,
+/// и доставляется по WebSocket (ТЗ §8). Создание заказа уведомлений
+/// не порождает — только broadcast в company-feed.
+model Notification {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type    NotificationType
+  orderId String?          @db.Uuid
+  order   Order?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  title  String
+  body   String?
+  isRead Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead, createdAt])
+}
+
+// ─── Вне MVP (ТЗ §11) ───────────────────────────────────────
+// Место в схеме занято сразу, endpoints и интеграция с провайдером —
+// за рамками MVP. Ни один модуль backend к этим таблицам не обращается.
+
+/// Сохранённая карта пользователя. Реквизиты не хранятся — только
+/// то, что показывается в интерфейсе, и токен провайдера.
+model UserCard {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  brand         String
+  last4         String
+  expMonth      Int
+  expYear       Int
+  isDefault     Boolean @default(false)
+  providerToken String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// Платёж по заказу.
+model Payment {
+  id      String @id @default(uuid()) @db.Uuid
+  orderId String @db.Uuid
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  payerId String @db.Uuid
+  payer   User   @relation(fields: [payerId], references: [id], onDelete: Cascade)
+
+  amount     Decimal       @db.Decimal(12, 2)
+  currency   String        @default("USD")
+  status     PaymentStatus @default(PENDING)
+  provider   String?
+  externalId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([payerId])
 }

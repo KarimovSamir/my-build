@@ -47,6 +47,9 @@ desktop.ini
 # Сгенерированный клиент Prisma — воссоздаётся командой npm run db:generate
 backend/src/generated/
 
+# Локальные настройки Claude Code
+.claude/settings.local.json
+
 # Кэш инструментов
 .eslintcache
 .turbo/
