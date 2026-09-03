@@ -7,11 +7,14 @@
  */
 
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { FileOwnerType, type OrderFileDto } from '@mybuild/shared';
+import {
+  EXECUTOR_OFFER_STATUSES,
+  FileOwnerType,
+  type OrderFileDto,
+} from '@mybuild/shared';
 
 import type { OrderFile } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
-import { EXECUTOR_OFFER_STATUSES } from '../orders/order-participation.js';
 import {
   prepareFile,
   sanitizeFileName,

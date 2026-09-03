@@ -6,10 +6,9 @@
  * unit-тестами, а не только прогоном по живым данным.
  */
 
-import { parseOrderNumber } from '@mybuild/shared';
+import { EXECUTOR_OFFER_STATUSES, parseOrderNumber } from '@mybuild/shared';
 
 import type { Prisma } from '../../generated/prisma/client.js';
-import { EXECUTOR_OFFER_STATUSES } from './order-participation.js';
 
 export function buildSearchConditions(query: string): Prisma.OrderWhereInput[] {
   const conditions: Prisma.OrderWhereInput[] = [

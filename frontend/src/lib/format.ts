@@ -33,6 +33,21 @@ export function formatMoney(value: MoneyString): string {
   return Number.isFinite(amount) ? `${amountFormatter.format(amount)} USD` : value;
 }
 
+/** Площадь в виде «62,5 м²». */
+export function formatArea(squareMeters: number): string {
+  return `${amountFormatter.format(squareMeters)} м²`;
+}
+
+/** Размер файла в том виде, в каком его показывает список: «1,4 МБ». */
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} Б`;
+
+  const kilobytes = bytes / 1024;
+  if (kilobytes < 1024) return `${Math.round(kilobytes)} КБ`;
+
+  return `${(kilobytes / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} МБ`;
+}
+
 /** Дата в виде «25 дек 2025». */
 export function formatDate(value: IsoDateString): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);

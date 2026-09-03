@@ -59,6 +59,17 @@ export interface OrderFileDto {
   createdAt: IsoDateString;
 }
 
+/**
+ * Ссылка на скачивание файла (ТЗ §5, `GET /documents/:id/download`).
+ *
+ * Подпись живёт недолго и выдаётся под конкретного пользователя, поэтому
+ * ссылку запрашивают в момент нажатия, а не кладут в разметку страницы.
+ */
+export interface DownloadLink {
+  url: string;
+  originalName: string;
+}
+
 /** Предложение компании по заказу. */
 export interface OfferDto {
   id: string;

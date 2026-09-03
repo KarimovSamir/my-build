@@ -571,6 +571,86 @@ describe('Заказы (e2e)', () => {
     });
   });
 
+  /**
+   * Скачивание файла заказа (ТЗ §5). Маршрут живёт в модуле `files`, но
+   * проверяется здесь: фикстуры этого файла как раз дают заказ с файлом,
+   * компанию-исполнителя и двух посторонних.
+   *
+   * Правила доступа покрыты unit- и e2e-тестами самого сервиса; здесь важно,
+   * что до них доходит HTTP-запрос и что ссылка действительно рабочая.
+   */
+  describe('GET /documents/:id/download', () => {
+    async function clientFileId(): Promise<string> {
+      const file = await prisma.orderFile.findFirstOrThrow({
+        where: { orderId: inProgressId },
+      });
+
+      return file.id;
+    }
+
+    it('владельцу отдаёт ссылку, по которой скачивается тот самый файл', async () => {
+      const response = await request(app.getHttpServer())
+        .get(`/documents/${await clientFileId()}/download`)
+        .set('Authorization', `Bearer ${listerToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.originalName).toBe('Задание.pdf');
+
+      const downloaded = await fetch(response.body.url);
+      expect(downloaded.status).toBe(200);
+      expect(Buffer.from(await downloaded.arrayBuffer()).equals(PDF)).toBe(true);
+    });
+
+    it('компания-исполнитель ссылку получает', async () => {
+      const response = await request(app.getHttpServer())
+        .get(`/documents/${await clientFileId()}/download`)
+        .set('Authorization', `Bearer ${executorToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.url).toContain('token=');
+    });
+
+    it('посторонней компании файл не отдаётся', async () => {
+      const response = await request(app.getHttpServer())
+        .get(`/documents/${await clientFileId()}/download`)
+        .set('Authorization', `Bearer ${outsiderToken}`);
+
+      expect(response.status).toBe(403);
+    });
+
+    it('чужому клиенту файл не отдаётся', async () => {
+      const response = await request(app.getHttpServer())
+        .get(`/documents/${await clientFileId()}/download`)
+        .set('Authorization', `Bearer ${strangerToken}`);
+
+      expect(response.status).toBe(403);
+    });
+
+    it('несуществующий файл — 404', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/documents/00000000-0000-4000-8000-000000000000/download')
+        .set('Authorization', `Bearer ${listerToken}`);
+
+      expect(response.status).toBe(404);
+    });
+
+    it('идентификатор не в форме UUID — 404, а не 500', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/documents/не-uuid/download')
+        .set('Authorization', `Bearer ${listerToken}`);
+
+      expect(response.status).toBe(404);
+    });
+
+    it('без токена — 401', async () => {
+      const response = await request(app.getHttpServer()).get(
+        `/documents/${await clientFileId()}/download`,
+      );
+
+      expect(response.status).toBe(401);
+    });
+  });
+
   describe('DELETE /orders/:id', () => {
     it('удаляет свой заказ в статусе поиска исполнителя вместе с файлами', async () => {
       const order = await seedOrder({ clientId: client.id, title: 'Заказ на удаление' });

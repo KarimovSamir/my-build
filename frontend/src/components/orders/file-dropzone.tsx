@@ -11,7 +11,8 @@ import {
 } from "@mybuild/shared";
 
 import { Button } from "@/components/ui/button";
-import { addFiles, formatFileSize } from "@/lib/order-form";
+import { formatFileSize } from "@/lib/format";
+import { addFiles } from "@/lib/order-form";
 import { cn } from "@/lib/utils";
 
 /**

@@ -56,6 +56,11 @@ export function OrdersSearch({ filter }: { filter: OrdersFilter }) {
         aria-hidden
       />
       <Input
+        // Поле без id и name Chrome помечает замечанием к разметке формы,
+        // хотя формы вокруг него нет. Дешевле дать имя, чем объяснять запись
+        // в консоли каждому, кто откроет вкладку Issues.
+        id="orders-search"
+        name="q"
         type="search"
         value={value}
         onChange={(event) => handleChange(event.target.value)}

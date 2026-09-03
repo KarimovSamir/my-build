@@ -20,7 +20,7 @@ export function AppHeader({ user }: { user: CurrentUser }) {
       <MobileSidebar user={user} />
 
       <div className="min-w-0 flex-1">
-        <Breadcrumbs />
+        <Breadcrumbs role={user.role} />
       </div>
 
       <Button variant="ghost" size="icon" asChild aria-label="Уведомления">

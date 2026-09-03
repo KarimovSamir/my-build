@@ -9,8 +9,10 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   DEFAULT_PAGE_SIZE,
+  EXECUTOR_OFFER_STATUSES,
   FileOwnerType,
   OrderStatus,
+  canDeleteOrder,
   type OrderDetail,
   type OrderListItem,
   type Paginated,
@@ -22,7 +24,6 @@ import type { UploadedFileInput } from '../files/file-validation.js';
 import { FilesService } from '../files/files.service.js';
 import type { CreateOrderDto } from './dto/create-order.dto.js';
 import type { ListOrdersQueryDto } from './dto/list-orders.dto.js';
-import { EXECUTOR_OFFER_STATUSES } from './order-participation.js';
 import { buildSearchConditions } from './order-search.js';
 import {
   toOrderDetail,
@@ -30,12 +31,6 @@ import {
   type OrderDetailRow,
   type OrderViewer,
 } from './order-view.js';
-
-/** Статусы, в которых заказ ещё можно удалить: работы не начинались (ТЗ §4.1). */
-export const DELETABLE_ORDER_STATUSES: OrderStatus[] = [
-  OrderStatus.WAITING,
-  OrderStatus.AWAITING_CONFIRMATION,
-];
 
 /** Предложение исполнителя — из него берётся колонка «Подрядчик». */
 const EXECUTOR_OFFER_SELECT = {
@@ -190,7 +185,7 @@ export class OrdersService {
    * хранилища — нет, и после удаления строк их ключи узнать уже неоткуда.
    */
   async remove(orderId: string, status: OrderStatus): Promise<void> {
-    if (!DELETABLE_ORDER_STATUSES.includes(status)) {
+    if (!canDeleteOrder(status)) {
       throw new ConflictException(
         'Заказ уже в работе — его нельзя удалить. Дождитесь завершения',
       );

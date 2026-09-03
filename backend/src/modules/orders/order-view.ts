@@ -8,6 +8,8 @@
 
 import {
   OrderStatus,
+  isActiveOffer,
+  isExecutorOffer,
   type IsoDateString,
   type MoneyString,
   type ObjectType,
@@ -20,7 +22,6 @@ import {
 } from '@mybuild/shared';
 
 import type { Prisma } from '../../generated/prisma/client.js';
-import { isActiveOffer, isExecutorOffer } from './order-participation.js';
 
 /**
  * Кто смотрит на заказ.

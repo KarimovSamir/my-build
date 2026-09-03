@@ -193,16 +193,6 @@ export function addFiles(
   return { files, rejected };
 }
 
-/** Размер файла в том виде, в каком его показывает список: «1,4 МБ». */
-export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} Б`;
-
-  const kilobytes = bytes / 1024;
-  if (kilobytes < 1024) return `${Math.round(kilobytes)} КБ`;
-
-  return `${(kilobytes / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} МБ`;
-}
-
 /** Запятая в числе — привычный десятичный разделитель, backend ждёт точку. */
 function normalizeNumber(value: string): string {
   return value.trim().replace(",", ".");
