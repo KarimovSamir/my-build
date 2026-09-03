@@ -37,6 +37,10 @@ import {
   Role,
 } from '../src/generated/prisma/client.js';
 import {
+  buildStorageKey,
+  sanitizeFileName,
+} from '../src/modules/files/file-validation.js';
+import {
   createAuthUser,
   createSupabaseAdminClient,
   deleteAuthUsersByEmail,
@@ -410,7 +414,9 @@ const buildOrders = (): SeedOrder[] => [
 
 async function seedOrders(): Promise<void> {
   for (const order of buildOrders()) {
-    await prisma.order.create({
+    // Заказ создаётся первым, а файлы — следом: ключ объекта в хранилище
+    // содержит идентификатор заказа, и до вставки его ещё нет.
+    const created = await prisma.order.create({
       data: {
         clientId: userId('client'),
         title: order.title,
@@ -428,18 +434,35 @@ async function seedOrders(): Promise<void> {
         clientCompletionComment: order.clientCompletionComment ?? null,
         correctionComment: order.correctionComment ?? null,
         offers: { create: order.offers },
-        files: {
-          create: order.files.map((file) => ({
-            storageKey: `orders/${file.submissionRound}/${file.name}`,
-            ownerType: file.ownerType,
-            submissionRound: file.submissionRound,
-            fileHash: fakeHash(file.name),
-            originalName: file.name,
-            mimeType: file.mimeType,
-            sizeBytes: file.sizeBytes,
-          })),
-        },
       },
+    });
+
+    await prisma.orderFile.createMany({
+      data: order.files.map((file) => {
+        const prepared = {
+          fileHash: fakeHash(file.name),
+          safeName: sanitizeFileName(file.name),
+        };
+
+        return {
+          orderId: created.id,
+          // Ключ строится той же функцией, что и при настоящей загрузке:
+          // иначе seed-данные выглядели бы как файлы приложения, но лежали
+          // бы не там, где их ищет `FilesService`.
+          storageKey: buildStorageKey(
+            created.id,
+            file.ownerType,
+            file.submissionRound,
+            prepared,
+          ),
+          ownerType: file.ownerType,
+          submissionRound: file.submissionRound,
+          fileHash: prepared.fileHash,
+          originalName: file.name,
+          mimeType: file.mimeType,
+          sizeBytes: file.sizeBytes,
+        };
+      }),
     });
   }
 }
@@ -525,11 +548,13 @@ async function seedNotifications(): Promise<void> {
         isRead: false,
       },
       {
+        // Проигравшей компании — то же уведомление, что создаёт машина
+        // при принятии чужого предложения (ТЗ §4, §8).
         userId: userId('remont'),
-        type: NotificationType.OFFER_RECEIVED,
+        type: NotificationType.OFFER_REJECTED,
         orderId: orderId('Строительство частного дома'),
-        title: 'Новое предложение',
-        body: `${ref('Строительство частного дома')}: выбрано другое предложение`,
+        title: 'Предложение отклонено',
+        body: `${ref('Строительство частного дома')}: клиент выбрал другое предложение`,
         isRead: true,
       },
     ],

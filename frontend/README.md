@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MyBuild — frontend
 
-## Getting Started
+Next.js 16 (App Router) + Tailwind 4 + shadcn/ui. Интерфейс на русском, обе роли
+(клиент и компания) живут в одном кабинете. За данными фронт ходит в NestJS
+(`backend/`), напрямую в Supabase — только за авторизацией.
 
-First, run the development server:
+Требования и макеты — в `MyBuild_NestJS_TZ.md` в корне репозитория и в
+`docs/design/`, правила работы над проектом — в `CLAUDE.md`.
+
+## Запуск
+
+Пакет входит в npm workspaces, поэтому зависимости ставятся из корня репозитория:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install                             # из корня
+cp frontend/env.example frontend/.env.local   # заполнить значения
+npm run dev                             # frontend + backend вместе
+npm run dev:web                         # только frontend
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Приложение поднимается на `http://localhost:3000`, API ожидается на
+`http://localhost:4000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Переменные окружения
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Шаблон — в `env.example`. Наружу (в браузер) уходит только то, что начинается с
+`NEXT_PUBLIC_`: адрес проекта Supabase, публичный anon-ключ и адрес API.
+Секретных ключей и строки подключения к базе здесь нет и быть не должно — они
+живут в `backend/.env` (ТЗ §6).
 
-## Learn More
+## Авторизация и защита маршрутов
 
-To learn more about Next.js, take a look at the following resources:
+`src/proxy.ts` (в Next.js 16 заменил `middleware.ts`) на каждом запросе продлевает
+сессию Supabase, уводит гостя на `/login`, а вошедшего — в раздел его роли.
+Это удобство и первый барьер; настоящую проверку прав делает backend.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Тема оформления
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Светлая, тёмная и «как в системе» (ТЗ §7). Класс `dark` на `<html>` выставляет
+`next-themes` (`components/theme-provider.tsx`), переключатель —
+`components/theme-toggle.tsx` в шапке кабинета, на лендинге и на экранах входа.
+Цвета берутся только из токенов `globals.css`: захардкоженный `bg-white`
+сломает тёмную тему.
 
-## Deploy on Vercel
+## Структура
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+src/
+  app/
+    page.tsx              лендинг (публичный)
+    (auth)/               вход, регистрация, сброс пароля, /callback
+    (app)/                кабинет обеих ролей: меню + шапка + разделы
+  components/ui/          компоненты дизайн-системы (shadcn)
+  components/layout/      боковое меню, шапка, хлебные крошки
+  components/orders/      экраны заказов
+  components/brand/       логотип
+  components/status-badge.tsx   badge статусов заказа и предложения
+  lib/api.ts              транспорт к NestJS; api.server.ts / api.client.ts берут токен
+  lib/supabase/           клиенты Supabase (browser / server / proxy)
+  lib/navigation.ts       состав бокового меню по ролям
+  lib/types.ts            единственный вход к типам из `shared/`
+  proxy.ts                сессия и защита маршрутов
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Доменные типы, enum-ы и общие для формы и API правила лежат в пакете
+`shared/` и импортируются через `@/lib/types` — дублировать их здесь нельзя
+(`CLAUDE.md` §5). После правки `shared/` нужен `npm run build:shared` из корня,
+иначе фронт не увидит новых типов.
+
+## Проверки
+
+```bash
+npm run typecheck   # tsc --noEmit
+npm run lint        # eslint
+npm run build       # production-сборка
+```
+
+Своих автотестов у фронта пока нет — это отдельная задача Фазы 7.

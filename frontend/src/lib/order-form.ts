@@ -19,7 +19,7 @@ import {
   fileExtension,
   type ObjectType,
   type OrderCategory,
-} from "@mybuild/shared";
+} from "@/lib/types";
 
 /** Значения полей формы. Всё строками — так их отдаёт браузер. */
 export interface OrderFormValues {

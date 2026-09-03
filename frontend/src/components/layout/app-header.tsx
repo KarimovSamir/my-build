@@ -3,7 +3,9 @@ import Link from "next/link";
 
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import type { CurrentUser } from "@/lib/session";
 
 /**
@@ -23,6 +25,8 @@ export function AppHeader({ user }: { user: CurrentUser }) {
         <Breadcrumbs role={user.role} />
       </div>
 
+      <ThemeToggle />
+
       <Button variant="ghost" size="icon" asChild aria-label="Уведомления">
         <Link href="/notifications">
           <Bell className="size-5" />
@@ -30,10 +34,13 @@ export function AppHeader({ user }: { user: CurrentUser }) {
       </Button>
 
       {location ? (
-        <div className="border-border text-muted-foreground hidden items-center gap-1.5 border-l pl-4 text-sm sm:flex">
-          <MapPin className="size-4" aria-hidden />
-          {location}
-        </div>
+        <>
+          <Separator orientation="vertical" className="hidden h-6 sm:block" />
+          <div className="text-muted-foreground hidden items-center gap-1.5 text-sm sm:flex">
+            <MapPin className="size-4" aria-hidden />
+            {location}
+          </div>
+        </>
       ) : null}
     </header>
   );

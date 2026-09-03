@@ -11,7 +11,7 @@ import {
   objectTypeLabels,
   orderCategoryLabels,
   type OrderDetail,
-} from "@mybuild/shared";
+} from "@/lib/types";
 
 import { DatePicker } from "@/components/date-picker";
 import { Field, FieldMessage, FormError } from "@/components/form-parts";

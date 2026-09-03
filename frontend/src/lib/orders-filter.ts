@@ -7,7 +7,7 @@
  * понимали параметры одинаково.
  */
 
-import { OrderStatus } from "@mybuild/shared";
+import { OrderStatus } from "@/lib/types";
 
 export interface OrdersFilter {
   /** null — вкладка «Все заказы». */

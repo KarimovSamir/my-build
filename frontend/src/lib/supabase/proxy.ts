@@ -1,9 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import type { Role } from "@mybuild/shared";
+import type { Role } from "@/lib/types";
 
-import { readRoleClaim } from "../session";
+import { readEmailVerifiedClaim, readRoleClaim } from "../session";
 import { supabaseCredentials } from "./env";
 
 export interface ProxySession {
@@ -11,6 +11,7 @@ export interface ProxySession {
   response: NextResponse;
   userId: string | null;
   role: Role | null;
+  emailVerified: boolean;
 }
 
 /**
@@ -56,5 +57,6 @@ export async function updateSession(request: NextRequest): Promise<ProxySession>
     response,
     userId: typeof claims?.sub === "string" ? claims.sub : null,
     role: readRoleClaim(claims?.user_role),
+    emailVerified: readEmailVerifiedClaim(claims?.email_verified),
   };
 }

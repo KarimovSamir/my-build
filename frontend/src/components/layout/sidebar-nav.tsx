@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import type { Role } from "@mybuild/shared";
+import type { Role } from "@/lib/types";
 import { getNavigation, isNavItemActive } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 

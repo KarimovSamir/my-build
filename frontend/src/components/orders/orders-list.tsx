@@ -6,7 +6,7 @@ import {
   formatOrderNumber,
   type OrderListItem,
   type Paginated,
-} from "@mybuild/shared";
+} from "@/lib/types";
 
 import { OrderStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";

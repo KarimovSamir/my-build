@@ -44,15 +44,23 @@ export interface AuthUserMetadata {
  *
  * Профиль в public."User" появится сам — его создаст триггер on_auth_user_created.
  * Ошибка метаданных всплывёт прямо здесь: триггер отменит вставку.
+ *
+ * `confirmEmail: false` нужен только тестам: так проверяется, что хук доступа
+ * кладёт в токен `email_verified: false` (ТЗ §6).
  */
 export async function createAuthUser(
   admin: SupabaseClient,
-  params: { email: string; password: string; metadata: AuthUserMetadata },
+  params: {
+    email: string;
+    password: string;
+    metadata: AuthUserMetadata;
+    confirmEmail?: boolean;
+  },
 ): Promise<User> {
   const { data, error } = await admin.auth.admin.createUser({
     email: params.email,
     password: params.password,
-    email_confirm: true,
+    email_confirm: params.confirmEmail ?? true,
     user_metadata: params.metadata,
   });
 

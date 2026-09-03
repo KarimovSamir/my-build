@@ -1,4 +1,4 @@
-import { Role, roleLabels, type UserProfile } from "@mybuild/shared";
+import { Role, roleLabels, type UserProfile } from "@/lib/types";
 
 /**
  * Текущий пользователь в том виде, в каком его показывает интерфейс.
@@ -39,4 +39,16 @@ export function toCurrentUser(profile: UserProfile): CurrentUser {
  */
 export function readRoleClaim(claim: unknown): Role | null {
   return claim === Role.CLIENT || claim === Role.COMPANY ? claim : null;
+}
+
+/**
+ * Подтверждён ли email — claim `email_verified` из того же хука (ТЗ §6).
+ *
+ * Хук берёт значение из `auth.users.email_confirmed_at`, поэтому подделать его
+ * нельзя. Claim'а нет — считаем подтверждённым: значит, хук в проекте выключен,
+ * и тогда нет и роли, а без роли кабинет всё равно закрыт. Так же рассуждает
+ * backend (`supabase-jwt.service.ts`), и расходиться эти две проверки не должны.
+ */
+export function readEmailVerifiedClaim(claim: unknown): boolean {
+  return claim !== false;
 }

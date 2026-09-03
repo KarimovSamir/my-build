@@ -4,7 +4,7 @@ import { Download } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import type { DownloadLink } from "@mybuild/shared";
+import type { DownloadLink } from "@/lib/types";
 
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/lib/api";

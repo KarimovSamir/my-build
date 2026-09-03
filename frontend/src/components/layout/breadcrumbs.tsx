@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment } from "react";
 
-import { Role } from "@mybuild/shared";
+import { getHomeHref } from "@/lib/navigation";
+import { Role } from "@/lib/types";
 
 /**
  * Хлебные крошки в шапке (ТЗ §7).
@@ -43,28 +44,53 @@ function isReachable(href: string, role: Role | null): boolean {
   return !(role === Role.COMPANY && href === "/orders");
 }
 
+/**
+ * Адрес в пути может быть закодирован как угодно, в том числе неправильно:
+ * `/orders/%` уронил бы `decodeURIComponent` прямо в шапке кабинета.
+ */
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export function Breadcrumbs({ role }: { role: Role | null }) {
   const pathname = usePathname();
   const segments = pathname.split("/").filter(Boolean);
 
+  // «Главная» ведёт в кабинет роли, а не на лендинг: с `/` вошедшего
+  // немедленно перекидывает обратно, то есть ссылка не делала ничего.
+  // Когда первый сегмент — сам кабинет, крошка не нужна: она вела бы туда же,
+  // куда и соседняя.
+  const homeHref = getHomeHref(role);
+  const showHome = segments.length === 0 || `/${segments[0]}` !== homeHref;
+
   return (
     <nav aria-label="Хлебные крошки" className="flex items-center gap-2 text-sm">
-      <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors">
-        Главная
-      </Link>
+      {showHome ? (
+        <Link
+          href={homeHref}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Главная
+        </Link>
+      ) : null}
 
       {segments.map((segment, index) => {
         const href = `/${segments.slice(0, index + 1).join("/")}`;
         const isLast = index === segments.length - 1;
         const label =
-          segmentLabels[segment] ??
-          (UUID.test(segment) ? "Заказ" : decodeURIComponent(segment));
+          segmentLabels[segment] ?? (UUID.test(segment) ? "Заказ" : decodeSegment(segment));
 
         return (
           <Fragment key={href}>
-            <span className="text-muted-foreground/50" aria-hidden>
-              /
-            </span>
+            {showHome || index > 0 ? (
+              <span className="text-muted-foreground/50" aria-hidden>
+                /
+              </span>
+            ) : null}
             {isLast || !isReachable(href, role) ? (
               <span className={isLast ? "font-medium" : "text-muted-foreground"}>
                 {label}

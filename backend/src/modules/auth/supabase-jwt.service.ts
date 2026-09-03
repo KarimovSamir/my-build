@@ -71,6 +71,7 @@ export class SupabaseJwtService implements OnModuleInit {
     return {
       id: payload.sub,
       email: typeof payload.email === 'string' ? payload.email : null,
+      emailVerified: readEmailVerified(payload),
       role: this.readRole(payload),
     };
   }
@@ -93,4 +94,21 @@ export class SupabaseJwtService implements OnModuleInit {
 
     return null;
   }
+}
+
+/**
+ * Подтверждён ли email (ТЗ §6: до подтверждения кабинет закрыт).
+ *
+ * Claim `email_verified` кладёт наш Custom Access Token Hook, читая
+ * `auth.users.email_confirmed_at`. Брать одноимённое поле из `user_metadata`
+ * нельзя: метаданные пользователь меняет сам через `updateUser`, то есть
+ * проверка обходилась бы одним запросом.
+ *
+ * Claim'а нет — считаем подтверждённым: это значит, что хук в проекте выключен,
+ * и тогда в токене нет и роли, а без роли `RolesGuard` не пустит никуда
+ * и скажет об этом прямо. Обратный выбор превратил бы выключенный хук
+ * в полностью неработающее приложение без внятной причины.
+ */
+function readEmailVerified(payload: JWTPayload): boolean {
+  return payload.email_verified !== false;
 }

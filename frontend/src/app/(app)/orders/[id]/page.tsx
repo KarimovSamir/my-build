@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import type { OrderDetail } from "@mybuild/shared";
+import type { OrderDetail } from "@/lib/types";
 
 import { OrderDetailView } from "@/components/orders/order-detail";
 import { ApiRequestError } from "@/lib/api";

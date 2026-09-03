@@ -3,10 +3,15 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 
-import type { Role, UserProfile } from "@mybuild/shared";
+import type { Role, UserProfile } from "@/lib/types";
 
 import { serverApi } from "./api.server";
-import { readRoleClaim, toCurrentUser, type CurrentUser } from "./session";
+import {
+  readEmailVerifiedClaim,
+  readRoleClaim,
+  toCurrentUser,
+  type CurrentUser,
+} from "./session";
 import { createSupabaseServerClient } from "./supabase/server";
 
 /**
@@ -18,6 +23,9 @@ import { createSupabaseServerClient } from "./supabase/server";
 
 export interface SessionClaims {
   userId: string;
+  email: string | null;
+  /** Claim из Custom Access Token Hook: подтверждён ли адрес (ТЗ §6). */
+  emailVerified: boolean;
   role: Role | null;
 }
 
@@ -34,7 +42,12 @@ export const getSessionClaims = cache(async (): Promise<SessionClaims | null> =>
     return null;
   }
 
-  return { userId: claims.sub, role: readRoleClaim(claims.user_role) };
+  return {
+    userId: claims.sub,
+    email: typeof claims.email === "string" ? claims.email : null,
+    emailVerified: readEmailVerifiedClaim(claims.email_verified),
+    role: readRoleClaim(claims.user_role),
+  };
 });
 
 /** Access-токен для запросов к нашему API. */

@@ -7,7 +7,7 @@
  * западнее Гринвича превратилось бы в 24-е.
  */
 
-import type { IsoDateString, MoneyString } from "@mybuild/shared";
+import type { IsoDateString, MoneyString } from "@/lib/types";
 
 const monthsShort = [
   "янв",

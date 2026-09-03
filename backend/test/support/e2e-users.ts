@@ -38,12 +38,14 @@ export interface E2eUser {
 export async function createE2eUser(
   prefix: string,
   overrides: Partial<AuthUserMetadata> & { role: Role },
+  options: { confirmEmail?: boolean } = {},
 ): Promise<E2eUser> {
   const email = `${prefix}-${randomUUID()}${E2E_EMAIL_DOMAIN}`;
 
   const user = await createAuthUser(createSupabaseAdminClient(), {
     email,
     password: E2E_PASSWORD,
+    confirmEmail: options.confirmEmail,
     metadata: {
       firstName: 'Тест',
       phone: '+7 900 000-00-00',

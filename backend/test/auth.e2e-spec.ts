@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Role } from '@mybuild/shared';
 
 import { Roles } from '../src/common/decorators/roles.decorator.js';
+import { PrismaService } from '../src/prisma/prisma.service.js';
 import {
   createE2eUser,
   dropE2eUsers,
@@ -217,6 +218,64 @@ describe('Аутентификация и доступ (e2e)', () => {
 
       expect(response.status).toBe(400);
     });
+
+    it.each(['без цифр', '12345', '+7 900 000-00-00-00-00-00', '+7(900)000$00$00'])(
+      'отклоняет телефон неверного формата: %s',
+      async (phone) => {
+        const response = await request(app.getHttpServer())
+          .patch('/profile')
+          .set('Authorization', `Bearer ${clientToken}`)
+          .send({ phone });
+
+        expect(response.status).toBe(400);
+      },
+    );
+
+    it('принимает телефон в привычных записях', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/profile')
+        .set('Authorization', `Bearer ${clientToken}`)
+        .send({ phone: '8 (800) 555-35-35' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.phone).toBe('8 (800) 555-35-35');
+    });
   });
 
+  /**
+   * Подтверждение email — требование ТЗ §6, и держаться оно должно на коде,
+   * а не только на переключателе в панели Supabase (находка 2-С3). Источник
+   * истины — claim `email_verified`, который кладёт наш хук доступа; здесь
+   * проверяется сам хук, на живой базе.
+   */
+  describe('claim email_verified', () => {
+    async function callHook(userId: string): Promise<Record<string, unknown>> {
+      const prisma = app.get(PrismaService);
+      const event = JSON.stringify({ user_id: userId, claims: { sub: userId } });
+
+      const [row] = await prisma.$queryRaw<{ result: { claims: Record<string, unknown> } }[]>`
+        SELECT public.custom_access_token_hook(${event}::jsonb) AS result
+      `;
+
+      return row!.result.claims;
+    }
+
+    it('у подтверждённого пользователя true, и роль на месте', async () => {
+      const claims = await callHook(client.id);
+
+      expect(claims).toMatchObject({ email_verified: true, user_role: Role.CLIENT });
+    });
+
+    it('у неподтверждённого пользователя false', async () => {
+      const pending = await createE2eUser(
+        'auth-unconfirmed',
+        { role: Role.CLIENT, firstName: 'Не', phone: '+7 900 000-33-33' },
+        { confirmEmail: false },
+      );
+
+      const claims = await callHook(pending.id);
+
+      expect(claims).toMatchObject({ email_verified: false, user_role: Role.CLIENT });
+    });
+  });
 });

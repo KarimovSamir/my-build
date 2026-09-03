@@ -18,7 +18,7 @@ export function buildSearchConditions(query: string): Prisma.OrderWhereInput[] {
       // кого не выбрали, в поиск не попадают: подрядчиками они не стали.
       offers: {
         some: {
-          status: { in: EXECUTOR_OFFER_STATUSES },
+          status: { in: [...EXECUTOR_OFFER_STATUSES] },
           company: { companyName: { contains: query, mode: 'insensitive' } },
         },
       },

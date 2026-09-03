@@ -11,8 +11,9 @@
  */
 
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { OfferStatus, OrderStatus } from '@mybuild/shared';
+import { EXECUTING_OFFER_STATUSES, OfferStatus, OrderStatus } from '@mybuild/shared';
 
+import { isUuid } from '../../common/uuid.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import type { Notification, Order } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -45,6 +46,13 @@ export type OrderTransitionCommand =
       correctionComment: string;
     };
 
+/** Предложение, у которого сменился статус, и компания-адресат события. */
+export interface OfferStatusUpdate {
+  offerId: string;
+  companyId: string;
+  status: OfferStatus;
+}
+
 /** Результат перехода. Из него Фаза 5 соберёт события WebSocket (ТЗ §8). */
 export interface AppliedTransition {
   order: Order;
@@ -52,19 +60,19 @@ export interface AppliedTransition {
   companyId: string;
   fromStatus: OrderStatus;
   nextStatus: OrderStatus;
+  /**
+   * Все затронутые предложения, а не только то, по которому пришло событие:
+   * при принятии одного остальные уходят в `NOT_ACCEPTED`, и каждой из этих
+   * компаний адресовано своё `offer:status_changed`.
+   */
+  offerUpdates: OfferStatusUpdate[];
   notifications: Notification[];
 }
-
-/** Статусы предложения, в которых компания считается исполнителем заказа. */
-const EXECUTING_OFFER_STATUSES: OfferStatus[] = [
-  OfferStatus.ACCEPTED,
-  OfferStatus.WORK_SUBMITTED,
-  OfferStatus.BACK_FOR_OVERRIDE,
-];
 
 type OfferWithCompany = {
   id: string;
   companyId: string;
+  status: OfferStatus;
   proposedPrice: Prisma.Decimal;
   proposedDeadline: Date;
   company: { companyName: string | null };
@@ -95,7 +103,7 @@ export class OrderTransitionService {
           event,
         );
 
-        const { updatedOrder, notifications } = await this.applyEffects(
+        const { updatedOrder, offerUpdates, notifications } = await this.applyEffects(
           tx,
           order.id,
           nextStatus,
@@ -108,6 +116,7 @@ export class OrderTransitionService {
           companyId: offer.companyId,
           fromStatus,
           nextStatus,
+          offerUpdates,
           notifications,
         };
       },
@@ -134,6 +143,12 @@ export class OrderTransitionService {
     tx: Prisma.TransactionClient,
     orderId: string,
   ): Promise<Order> {
+    // Приведение к `uuid` в сыром запросе не прощает мусора: неверный
+    // идентификатор упал бы в Postgres, то есть ушёл наружу как 500.
+    if (!isUuid(orderId)) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
     const locked = await tx.$queryRaw<
       { id: string }[]
     >`SELECT "id" FROM "Order" WHERE "id" = ${orderId}::uuid FOR UPDATE`;
@@ -150,14 +165,23 @@ export class OrderTransitionService {
     orderId: string,
     command: OrderTransitionCommand,
   ): Promise<OfferWithCompany> {
+    // Тот же случай, что и с заказом: колонка `Offer.id` типа `uuid`,
+    // и мусор в идентификаторе дал бы 500 вместо 404.
+    if ('offerId' in command && !isUuid(command.offerId)) {
+      throw new NotFoundException('Предложение не найдено');
+    }
+
     const select = {
       id: true,
       companyId: true,
+      status: true,
       proposedPrice: true,
       proposedDeadline: true,
       company: { select: { companyName: true } },
     } as const;
 
+    // Статус предложения здесь не фильтруется: подходит ли он событию,
+    // решает state-машина — это правило перехода, а не выборка (ТЗ §4).
     const offer =
       'offerId' in command
         ? await tx.offer.findFirst({
@@ -165,7 +189,7 @@ export class OrderTransitionService {
             select,
           })
         : await tx.offer.findFirst({
-            where: { orderId, status: { in: EXECUTING_OFFER_STATUSES } },
+            where: { orderId, status: { in: [...EXECUTING_OFFER_STATUSES] } },
             select,
           });
 
@@ -183,7 +207,11 @@ export class OrderTransitionService {
     command: OrderTransitionCommand,
     offer: OfferWithCompany,
   ): Promise<OrderEvent> {
-    const ref = { offerId: offer.id, companyId: offer.companyId };
+    const ref = {
+      offerId: offer.id,
+      companyId: offer.companyId,
+      offerStatus: offer.status,
+    };
 
     switch (command.type) {
       case OrderEventType.OFFER_SUBMITTED:
@@ -214,6 +242,19 @@ export class OrderTransitionService {
           // Decimal не переживает JSON без потерь, поэтому цена везде строка.
           proposedPrice: offer.proposedPrice.toString(),
           proposedDeadline: offer.proposedDeadline,
+          // Проигравшие нужны поимённо: каждой компании — свой статус
+          // и своё уведомление. Читаются под блокировкой строки заказа,
+          // то есть параллельный переход их не изменит.
+          otherOffers: (
+            await tx.offer.findMany({
+              where: {
+                orderId: command.orderId,
+                status: OfferStatus.SENT,
+                id: { not: offer.id },
+              },
+              select: { id: true, companyId: true },
+            })
+          ).map((rival) => ({ offerId: rival.id, companyId: rival.companyId })),
         };
 
       case OrderEventType.WORK_SUBMITTED:
@@ -240,25 +281,28 @@ export class OrderTransitionService {
     orderId: string,
     nextStatus: OrderStatus,
     effects: OrderSideEffect[],
-  ): Promise<{ updatedOrder: Order; notifications: Notification[] }> {
+  ): Promise<{
+    updatedOrder: Order;
+    offerUpdates: OfferStatusUpdate[];
+    notifications: Notification[];
+  }> {
     const orderData: Prisma.OrderUpdateInput = { status: nextStatus };
     const notificationsToCreate: Prisma.NotificationCreateManyInput[] = [];
 
-    // Каждый переход касается ровно одного предложения — того, по которому
-    // пришло событие. Поэтому здесь одно поле, а не список.
-    let offerStatusUpdate: { offerId: string; status: OfferStatus } | null = null;
-    let declineOthersExcept: string | null = null;
+    // Предложений в переходе может быть несколько: принимая одно, клиент
+    // отказывает остальным.
+    const offerUpdates: OfferStatusUpdate[] = [];
 
     // Сначала разбираем эффекты, потом пишем: так в цикле нет запросов
     // и порядок обращений к базе виден целиком.
     for (const effect of effects) {
       switch (effect.kind) {
         case 'SET_OFFER_STATUS':
-          offerStatusUpdate = { offerId: effect.offerId, status: effect.status };
-          break;
-
-        case 'DECLINE_OTHER_OFFERS':
-          declineOthersExcept = effect.acceptedOfferId;
+          offerUpdates.push({
+            offerId: effect.offerId,
+            companyId: effect.companyId,
+            status: effect.status,
+          });
           break;
 
         case 'SET_ORDER_DEAL':
@@ -286,19 +330,14 @@ export class OrderTransitionService {
       }
     }
 
-    if (offerStatusUpdate) {
-      await tx.offer.update({
-        where: { id: offerStatusUpdate.offerId },
-        data: { status: offerStatusUpdate.status },
-      });
-    }
-
-    if (declineOthersExcept) {
-      await tx.offer.updateMany({
-        where: { orderId, id: { not: declineOthersExcept }, status: OfferStatus.SENT },
-        data: { status: OfferStatus.NOT_ACCEPTED },
-      });
-    }
+    // Обновления сгруппированы по новому статусу: сколько бы предложений
+    // ни было у заказа, запросов остаётся не больше двух. Группы не
+    // пересекаются по идентификаторам, поэтому порядок между ними не важен.
+    await Promise.all(
+      [...groupOfferIdsByStatus(offerUpdates)].map(([status, offerIds]) =>
+        tx.offer.updateMany({ where: { id: { in: offerIds } }, data: { status } }),
+      ),
+    );
 
     const updatedOrder = await tx.order.update({
       where: { id: orderId },
@@ -311,6 +350,20 @@ export class OrderTransitionService {
       ? await tx.notification.createManyAndReturn({ data: notificationsToCreate })
       : [];
 
-    return { updatedOrder, notifications };
+    return { updatedOrder, offerUpdates, notifications };
   }
+}
+
+function groupOfferIdsByStatus(
+  updates: OfferStatusUpdate[],
+): Map<OfferStatus, string[]> {
+  const grouped = new Map<OfferStatus, string[]>();
+
+  for (const update of updates) {
+    const ids = grouped.get(update.status);
+    if (ids) ids.push(update.offerId);
+    else grouped.set(update.status, [update.offerId]);
+  }
+
+  return grouped;
 }

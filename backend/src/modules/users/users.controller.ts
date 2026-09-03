@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
 
 import type { UserProfile } from '@mybuild/shared';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
+import { Throttle } from '../../common/decorators/throttle.decorator.js';
+import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
 import type { AuthUser } from '../auth/auth-user.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { UsersService } from './users.service.js';
@@ -20,7 +22,10 @@ export class UsersController {
     return this.users.getProfile(user.id);
   }
 
+  /** Мутирующий маршрут — под ограничением частоты (ТЗ §6). */
   @Patch()
+  @UseGuards(ThrottleGuard)
+  @Throttle({ limit: 20, ttl: 60_000 })
   updateProfile(
     @CurrentUser() user: AuthUser,
     @Body() dto: UpdateProfileDto,

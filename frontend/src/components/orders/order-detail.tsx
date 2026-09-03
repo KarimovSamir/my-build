@@ -10,7 +10,7 @@ import {
   orderCategoryLabels,
   type OrderDetail,
   type OrderFileDto,
-} from "@mybuild/shared";
+} from "@/lib/types";
 
 import { DeleteOrderDialog } from "@/components/orders/delete-order-dialog";
 import { DownloadFileButton } from "@/components/orders/download-file-button";

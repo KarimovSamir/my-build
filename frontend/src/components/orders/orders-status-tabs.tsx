@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { orderStatusLabels } from "@mybuild/shared";
+import { orderStatusLabels } from "@/lib/types";
 
 import { ORDER_STATUS_TABS, ordersHref, type OrdersFilter } from "@/lib/orders-filter";
 import { cn } from "@/lib/utils";

@@ -14,6 +14,7 @@ import {
   MAX_FILE_SIZE_BYTES,
   fileExtension,
   type AllowedFileMimeType,
+  type FileOwnerType,
 } from '@mybuild/shared';
 
 /** Файл, пришедший на загрузку. Форма своя, не multer'овская: сервис не должен зависеть от транспорта. */
@@ -94,6 +95,26 @@ export function prepareFile(file: UploadedFileInput): PreparedFile {
     fileHash: createHash('sha256').update(file.buffer).digest('hex'),
     buffer: file.buffer,
   };
+}
+
+/**
+ * Ключ объекта в бакете.
+ *
+ * Хеш в имени делает ключ уникальным ровно там же, где уникальность требует
+ * база (`orderId + submissionRound + fileHash`), а транслитерированное имя
+ * рядом — чтобы содержимое папки читалось глазами в панели Supabase.
+ *
+ * Функция лежит здесь, а не в сервисе: тот же ключ строит seed, а тянуть
+ * ради этого в скрипт весь `FilesService` с базой и хранилищем незачем.
+ */
+export function buildStorageKey(
+  orderId: string,
+  ownerType: FileOwnerType,
+  submissionRound: number,
+  file: Pick<PreparedFile, 'fileHash' | 'safeName'>,
+): string {
+  const owner = ownerType.toLowerCase();
+  return `orders/${orderId}/${owner}/${submissionRound}/${file.fileHash.slice(0, 16)}-${file.safeName}`;
 }
 
 /**

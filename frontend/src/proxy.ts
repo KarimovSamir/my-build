@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { Role } from "@mybuild/shared";
+import { Role } from "@/lib/types";
 
-import { getHomeHref } from "./lib/navigation";
+import { getHomeHref, SESSION_ISSUE_PAGES } from "./lib/navigation";
 import { updateSession } from "./lib/supabase/proxy";
 
 /**
@@ -30,8 +30,20 @@ const APP_SECTIONS = [
 /** Экраны входа: вошедшему пользователю показывать их незачем. */
 const GUEST_ONLY_PAGES = ["/login", "/register", "/forgot-password"];
 
+/** Служебные экраны про испорченную сессию: без входа они бессмысленны. */
+const SESSION_ISSUE_PATHS: string[] = Object.values(SESSION_ISSUE_PAGES);
+
+/**
+ * Экраны, где сессия как раз устанавливается или меняется.
+ *
+ * Уводить с них нельзя ни при каких проблемах с сессией: ссылка из письма
+ * подтверждения приводит именно на `/callback`, и увод оттуда означал бы,
+ * что подтвердить email нельзя никогда.
+ */
+const AUTH_FLOW_PAGES = ["/callback", "/reset-password"];
+
 export async function proxy(request: NextRequest): Promise<NextResponse> {
-  const { response, userId, role } = await updateSession(request);
+  const { response, userId, role, emailVerified } = await updateSession(request);
   const { pathname } = request.nextUrl;
 
   if (!userId) {
@@ -42,18 +54,45 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       return NextResponse.redirect(login);
     }
 
+    if (SESSION_ISSUE_PATHS.includes(pathname)) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+
     return response;
   }
 
-  if (GUEST_ONLY_PAGES.includes(pathname)) {
+  if (isAuthFlowPage(pathname)) {
+    return response;
+  }
+
+  // Вошёл, но кабинетом пользоваться нельзя: причина показывается отдельным
+  // экраном, иначе пользователь упрётся в 401/403 от API без объяснений.
+  const stayOrGo = (target: string) =>
+    pathname === target ? response : NextResponse.redirect(new URL(target, request.url));
+
+  if (!emailVerified) {
+    return stayOrGo(SESSION_ISSUE_PAGES.unverifiedEmail);
+  }
+
+  if (!role) {
+    return stayOrGo(SESSION_ISSUE_PAGES.missingRole);
+  }
+
+  if (GUEST_ONLY_PAGES.includes(pathname) || SESSION_ISSUE_PATHS.includes(pathname)) {
     return NextResponse.redirect(new URL(getHomeHref(role), request.url));
   }
 
-  if (role && !isAllowedForRole(pathname, role)) {
+  if (!isAllowedForRole(pathname, role)) {
     return NextResponse.redirect(new URL(getHomeHref(role), request.url));
   }
 
   return response;
+}
+
+function isAuthFlowPage(pathname: string): boolean {
+  return AUTH_FLOW_PAGES.some(
+    (page) => pathname === page || pathname.startsWith(`${page}/`),
+  );
 }
 
 function isAppSection(pathname: string): boolean {

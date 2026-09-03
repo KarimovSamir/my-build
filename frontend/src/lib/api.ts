@@ -1,4 +1,4 @@
-import type { ApiError } from "@mybuild/shared";
+import type { ApiError } from "@/lib/types";
 
 /**
  * Типизированный клиент к NestJS API.

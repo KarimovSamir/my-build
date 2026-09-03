@@ -1,4 +1,4 @@
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -77,7 +77,7 @@ describe('SupabaseAuthGuard', () => {
   });
 
   it('кладёт пользователя в запрос после успешной проверки', async () => {
-    const user = { id: 'u1', email: 'a@b.test', role: Role.CLIENT };
+    const user = { id: 'u1', email: 'a@b.test', emailVerified: true, role: Role.CLIENT };
     const verify = vi.fn().mockResolvedValue(user);
     const { context, request } = contextFor('protected_', {
       headers: { authorization: 'Bearer token' },
@@ -95,6 +95,24 @@ describe('SupabaseAuthGuard', () => {
     const guard = guardWith(() => Promise.reject(new InvalidTokenError('Токен истёк')));
 
     await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('не пускает с неподтверждённым email (ТЗ §6)', async () => {
+    const { context } = contextFor('protected_', {
+      headers: { authorization: 'Bearer token' },
+    });
+    const guard = guardWith(() =>
+      Promise.resolve({ id: 'u1', email: 'a@b.test', emailVerified: false, role: Role.CLIENT }),
+    );
+
+    await expect(guard.canActivate(context)).rejects.toThrow(ForbiddenException);
+    await expect(guard.canActivate(context)).rejects.toThrow(/Подтвердите email/);
+  });
+
+  it('не проверяет подтверждение email на публичном маршруте', async () => {
+    const { context } = contextFor('open', { headers: {} });
+
+    await expect(guardWith(failIfCalled).canActivate(context)).resolves.toBe(true);
   });
 
   it('не прячет посторонние ошибки под 401', async () => {

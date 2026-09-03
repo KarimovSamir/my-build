@@ -10,7 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import type { Role } from "@mybuild/shared";
+import type { Role } from "@/lib/types";
 
 export interface NavItem {
   href: string;
@@ -72,17 +72,32 @@ export function getNavigation(role: Role): NavSection[] {
 }
 
 /**
+ * Служебные экраны: вход выполнен, но пользоваться кабинетом нельзя.
+ *
+ * Оба случая — поломка настройки проекта Supabase, а не действие пользователя,
+ * поэтому экран обязан назвать причину: иначе человек видит пустой кабинет
+ * и не понимает, что произошло. Разделы кабинета до этих экранов не доходят —
+ * `proxy.ts` уводит сюда раньше.
+ */
+export const SESSION_ISSUE_PAGES = {
+  /** Email не подтверждён (ТЗ §6). */
+  unverifiedEmail: "/verify-email",
+  /** В токене нет claim'а `user_role`: не включён Custom Access Token Hook. */
+  missingRole: "/no-role",
+} as const;
+
+/**
  * Куда отправляем пользователя сразу после входа.
  *
  * Роли может не быть, если в проекте Supabase не включён хук, добавляющий
- * claim `user_role`. Тогда ведём в настройки: там профиль виден целиком
- * и понятно, что с ним не так.
+ * claim `user_role`. Раздела, который что-то показал бы такому пользователю,
+ * не существует — ведём на служебный экран с объяснением.
  */
 export function getHomeHref(role: Role | null): string {
   if (role === "COMPANY") return "/available";
   if (role === "CLIENT") return "/orders";
 
-  return "/settings";
+  return SESSION_ISSUE_PAGES.missingRole;
 }
 
 /**

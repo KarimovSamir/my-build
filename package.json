@@ -18,7 +18,7 @@
     "test": "npm run test -w backend",
     "test:e2e": "npm run test:e2e -w backend",
     "lint": "npm run lint -w backend && npm run lint -w frontend",
-    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
+    "typecheck": "npm run typecheck -w shared && npm run typecheck -w backend && npm run typecheck -w frontend",
     "db:migrate": "npm run db:migrate -w backend",
     "db:generate": "npm run db:generate -w backend",
     "db:studio": "npm run db:studio -w backend",

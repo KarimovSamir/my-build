@@ -15,6 +15,7 @@ import {
   ORDER_ACCESS_KEY,
   OrderAccessMode,
 } from '../decorators/order-access.decorator.js';
+import { isUuid } from '../uuid.js';
 
 /**
  * Проверка владения заказом (ТЗ §6, «Ownership-guards»).
@@ -40,10 +41,6 @@ export interface OrderAccessContext {
 export interface RequestWithOrderAccess extends RequestWithUser {
   orderAccess?: OrderAccessContext;
 }
-
-/** `:id` в маршрутах заказа — UUID. Проверяем до запроса: иначе Prisma даст 500. */
-const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class OwnershipGuard implements CanActivate {
@@ -72,7 +69,8 @@ export class OwnershipGuard implements CanActivate {
     const raw: unknown = request.params?.['id'];
     const orderId = typeof raw === 'string' ? raw : '';
 
-    if (!UUID.test(orderId)) {
+    // `:id` в маршрутах заказа — UUID. Проверяем до запроса: иначе Prisma даст 500.
+    if (!isUuid(orderId)) {
       throw new NotFoundException('Заказ не найден');
     }
 

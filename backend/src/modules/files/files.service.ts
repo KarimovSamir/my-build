@@ -16,6 +16,7 @@ import {
 import type { OrderFile } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import {
+  buildStorageKey,
   prepareFile,
   sanitizeFileName,
   type PreparedFile,
@@ -30,10 +31,9 @@ import { StorageService } from './storage.service.js';
  *
  * Список общий с модулем заказов: два независимых перечня одних и тех же
  * статусов рано или поздно разошлись бы. Он шире, чем `EXECUTING_OFFER_STATUSES`
- * в `OrderTransitionService`: там речь про заказ в работе, а доступ к файлам
- * сохраняется и после завершения.
+ * (заказ в работе): доступ к файлам сохраняется и после завершения.
  */
-const PARTICIPATING_OFFER_STATUSES = EXECUTOR_OFFER_STATUSES;
+const PARTICIPATING_OFFER_STATUSES = [...EXECUTOR_OFFER_STATUSES];
 
 export interface AttachFilesParams {
   orderId: string;
@@ -233,23 +233,6 @@ export class FilesService {
     const known = new Set(existing.map((file) => file.fileHash));
     return uniqueInBatch.filter((file) => !known.has(file.fileHash));
   }
-}
-
-/**
- * Ключ объекта в бакете.
- *
- * Хеш в имени делает ключ уникальным ровно там же, где уникальность требует
- * база (`orderId + submissionRound + fileHash`), а транслитерированное имя
- * рядом — чтобы содержимое папки читалось глазами в панели Supabase.
- */
-function buildStorageKey(
-  orderId: string,
-  ownerType: FileOwnerType,
-  submissionRound: number,
-  file: PreparedFile,
-): string {
-  const owner = ownerType.toLowerCase();
-  return `orders/${orderId}/${owner}/${submissionRound}/${file.fileHash.slice(0, 16)}-${file.safeName}`;
 }
 
 /** Имя латиницей и цифрами — такое Supabase Storage отдаёт без искажений. */

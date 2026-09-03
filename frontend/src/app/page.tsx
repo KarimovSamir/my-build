@@ -12,6 +12,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Logo } from "@/components/brand/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getHomeHref } from "@/lib/navigation";
@@ -71,6 +72,7 @@ export default async function LandingPage() {
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 lg:px-8">
           <Logo href="/" />
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <Button variant="ghost" asChild>
               <Link href="/login">Войти</Link>
             </Button>
@@ -151,7 +153,7 @@ export default async function LandingPage() {
 
       <footer className="border-border border-t">
         <div className="text-muted-foreground mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm lg:px-8">
-          <Logo href="/" size={24} />
+          <Logo href="/" size="sm" />
           <p>© {new Date().getFullYear()} MyBuild</p>
         </div>
       </footer>

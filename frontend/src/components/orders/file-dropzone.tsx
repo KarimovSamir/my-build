@@ -8,7 +8,7 @@ import {
   ALLOWED_FILE_EXTENSIONS_HINT,
   MAX_FILES_PER_REQUEST,
   MAX_FILE_SIZE_BYTES,
-} from "@mybuild/shared";
+} from "@/lib/types";
 
 import { Button } from "@/components/ui/button";
 import { formatFileSize } from "@/lib/format";

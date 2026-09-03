@@ -7,8 +7,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  * Проверяет, что приложение поднимается целиком и честно сообщает о состоянии.
  *
  * База здесь заведомо недоступна (адрес указывает в никуда) — это и проверяем:
- * сервер не падает, а `/health` отдаёт 503 с причиной. Проверка «база жива»
- * появится, когда в CI будет реальное подключение.
+ * сервер не падает, а `/health` отдаёт 503. Проверка «база жива» появится,
+ * когда в CI будет реальное подключение.
  */
 describe('Health (e2e)', () => {
   let app: INestApplication;
@@ -44,7 +44,7 @@ describe('Health (e2e)', () => {
     await app?.close();
   });
 
-  it('отдаёт 503 и причину, когда база недоступна', async () => {
+  it('отдаёт 503, когда база недоступна', async () => {
     const response = await request(app.getHttpServer()).get('/health');
 
     expect(response.status).toBe(503);
@@ -52,8 +52,16 @@ describe('Health (e2e)', () => {
       status: 'degraded',
       database: 'down',
     });
-    expect(typeof response.body.databaseError).toBe('string');
     expect(typeof response.body.uptimeSeconds).toBe('number');
+  });
+
+  it('не раскрывает наружу подробности ошибки базы', async () => {
+    const response = await request(app.getHttpServer()).get('/health');
+
+    // Текст ошибки Prisma/pg содержит хост, порт и имя базы: маршрут публичный,
+    // и показывать это кому угодно нельзя (находка 2-С1).
+    expect(Object.keys(response.body)).toEqual(['status', 'uptimeSeconds', 'database']);
+    expect(JSON.stringify(response.body)).not.toContain('127.0.0.1');
   });
 
   it('на неизвестном маршруте отдаёт ошибку в едином формате', async () => {

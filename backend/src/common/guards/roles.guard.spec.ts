@@ -31,9 +31,11 @@ function contextFor(route: RouteName, user: AuthUser | undefined): ExecutionCont
 
 const guard = new RolesGuard(new Reflector());
 
-const client: AuthUser = { id: 'u1', email: 'a@b.test', role: Role.CLIENT };
-const company: AuthUser = { id: 'u2', email: 'c@d.test', role: Role.COMPANY };
-const roleless: AuthUser = { id: 'u3', email: 'e@f.test', role: null };
+const verified = { emailVerified: true } as const;
+
+const client: AuthUser = { id: 'u1', email: 'a@b.test', role: Role.CLIENT, ...verified };
+const company: AuthUser = { id: 'u2', email: 'c@d.test', role: Role.COMPANY, ...verified };
+const roleless: AuthUser = { id: 'u3', email: 'e@f.test', role: null, ...verified };
 
 describe('RolesGuard', () => {
   it('пропускает маршрут без ограничения по роли', () => {

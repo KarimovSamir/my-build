@@ -14,6 +14,11 @@ export interface AuthUser {
   id: string;
   email: string | null;
   /**
+   * Claim `email_verified` из того же хука: он читает `auth.users.email_confirmed_at`,
+   * то есть значение подписано Supabase и подделать его нельзя (ТЗ §6).
+   */
+  emailVerified: boolean;
+  /**
    * Claim `user_role` из Custom Access Token Hook (ТЗ §6).
    * `null`, если хук не включён в проекте Supabase, — тогда `RolesGuard`
    * не пропустит запрос и скажет, чего не хватает.

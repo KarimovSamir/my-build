@@ -15,14 +15,17 @@ import {
   offerStatusTones,
   orderStatusLabels,
   orderStatusTones,
-} from "@mybuild/shared";
+} from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 /**
  * Badge статуса — один компонент на все экраны.
  *
- * Цвет и текст берутся из `shared/`, поэтому статус заказа выглядит одинаково
- * в кабинете клиента и в кабинете компании (ТЗ §7, «UX-замечания»).
+ * Собран на `ui/badge` из дизайн-системы: своя вёрстка разъехалась бы с
+ * остальными badge. Меняются только цвета — они берутся из `shared/`, поэтому
+ * статус заказа выглядит одинаково в кабинете клиента и в кабинете компании
+ * (ТЗ §7, «UX-замечания»).
  */
 
 const toneClasses: Record<StatusTone, string> = {
@@ -51,16 +54,13 @@ interface BadgeShellProps {
 
 function BadgeShell({ tone, icon: Icon, label, className }: BadgeShellProps) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap",
-        toneClasses[tone],
-        className,
-      )}
+    <Badge
+      variant="secondary"
+      className={cn("h-auto gap-1.5 rounded-full px-2.5 py-1", toneClasses[tone], className)}
     >
-      <Icon className="size-3.5 shrink-0" aria-hidden />
+      <Icon aria-hidden />
       {label}
-    </span>
+    </Badge>
   );
 }
 

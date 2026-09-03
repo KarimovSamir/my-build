@@ -1,5 +1,7 @@
 import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+
+import { PHONE_ERROR_MESSAGE, PHONE_MAX_LENGTH, PHONE_PATTERN } from '@mybuild/shared';
 
 /** Обрезает пробелы по краям: ' Анна ' и 'Анна' — это одно и то же имя. */
 const trim = () =>
@@ -34,7 +36,8 @@ export class UpdateProfileDto {
   @IsString()
   @trim()
   @IsNotEmpty({ message: 'Телефон не может быть пустым' })
-  @MaxLength(30)
+  @MaxLength(PHONE_MAX_LENGTH)
+  @Matches(PHONE_PATTERN, { message: PHONE_ERROR_MESSAGE })
   phone?: string;
 
   @IsOptional()

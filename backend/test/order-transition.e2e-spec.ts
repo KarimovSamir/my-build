@@ -140,6 +140,17 @@ describe('OrderTransitionService (e2e)', () => {
       type: NotificationType.OFFER_ACCEPTED,
     });
 
+    // Проигравшая компания узнаёт о решении клиента тем же коммитом (ТЗ §8),
+    // а Фаза 5 берёт из `offerUpdates` адресатов `offer:status_changed`.
+    expect(accepted.notifications[1]).toMatchObject({
+      userId: companyBId,
+      type: NotificationType.OFFER_REJECTED,
+    });
+    expect(accepted.offerUpdates).toEqual([
+      { offerId: offerA.id, companyId: companyAId, status: OfferStatus.ACCEPTED },
+      { offerId: offerB.id, companyId: companyBId, status: OfferStatus.NOT_ACCEPTED },
+    ]);
+
     const offersAfterAccept = await prisma.offer.findMany({
       where: { orderId: order.id },
       select: { id: true, status: true },
@@ -223,6 +234,58 @@ describe('OrderTransitionService (e2e)', () => {
     expect(await prisma.notification.count({ where: { orderId: order.id } })).toBe(
       notificationsBefore,
     );
+  });
+
+  it('отклоняет предложение один раз: повторное отклонение даёт 409', async () => {
+    const { order, offerA, offerB } = await createOrderWithOffers(
+      new Date('2027-06-01T00:00:00.000Z'),
+    );
+
+    await transitions.apply({
+      type: OrderEventType.OFFER_SUBMITTED,
+      orderId: order.id,
+      offerId: offerA.id,
+    });
+    await transitions.apply({
+      type: OrderEventType.OFFER_SUBMITTED,
+      orderId: order.id,
+      offerId: offerB.id,
+    });
+
+    const rejected = await transitions.apply({
+      type: OrderEventType.OFFER_REJECTED,
+      orderId: order.id,
+      offerId: offerB.id,
+    });
+    expect(rejected.order.status).toBe(OrderStatus.AWAITING_CONFIRMATION);
+    expect(rejected.notifications[0]).toMatchObject({
+      userId: companyBId,
+      type: NotificationType.OFFER_REJECTED,
+    });
+
+    const notificationsBefore = await prisma.notification.count({
+      where: { orderId: order.id },
+    });
+
+    // Заказ по-прежнему ждёт выбора из предложения компании А, то есть
+    // по статусу заказа переход разрешён. Второй раз отклонять уже нечего.
+    await expect(
+      transitions.apply({
+        type: OrderEventType.OFFER_REJECTED,
+        orderId: order.id,
+        offerId: offerB.id,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+
+    expect(await prisma.notification.count({ where: { orderId: order.id } })).toBe(
+      notificationsBefore,
+    );
+  });
+
+  it('не находит заказ по идентификатору, который не является UUID', async () => {
+    await expect(
+      transitions.apply({ type: OrderEventType.WORK_SUBMITTED, orderId: 'not-a-uuid' }),
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it('возвращает заказ в поиск исполнителя, когда отозвано последнее предложение', async () => {

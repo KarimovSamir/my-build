@@ -12,8 +12,12 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
  *
  * `scope: 'global'` — сессия закрывается на всех устройствах (ТЗ §5): для
  * общего компьютера это ожидаемое поведение кнопки «выйти».
+ *
+ * В шапке кабинета это иконка, а на служебных экранах — обычная кнопка
+ * с подписью: там она единственное осмысленное действие, и прятать её
+ * под иконку нельзя.
  */
-export function SignOutButton() {
+export function SignOutButton({ label }: { label?: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
 
@@ -22,6 +26,15 @@ export function SignOutButton() {
     await getSupabaseBrowserClient().auth.signOut({ scope: "global" });
     router.replace("/login");
     router.refresh();
+  }
+
+  if (label) {
+    return (
+      <Button variant="outline" onClick={signOut} disabled={pending} className="w-full">
+        <LogOut className="size-4" />
+        {label}
+      </Button>
+    );
   }
 
   return (

@@ -32,9 +32,15 @@ import {
   type OrderViewer,
 } from './order-view.js';
 
+/**
+ * Списки статусов в `shared/` объявлены `readonly`, а Prisma ждёт изменяемый
+ * массив: копия делается один раз здесь, а не в каждом запросе.
+ */
+const EXECUTOR_STATUSES = [...EXECUTOR_OFFER_STATUSES];
+
 /** Предложение исполнителя — из него берётся колонка «Подрядчик». */
 const EXECUTOR_OFFER_SELECT = {
-  where: { status: { in: EXECUTOR_OFFER_STATUSES } },
+  where: { status: { in: EXECUTOR_STATUSES } },
   include: { company: { select: { companyName: true } } },
   take: 1,
 } as const;

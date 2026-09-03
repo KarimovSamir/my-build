@@ -15,7 +15,7 @@ import {
 import { authErrorMessage } from "@/lib/auth-errors";
 import { getHomeHref } from "@/lib/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { Role, roleLabels } from "@mybuild/shared";
+import { isValidPhone, PHONE_ERROR_MESSAGE, Role, roleLabels } from "@/lib/types";
 
 /**
  * Регистрация (ТЗ §5).
@@ -42,6 +42,13 @@ export function RegisterForm() {
     const form = new FormData(event.currentTarget);
     const email = String(form.get("email")).trim();
     const password = String(form.get("password"));
+    const phone = text(form, "phone") ?? "";
+
+    // Тот же формат проверяет `PATCH /profile`: правило одно, в `shared/`.
+    if (!isValidPhone(phone)) {
+      setError(PHONE_ERROR_MESSAGE);
+      return;
+    }
 
     if (password.length < MIN_PASSWORD_LENGTH) {
       setError(`Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов`);
@@ -65,7 +72,7 @@ export function RegisterForm() {
           role,
           firstName: text(form, "firstName"),
           lastName: text(form, "lastName"),
-          phone: text(form, "phone"),
+          phone,
           companyName: role === Role.COMPANY ? text(form, "companyName") : undefined,
           city: text(form, "city"),
           country: text(form, "country"),

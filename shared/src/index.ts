@@ -4,3 +4,4 @@ export * from './types.js';
 export * from './api.js';
 export * from './orders.js';
 export * from './offers.js';
+export * from './profile.js';

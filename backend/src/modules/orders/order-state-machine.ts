@@ -50,6 +50,18 @@ export interface OrderStateContext {
 interface OfferRef {
   offerId: string;
   companyId: string;
+  /**
+   * Статус предложения на момент события. Без него машина решала бы переход
+   * по одному лишь статусу заказа, и уже отклонённое предложение можно было
+   * бы отклонить второй раз, пока заказ ждёт выбора из других.
+   */
+  offerStatus: OfferStatus;
+}
+
+/** Чужое предложение того же заказа, всё ещё ждущее решения клиента. */
+export interface RivalOffer {
+  offerId: string;
+  companyId: string;
 }
 
 export type OrderEvent =
@@ -65,6 +77,12 @@ export type OrderEvent =
       type: typeof OrderEventType.OFFER_ACCEPTED;
       proposedPrice: string;
       proposedDeadline: Date;
+      /**
+       * Остальные предложения заказа в статусе SENT: они проигрывают выбор.
+       * Список, а не счётчик, — каждой компании нужно и сменить статус,
+       * и отправить уведомление (ТЗ §8).
+       */
+      otherOffers: RivalOffer[];
     } & OfferRef)
   | ({ type: typeof OrderEventType.WORK_SUBMITTED } & OfferRef)
   | ({ type: typeof OrderEventType.WORK_CONFIRMED; completionComment?: string } & OfferRef)
@@ -75,10 +93,16 @@ export type OrderEvent =
  * Все эффекты перехода применяются в одной транзакции (ТЗ §12.2).
  */
 export type OrderSideEffect =
-  /** Сменить статус предложения, по которому пришло событие. */
-  | { kind: 'SET_OFFER_STATUS'; offerId: string; status: OfferStatus }
-  /** Остальные активные предложения заказа → NOT_ACCEPTED. */
-  | { kind: 'DECLINE_OTHER_OFFERS'; acceptedOfferId: string }
+  /**
+   * Сменить статус предложения. `companyId` здесь не для записи в базу,
+   * а для адресата: по нему Фаза 5 разошлёт `offer:status_changed` (ТЗ §8).
+   */
+  | {
+      kind: 'SET_OFFER_STATUS';
+      offerId: string;
+      companyId: string;
+      status: OfferStatus;
+    }
   /** Зафиксировать цену и срок сделки из принятого предложения. */
   | { kind: 'SET_ORDER_DEAL'; price: string; deadline: Date }
   /** Комментарий клиента к доработке. */
@@ -114,6 +138,50 @@ export class InvalidStateTransitionError extends ConflictException {
   }
 }
 
+/**
+ * 409 Conflict на событие, которому не подходит текущий статус самого
+ * предложения. Отдельно от `InvalidStateTransitionError`: заказ в подходящем
+ * статусе, а вот предложение — нет.
+ */
+export class InvalidOfferStatusError extends ConflictException {
+  constructor(
+    readonly offerStatus: OfferStatus,
+    readonly event: OrderEventType,
+  ) {
+    super({
+      statusCode: 409,
+      error: 'InvalidOfferStatus',
+      message: `Недопустимое действие «${event}» для предложения в статусе «${offerStatus}»`,
+    });
+  }
+}
+
+/**
+ * Статусы предложения, из которых событие имеет смысл.
+ *
+ * Статус заказа этого не заменяет: пока заказ ждёт выбора из нескольких
+ * предложений, он остаётся в `AWAITING_CONFIRMATION` — и без этой таблицы
+ * одно и то же предложение можно было бы отклонить дважды.
+ *
+ * `OFFER_SUBMITTED` разрешён из всех статусов, кроме исполнительских:
+ * компания вправе прислать предложение заново после отзыва, отказа клиента
+ * или проигрыша, но не тогда, когда уже работает по заказу.
+ */
+const OFFER_PRECONDITIONS: Record<OrderEventType, readonly OfferStatus[]> = {
+  [OrderEventType.OFFER_SUBMITTED]: [
+    OfferStatus.SENT,
+    OfferStatus.WITHDRAWN,
+    OfferStatus.REJECTED,
+    OfferStatus.NOT_ACCEPTED,
+  ],
+  [OrderEventType.OFFER_WITHDRAWN]: [OfferStatus.SENT],
+  [OrderEventType.OFFER_REJECTED]: [OfferStatus.SENT],
+  [OrderEventType.OFFER_ACCEPTED]: [OfferStatus.SENT],
+  [OrderEventType.WORK_SUBMITTED]: [OfferStatus.ACCEPTED, OfferStatus.BACK_FOR_OVERRIDE],
+  [OrderEventType.WORK_CONFIRMED]: [OfferStatus.WORK_SUBMITTED],
+  [OrderEventType.WORK_DISPUTED]: [OfferStatus.WORK_SUBMITTED],
+};
+
 type TransitionHandler = (
   context: OrderStateContext,
   event: OrderEvent,
@@ -126,6 +194,16 @@ type TransitionTable = {
 /** `ORD-7829 «Ремонт квартиры»` — как заказ подписан в уведомлении. */
 function orderRef(context: OrderStateContext): string {
   return `${formatOrderNumber(context.orderNumber)} «${context.title}»`;
+}
+
+/** Сменить статус предложения, по которому пришло событие. */
+function setOfferStatus(offer: OfferRef, status: OfferStatus): OrderSideEffect {
+  return {
+    kind: 'SET_OFFER_STATUS',
+    offerId: offer.offerId,
+    companyId: offer.companyId,
+    status,
+  };
 }
 
 function notify(
@@ -153,7 +231,7 @@ const offerSubmitted: TransitionHandler = (context, event) => {
   return {
     nextStatus: OrderStatus.AWAITING_CONFIRMATION,
     effects: [
-      { kind: 'SET_OFFER_STATUS', offerId: event.offerId, status: OfferStatus.SENT },
+      setOfferStatus(event, OfferStatus.SENT),
       notify(
         context.clientId,
         NotificationType.OFFER_RECEIVED,
@@ -179,9 +257,7 @@ function offerLeftSelection(
       throw unexpected(event);
     }
 
-    const effects: OrderSideEffect[] = [
-      { kind: 'SET_OFFER_STATUS', offerId: event.offerId, status: offerStatus },
-    ];
+    const effects: OrderSideEffect[] = [setOfferStatus(event, offerStatus)];
 
     if (notifyCompany) {
       effects.push(
@@ -206,23 +282,40 @@ function offerLeftSelection(
 const offerAccepted: TransitionHandler = (context, event) => {
   if (event.type !== OrderEventType.OFFER_ACCEPTED) throw unexpected(event);
 
-  return {
-    nextStatus: OrderStatus.IN_PROGRESS,
-    effects: [
-      { kind: 'SET_OFFER_STATUS', offerId: event.offerId, status: OfferStatus.ACCEPTED },
-      { kind: 'DECLINE_OTHER_OFFERS', acceptedOfferId: event.offerId },
+  const effects: OrderSideEffect[] = [
+    setOfferStatus(event, OfferStatus.ACCEPTED),
+    {
+      kind: 'SET_ORDER_DEAL',
+      price: event.proposedPrice,
+      deadline: event.proposedDeadline,
+    },
+    notify(
+      event.companyId,
+      NotificationType.OFFER_ACCEPTED,
+      `${orderRef(context)}: ваше предложение принято, можно приступать`,
+    ),
+  ];
+
+  // Проигравшие перечисляются поимённо, а не одним «отклонить остальные»:
+  // смена статуса без уведомления оставила бы компанию без ответа, а Фазу 5 —
+  // без адресатов события `offer:status_changed` (ТЗ §8).
+  for (const rival of event.otherOffers) {
+    effects.push(
       {
-        kind: 'SET_ORDER_DEAL',
-        price: event.proposedPrice,
-        deadline: event.proposedDeadline,
+        kind: 'SET_OFFER_STATUS',
+        offerId: rival.offerId,
+        companyId: rival.companyId,
+        status: OfferStatus.NOT_ACCEPTED,
       },
       notify(
-        event.companyId,
-        NotificationType.OFFER_ACCEPTED,
-        `${orderRef(context)}: ваше предложение принято, можно приступать`,
+        rival.companyId,
+        NotificationType.OFFER_REJECTED,
+        `${orderRef(context)}: клиент выбрал другое предложение`,
       ),
-    ],
-  };
+    );
+  }
+
+  return { nextStatus: OrderStatus.IN_PROGRESS, effects };
 };
 
 const workSubmitted: TransitionHandler = (context, event) => {
@@ -231,11 +324,7 @@ const workSubmitted: TransitionHandler = (context, event) => {
   return {
     nextStatus: OrderStatus.AWAITING_COMPLETION_CONFIRMATION,
     effects: [
-      {
-        kind: 'SET_OFFER_STATUS',
-        offerId: event.offerId,
-        status: OfferStatus.WORK_SUBMITTED,
-      },
+      setOfferStatus(event, OfferStatus.WORK_SUBMITTED),
       notify(
         context.clientId,
         NotificationType.WORK_SUBMITTED,
@@ -251,11 +340,7 @@ const workConfirmed: TransitionHandler = (context, event) => {
   return {
     nextStatus: OrderStatus.COMPLETED,
     effects: [
-      {
-        kind: 'SET_OFFER_STATUS',
-        offerId: event.offerId,
-        status: OfferStatus.COMPLETED,
-      },
+      setOfferStatus(event, OfferStatus.COMPLETED),
       { kind: 'SET_COMPLETION_COMMENT', comment: event.completionComment ?? null },
       notify(
         event.companyId,
@@ -272,11 +357,7 @@ const workDisputed: TransitionHandler = (context, event) => {
   return {
     nextStatus: OrderStatus.COMPLETION_DISPUTED,
     effects: [
-      {
-        kind: 'SET_OFFER_STATUS',
-        offerId: event.offerId,
-        status: OfferStatus.BACK_FOR_OVERRIDE,
-      },
+      setOfferStatus(event, OfferStatus.BACK_FOR_OVERRIDE),
       { kind: 'SET_CORRECTION_COMMENT', comment: event.correctionComment },
       notify(
         event.companyId,
@@ -343,12 +424,19 @@ export class OrderStateMachine {
    * возвращает следующий статус и список эффектов для применения.
    *
    * @throws InvalidStateTransitionError если перехода нет в таблице ТЗ §4.
+   * @throws InvalidOfferStatusError если событию не подходит статус предложения.
    */
   transition(context: OrderStateContext, event: OrderEvent): OrderTransitionResult {
     const handler = TRANSITIONS[context.status][event.type];
 
     if (!handler) {
       throw new InvalidStateTransitionError(context.status, event.type);
+    }
+
+    // Статус заказа проверяется первым: он описывает переход целиком,
+    // а статус предложения — только право этого предложения в нём участвовать.
+    if (!OFFER_PRECONDITIONS[event.type].includes(event.offerStatus)) {
+      throw new InvalidOfferStatusError(event.offerStatus, event.type);
     }
 
     return { fromStatus: context.status, ...handler(context, event) };
