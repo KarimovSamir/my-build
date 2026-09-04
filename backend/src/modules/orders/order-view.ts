@@ -19,6 +19,7 @@ import {
   type OrderDetail,
   type OrderFileDto,
   type OrderListItem,
+  type OrderSubmissionDto,
 } from '@mybuild/shared';
 
 import type { Prisma } from '../../generated/prisma/client.js';
@@ -69,6 +70,14 @@ export interface OrderRow {
   offers: OfferRow[];
 }
 
+/** Сдача работы в том объёме, в каком она лежит в базе. */
+export interface SubmissionRow {
+  round: number;
+  comment: string;
+  submittedAt: Date | null;
+  createdAt: Date;
+}
+
 /** Заказ со всем, что нужно для карточки. */
 export interface OrderDetailRow extends OrderRow {
   description: string;
@@ -87,6 +96,7 @@ export interface OrderDetailRow extends OrderRow {
     country: string | null;
   };
   files: OrderFileDto[];
+  submissions: SubmissionRow[];
 }
 
 /** Что именно этому пользователю позволено видеть в этом заказе. */
@@ -171,6 +181,16 @@ export function toOrderDetail(
     // Доступ к файлам совпадает с проверкой в FilesService: задание клиента
     // и сдачи компании видят только стороны сделки.
     files: view.isParty ? order.files : [],
+    submissions: view.isParty ? order.submissions.map(toSubmissionDto) : [],
+  };
+}
+
+function toSubmissionDto(submission: SubmissionRow): OrderSubmissionDto {
+  return {
+    round: submission.round,
+    comment: submission.comment,
+    submittedAt: toIso(submission.submittedAt),
+    createdAt: submission.createdAt.toISOString(),
   };
 }
 

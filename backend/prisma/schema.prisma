@@ -153,11 +153,38 @@ model Order {
 
   offers        Offer[]
   files         OrderFile[]
+  submissions   OrderSubmission[]
   notifications Notification[]
   payments      Payment[]
 
   @@index([clientId, status])
   @@index([status, createdAt])
+}
+
+/// Сдача работы компанией-исполнителем (ТЗ §4.1).
+///
+/// Одна строка на раунд: она хранит обязательный комментарий компании и
+/// отвечает на вопрос «какой сейчас номер сдачи». Вывести номер из файлов
+/// нельзя — раунд, в котором загрузка сорвалась, файлов не оставляет,
+/// и нумерация поехала бы.
+model OrderSubmission {
+  id      String @id @default(uuid()) @db.Uuid
+  orderId String @db.Uuid
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// Номер сдачи, начиная с 1. Файлы сдачи несут его в submissionRound.
+  round   Int
+  /// Комментарий компании: обязателен вместе с файлами (ТЗ §4.1).
+  comment String
+
+  /// Когда сдача ушла клиенту на подтверждение.
+  /// null — сдача открыта: компания ещё дозагружает файлы.
+  submittedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orderId, round])
 }
 
 /// Файл заказа. Файлы компании версионируются по сдачам: каждая сдача

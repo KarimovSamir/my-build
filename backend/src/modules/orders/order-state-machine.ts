@@ -15,9 +15,10 @@ import {
   NotificationType,
   OfferStatus,
   OrderStatus,
-  formatOrderNumber,
   notificationTypeLabels,
 } from '@mybuild/shared';
+
+import { orderRef } from './order-notification.js';
 
 /** События, которые двигают заказ по статусам. */
 export const OrderEventType = {
@@ -210,11 +211,6 @@ type TransitionHandler = (
 type TransitionTable = {
   [S in OrderStatus]: Partial<Record<OrderEventType, TransitionHandler>>;
 };
-
-/** `ORD-7829 «Ремонт квартиры»` — как заказ подписан в уведомлении. */
-function orderRef(context: OrderStateContext): string {
-  return `${formatOrderNumber(context.orderNumber)} «${context.title}»`;
-}
 
 /** Сменить статус предложения, по которому пришло событие. */
 function setOfferStatus(offer: OfferOwner, status: OfferStatus): OrderSideEffect {

@@ -18,6 +18,12 @@ export const OrderAccessMode = {
   OWNER: 'OWNER',
   /** Владелец либо любая компания: что именно она увидит, решает `order-view`. */
   VIEWER: 'VIEWER',
+  /**
+   * Только компания-исполнитель — та, чьё предложение приняли. Клиент сюда
+   * не проходит: это маршруты, которые может дёрнуть лишь тот, кто работу
+   * делает (сдача, файлы сдачи, уточнение площади — ТЗ §4.1).
+   */
+  EXECUTOR: 'EXECUTOR',
 } as const;
 export type OrderAccessMode = (typeof OrderAccessMode)[keyof typeof OrderAccessMode];
 

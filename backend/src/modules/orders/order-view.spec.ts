@@ -87,6 +87,14 @@ function order(overrides: Partial<OrderDetailRow> = {}): OrderDetailRow {
         createdAt: '2026-09-01T09:05:00.000Z',
       },
     ],
+    submissions: [
+      {
+        round: 1,
+        comment: 'Первая сдача: план и смета',
+        submittedAt: new Date('2026-09-03T12:00:00.000Z'),
+        createdAt: new Date('2026-09-03T11:00:00.000Z'),
+      },
+    ],
     ...overrides,
   };
 }
@@ -109,6 +117,17 @@ describe('toOrderDetail — клиент-владелец', () => {
   it('видит файлы и подрядчика', () => {
     expect(view.files).toHaveLength(1);
     expect(view.contractorName).toBe('ООО «3333»');
+  });
+
+  it('видит сдачи работы с комментарием исполнителя', () => {
+    expect(view.submissions).toEqual([
+      {
+        round: 1,
+        comment: 'Первая сдача: план и смета',
+        submittedAt: '2026-09-03T12:00:00.000Z',
+        createdAt: '2026-09-03T11:00:00.000Z',
+      },
+    ]);
   });
 
   it('видит самого себя как заказчика', () => {
@@ -135,8 +154,9 @@ describe('toOrderDetail — компания-исполнитель', () => {
     expect(view.correctionComment).toBe('Переделать проводку');
   });
 
-  it('видит файлы заказа', () => {
+  it('видит файлы заказа и свои сдачи', () => {
     expect(view.files).toHaveLength(1);
+    expect(view.submissions).toHaveLength(1);
   });
 
   it('видит только своё предложение, не конкурентов', () => {
@@ -160,8 +180,9 @@ describe('toOrderDetail — компания с активным предлож�
     expect(view.status).toBe(OrderStatus.AWAITING_CONFIRMATION);
   });
 
-  it('файлов заказа не видит: исполнителем её ещё не выбрали', () => {
+  it('ни файлов, ни сдач не видит: исполнителем её ещё не выбрали', () => {
     expect(view.files).toEqual([]);
+    expect(view.submissions).toEqual([]);
   });
 
   it('видит только своё предложение', () => {
@@ -181,6 +202,7 @@ describe('toOrderDetail — компания, которая в заказе н�
     expect(view.correctionComment).toBeNull();
     expect(view.clientCompletionComment).toBeNull();
     expect(view.files).toEqual([]);
+    expect(view.submissions).toEqual([]);
     expect(view.offers).toEqual([]);
   });
 

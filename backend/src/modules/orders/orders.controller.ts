@@ -38,8 +38,8 @@ import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
 import { UploadSizeGuard } from '../../common/guards/upload-size.guard.js';
 import { TempUploadCleanupInterceptor } from '../../common/interceptors/temp-upload-cleanup.interceptor.js';
 import type { AuthUser } from '../auth/auth-user.js';
-import type { UploadedFileInput } from '../files/file-validation.js';
 import { UPLOAD_TEMP_DIR } from '../files/uploaded-file.js';
+import { toUploads, type MulterFile } from './multer-file.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { ListOrdersQueryDto } from './dto/list-orders.dto.js';
 import { OrdersService } from './orders.service.js';
@@ -51,21 +51,6 @@ import { OrdersService } from './orders.service.js';
  * он. Детали открыты обеим ролям, но состав ответа зависит от того, кто
  * смотрит (ТЗ §4.1) — этим занимается `order-view`, а не контроллер.
  */
-
-/**
- * То, что multer кладёт в запрос. Пакет `@types/multer` не ставим: из всего
- * его описания нам нужны четыре поля, а лишняя зависимость — лишний повод
- * для конфликта версий.
- *
- * `buffer` здесь нет намеренно: файлы пишутся во временный каталог, а не
- * в память процесса.
- */
-interface MulterFile {
-  originalname: string;
-  mimetype: string;
-  path: string;
-  size: number;
-}
 
 @Controller('orders')
 export class OrdersController {
@@ -137,14 +122,4 @@ export class OrdersController {
   remove(@OrderAccessCtx() access: OrderAccessContext): Promise<void> {
     return this.orders.remove(access.orderId, access.status);
   }
-}
-
-/** Файлы multer → форма, с которой работает `FilesService`. */
-function toUploads(files: MulterFile[] | undefined): UploadedFileInput[] {
-  return (files ?? []).map((file) => ({
-    originalName: file.originalname,
-    mimeType: file.mimetype,
-    path: file.path,
-    sizeBytes: file.size,
-  }));
 }

@@ -30,6 +30,9 @@ class TestRoutes {
   @OrderAccess(OrderAccessMode.OWNER)
   owner(): void {}
 
+  @OrderAccess(OrderAccessMode.EXECUTOR)
+  executor(): void {}
+
   /** Декоратора нет: guard обязан считать маршрут закрытым. */
   undecorated(): void {}
 }
@@ -246,6 +249,61 @@ describe('OwnershipGuard', () => {
     await expect(
       guardWith(createPrismaStub(waitingOrder)).canActivate(context),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  describe('режим исполнителя', () => {
+    function orderWithOwnOffer(status: OfferStatus): StubOrder {
+      return {
+        clientId: CLIENT_ID,
+        status: OrderStatus.IN_PROGRESS,
+        offers: [{ id: 'offer-own', status, companyId: COMPANY_ID }],
+      };
+    }
+
+    it.each([
+      OfferStatus.ACCEPTED,
+      OfferStatus.WORK_SUBMITTED,
+      OfferStatus.BACK_FOR_OVERRIDE,
+      // Завершённый заказ компания тоже должна открывать: маршрут ответит 409,
+      // но это решение state-машины, а не отказ в доступе.
+      OfferStatus.COMPLETED,
+    ])('пускает компанию с предложением в статусе %s', async (status) => {
+      const prisma = createPrismaStub(orderWithOwnOffer(status));
+      const { context, request } = contextFor('executor', requestFor(company));
+
+      await expect(guardWith(prisma).canActivate(context)).resolves.toBe(true);
+      expect(request.orderAccess?.ownOffer).toEqual({ id: 'offer-own', status });
+    });
+
+    it.each([
+      OfferStatus.SENT,
+      OfferStatus.REJECTED,
+      OfferStatus.WITHDRAWN,
+      OfferStatus.NOT_ACCEPTED,
+    ])('не пускает компанию с предложением в статусе %s', async (status) => {
+      const { context } = contextFor('executor', requestFor(company));
+
+      await expect(
+        guardWith(createPrismaStub(orderWithOwnOffer(status))).canActivate(context),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('не пускает владельца заказа: сдаёт работу не он', async () => {
+      const prisma = createPrismaStub(orderWithOwnOffer(OfferStatus.ACCEPTED));
+      const { context } = contextFor('executor', requestFor(client));
+
+      await expect(guardWith(prisma).canActivate(context)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('не пускает компанию без предложения по заказу', async () => {
+      const { context } = contextFor('executor', requestFor(company));
+
+      await expect(
+        guardWith(createPrismaStub(waitingOrder)).canActivate(context),
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 
   it('не пускает пользователя без роли в токене', async () => {

@@ -8,7 +8,6 @@
 
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
-  DEFAULT_PAGE_SIZE,
   DELETABLE_ORDER_STATUSES,
   EXECUTOR_OFFER_STATUSES,
   FileOwnerType,
@@ -19,6 +18,7 @@ import {
   type Paginated,
 } from '@mybuild/shared';
 
+import { pageRequest, toPage } from '../../common/pagination.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import type { UploadedFileInput } from '../files/file-validation.js';
@@ -57,6 +57,9 @@ const DETAIL_INCLUDE = {
     include: { company: { select: { companyName: true } } },
     orderBy: { createdAt: 'asc' },
   },
+  // От первой сдачи к последней: интерфейс показывает последнюю, а прежние
+  // складывает в «Историю сдач» (ТЗ §4.1).
+  submissions: { orderBy: { round: 'asc' } },
 } as const;
 
 @Injectable()
@@ -143,8 +146,7 @@ export class OrdersService {
       where.OR = buildSearchConditions(query.q);
     }
 
-    const page = query.page || 1;
-    const pageSize = query.pageSize || DEFAULT_PAGE_SIZE;
+    const request = pageRequest(query);
 
     const [total, rows] = await Promise.all([
       this.prisma.order.count({ where }),
@@ -152,18 +154,16 @@ export class OrdersService {
         where,
         include: { offers: EXECUTOR_OFFER_SELECT },
         orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        skip: request.skip,
+        take: request.pageSize,
       }),
     ]);
 
-    return {
-      items: rows.map((row) => toOrderListItem(row, { id: clientId })),
-      page,
-      pageSize,
+    return toPage(
+      rows.map((row) => toOrderListItem(row, { id: clientId })),
+      request,
       total,
-      totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    };
+    );
   }
 
   /**

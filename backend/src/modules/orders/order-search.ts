@@ -22,12 +22,27 @@ export function escapeLike(value: string): string {
   return value.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
 }
 
-export function buildSearchConditions(query: string): Prisma.OrderWhereInput[] {
+export interface SearchOptions {
+  /**
+   * Искать ли по названию подрядчика. В ленте доступных заказов
+   * (`GET /company/orders/available`) подрядчика нет по определению — там
+   * это условие не нашло бы ничего и только удлиняло бы запрос.
+   */
+  includeContractor?: boolean;
+}
+
+export function buildSearchConditions(
+  query: string,
+  { includeContractor = true }: SearchOptions = {},
+): Prisma.OrderWhereInput[] {
   const text = escapeLike(query);
 
   const conditions: Prisma.OrderWhereInput[] = [
     { title: { contains: text, mode: 'insensitive' } },
-    {
+  ];
+
+  if (includeContractor) {
+    conditions.push({
       // Подрядчик — это компания, чьё предложение приняли. Предложения тех,
       // кого не выбрали, в поиск не попадают: подрядчиками они не стали.
       offers: {
@@ -36,8 +51,8 @@ export function buildSearchConditions(query: string): Prisma.OrderWhereInput[] {
           company: { companyName: { contains: text, mode: 'insensitive' } },
         },
       },
-    },
-  ];
+    });
+  }
 
   // Номер добавляется, только если запрос действительно похож на номер:
   // иначе в `where` уехал бы `NaN`. `parseOrderNumber` заодно отсекает числа,

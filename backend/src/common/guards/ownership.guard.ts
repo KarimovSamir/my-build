@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
-import { Role, type OfferStatus, type OrderStatus } from '@mybuild/shared';
+import { Role, isExecutorOffer, type OfferStatus, type OrderStatus } from '@mybuild/shared';
 
 import type { RequestWithUser } from '../../modules/auth/auth-user.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -98,8 +98,14 @@ export class OwnershipGuard implements CanActivate {
     // (ТЗ §4.1). Урезает ответ `order-view`, а не guard: здесь решается
     // только «пускать или нет». Условие написано «пускаем компанию», а не
     // «не пускаем клиента»: без роли в токене (хук выключён) доступа не будет.
+    //
+    // `EXECUTOR` — единственный режим, куда владелец заказа не проходит:
+    // сдавать работу и уточнять площадь может только та компания, чьё
+    // предложение приняли.
     const allowed =
-      isOwner || (mode === OrderAccessMode.VIEWER && request.user.role === Role.COMPANY);
+      mode === OrderAccessMode.EXECUTOR
+        ? ownOffer !== null && isExecutorOffer(ownOffer.status)
+        : isOwner || (mode === OrderAccessMode.VIEWER && request.user.role === Role.COMPANY);
 
     if (!allowed) {
       throw new NotFoundException('Заказ не найден');

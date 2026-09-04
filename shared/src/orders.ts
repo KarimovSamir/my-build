@@ -14,6 +14,12 @@ export const ORDER_LIMITS = {
   address: { min: 5, max: 300 },
   /** Площадь: число больше нуля, не более двух знаков после запятой. */
   squareMeters: { max: 1_000_000, maxDecimals: 2 },
+  /**
+   * Комментарии вокруг сдачи работы: к сдаче (компания), к доработке и
+   * к приёмке (клиент). Предел общий — это одно и то же поле для человека,
+   * и разные лимиты у соседних форм выглядели бы случайностью.
+   */
+  comment: { min: 1, max: 2000 },
 } as const;
 
 /** Сумма в формате колонки БД: `Decimal(12, 2)`. */
@@ -33,4 +39,37 @@ export const DELETABLE_ORDER_STATUSES: readonly OrderStatus[] = [
 
 export function canDeleteOrder(status: OrderStatus): boolean {
   return DELETABLE_ORDER_STATUSES.includes(status);
+}
+
+/**
+ * Статусы, в которых компания-исполнитель добавляет файлы своей сдачи (ТЗ §4.1).
+ *
+ * `AWAITING_COMPLETION_CONFIRMATION` сюда не входит: работа уже передана
+ * клиенту, и дозагрузка молча меняла бы то, что он в этот момент проверяет.
+ * Чтобы приложить забытый файл, компании нужна новая сдача — то есть сначала
+ * решение клиента.
+ */
+export const WORK_UPLOAD_ORDER_STATUSES: readonly OrderStatus[] = [
+  OrderStatus.IN_PROGRESS,
+  OrderStatus.COMPLETION_DISPUTED,
+];
+
+/**
+ * Статусы, в которых компания-исполнитель уточняет площадь (ТЗ §4.1):
+ * после принятия предложения и до завершения заказа.
+ */
+export const AREA_VERIFIABLE_ORDER_STATUSES: readonly OrderStatus[] = [
+  OrderStatus.IN_PROGRESS,
+  OrderStatus.AWAITING_COMPLETION_CONFIRMATION,
+  OrderStatus.COMPLETION_DISPUTED,
+];
+
+/** Компания может добавить файлы в свою текущую сдачу. */
+export function canUploadWork(status: OrderStatus): boolean {
+  return WORK_UPLOAD_ORDER_STATUSES.includes(status);
+}
+
+/** Компания может уточнить площадь объекта. */
+export function canVerifyArea(status: OrderStatus): boolean {
+  return AREA_VERIFIABLE_ORDER_STATUSES.includes(status);
 }

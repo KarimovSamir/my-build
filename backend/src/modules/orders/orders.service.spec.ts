@@ -77,6 +77,7 @@ function orderRow(overrides: Partial<{ status: OrderStatus }> = {}) {
       country: 'Россия',
     },
     offers: [],
+    submissions: [],
   };
 }
 

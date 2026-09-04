@@ -182,6 +182,14 @@ function companyFile(
   };
 }
 
+/** Сдача работы: комментарий компании к файлам того же раунда (ТЗ §4.1). */
+interface SeedSubmission {
+  round: number;
+  comment: string;
+  /** Все сдачи в seed уже отправлены клиенту: открытых раундов нет. */
+  submittedAt: Date;
+}
+
 /**
  * Создаёт учётные записи. Профили в public.User пишет триггер — здесь
  * остаётся только запомнить выданные Supabase идентификаторы.
@@ -223,6 +231,8 @@ interface SeedOrder {
   clientCompletionComment?: string;
   correctionComment?: string;
   files: SeedFile[];
+  /** По одной записи на каждый раунд файлов компании. */
+  submissions?: SeedSubmission[];
   offers: {
     companyId: string;
     status: OfferStatus;
@@ -345,6 +355,13 @@ const buildOrders = (): SeedOrder[] => [
       companyFile('Проект перепланировки.dwg', 'image/vnd.dwg', 3_882_010, 1),
       companyFile('Пояснительная записка.pdf', 'application/pdf', 918_443, 1),
     ],
+    submissions: [
+      {
+        round: 1,
+        comment: 'Проект готов, приложила пояснительную записку для согласования.',
+        submittedAt: daysFromNow(-1),
+      },
+    ],
     offers: [
       {
         companyId: userId('arch'),
@@ -373,6 +390,15 @@ const buildOrders = (): SeedOrder[] => [
       clientFile('Схема разводки.pdf', 'application/pdf', 402_115),
       companyFile('Фото после работ.jpg', 'image/jpeg', 2_204_910, 1),
     ],
+    // Сдача отправлена и вернулась на доработку: следующий раунд компания
+    // откроет сама, загрузив исправления.
+    submissions: [
+      {
+        round: 1,
+        comment: 'Работы закончены, прикладываю фото.',
+        submittedAt: daysFromNow(-3),
+      },
+    ],
     offers: [
       {
         companyId: userId('remont'),
@@ -400,6 +426,18 @@ const buildOrders = (): SeedOrder[] => [
       companyFile('Дизайн-проект v1.pdf', 'application/pdf', 7_331_002, 1),
       companyFile('Дизайн-проект финал.pdf', 'application/pdf', 7_905_244, 2),
       companyFile('Визуализации.png', 'image/png', 4_120_338, 2),
+    ],
+    submissions: [
+      {
+        round: 1,
+        comment: 'Первый вариант дизайн-проекта на согласование.',
+        submittedAt: daysFromNow(-16),
+      },
+      {
+        round: 2,
+        comment: 'Поправил цвет фасадов, добавил визуализации.',
+        submittedAt: daysFromNow(-11),
+      },
     ],
     offers: [
       {
@@ -434,6 +472,9 @@ async function seedOrders(): Promise<void> {
         clientCompletionComment: order.clientCompletionComment ?? null,
         correctionComment: order.correctionComment ?? null,
         offers: { create: order.offers },
+        // Сдача — это комментарий компании плюс файлы того же раунда;
+        // без неё карточка заказа показала бы файлы «ничьей» сдачи.
+        submissions: { create: order.submissions ?? [] },
       },
     });
 

@@ -83,6 +83,20 @@ export interface AppliedTransition {
   notifications: Notification[];
 }
 
+/**
+ * Настройки транзакции перехода.
+ *
+ * Переход — это до девяти запросов подряд, и база managed, то есть задержка
+ * сети умножается на девять. Дефолтные 5 секунд Prisma при плохой связи
+ * истекают ещё до коммита, и переход падает на ровном месте. Запас важнее
+ * пары секунд ожидания.
+ *
+ * Экспортируется, потому что вызывающий код иногда открывает транзакцию сам
+ * (отправка предложения: запись предложения и переход обязаны быть одним
+ * коммитом) и должен делать это с теми же запасами.
+ */
+export const TRANSITION_TX_OPTIONS = { timeout: 15_000, maxWait: 10_000 } as const;
+
 type OfferWithCompany = {
   id: string;
   companyId: string;
@@ -99,50 +113,64 @@ export class OrderTransitionService {
     private readonly machine: OrderStateMachine,
   ) {}
 
-  async apply(command: OrderTransitionCommand): Promise<AppliedTransition> {
+  /**
+   * Выполнить переход.
+   *
+   * `tx` передаётся, когда переход обязан войти в чужую транзакцию: отправка
+   * предложения записывает строку `Offer` и тут же двигает заказ, и разными
+   * коммитами это делать нельзя — предложение осталось бы висеть в `SENT`
+   * на заказе, который никуда не перешёл. Без `tx` сервис открывает
+   * транзакцию сам.
+   */
+  async apply(
+    command: OrderTransitionCommand,
+    tx?: Prisma.TransactionClient,
+  ): Promise<AppliedTransition> {
+    if (tx) {
+      return this.run(tx, command);
+    }
+
     return this.prisma.$transaction(
-      async (tx) => {
-        const order = await this.lockOrder(tx, command.orderId);
-        const offer = await this.resolveOffer(tx, order.id, command);
-        const event = await this.buildEvent(tx, command, offer);
-
-        const { fromStatus, nextStatus, effects } = this.machine.transition(
-          {
-            orderId: order.id,
-            orderNumber: order.orderNumber,
-            title: order.title,
-            clientId: order.clientId,
-            status: order.status,
-          },
-          event,
-        );
-
-        const { updatedOrder, offerUpdates, notifications } = await this.applyEffects(
-          tx,
-          order.id,
-          nextStatus,
-          effects,
-        );
-
-        return {
-          order: updatedOrder,
-          offerId: offer.id,
-          companyId: offer.companyId,
-          fromStatus,
-          nextStatus,
-          offerUpdates,
-          notifications,
-        };
-      },
-      {
-        // Переход — это до девяти запросов подряд, и база managed, то есть
-        // задержка сети умножается на девять. Дефолтные 5 секунд Prisma
-        // при плохой связи истекают ещё до коммита, и переход падает
-        // на ровном месте. Запас важнее пары секунд ожидания.
-        timeout: 15_000,
-        maxWait: 10_000,
-      },
+      (inner) => this.run(inner, command),
+      TRANSITION_TX_OPTIONS,
     );
+  }
+
+  private async run(
+    tx: Prisma.TransactionClient,
+    command: OrderTransitionCommand,
+  ): Promise<AppliedTransition> {
+    const order = await this.lockOrder(tx, command.orderId);
+    const offer = await this.resolveOffer(tx, order.id, command);
+    const event = await this.buildEvent(tx, command, offer);
+
+    const { fromStatus, nextStatus, effects } = this.machine.transition(
+      {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        title: order.title,
+        clientId: order.clientId,
+        status: order.status,
+      },
+      event,
+    );
+
+    const { updatedOrder, offerUpdates, notifications } = await this.applyEffects(
+      tx,
+      order.id,
+      nextStatus,
+      effects,
+    );
+
+    return {
+      order: updatedOrder,
+      offerId: offer.id,
+      companyId: offer.companyId,
+      fromStatus,
+      nextStatus,
+      offerUpdates,
+      notifications,
+    };
   }
 
   /**
@@ -152,8 +180,13 @@ export class OrderTransitionService {
    * предложение, а компания в тот же момент отзывает другое) прочитали бы
    * один и тот же статус и записали бы поверх друг друга. Prisma строчных
    * блокировок не умеет, поэтому FOR UPDATE идёт сырым запросом.
+   *
+   * Публичный, потому что порядок блокировок обязан быть одинаковым во всех
+   * транзакциях: тот, кто перед переходом пишет `Offer` сам, должен сначала
+   * заблокировать заказ — иначе две транзакции берут те же строки в обратном
+   * порядке и Postgres убивает одну из них по взаимной блокировке.
    */
-  private async lockOrder(
+  async lockOrder(
     tx: Prisma.TransactionClient,
     orderId: string,
   ): Promise<Order> {

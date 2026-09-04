@@ -70,6 +70,23 @@ export interface DownloadLink {
   originalName: string;
 }
 
+/**
+ * Сдача работы компанией (ТЗ §4.1).
+ *
+ * Файлы сюда не вкладываются: они уже приходят в `OrderDetail.files`
+ * и относятся к сдаче полем `submissionRound`. Дублировать их вторым списком
+ * значило бы возить одно и то же дважды и получить два источника правды.
+ */
+export interface OrderSubmissionDto {
+  /** Номер сдачи, начиная с 1. Совпадает с `submissionRound` её файлов. */
+  round: number;
+  /** Комментарий компании — при добавлении файлов он обязателен (ТЗ §4.1). */
+  comment: string;
+  /** Когда работа ушла клиенту. `null` — сдача ещё готовится. */
+  submittedAt: IsoDateString | null;
+  createdAt: IsoDateString;
+}
+
 /** Предложение компании по заказу. */
 export interface OfferDto {
   id: string;
@@ -121,6 +138,23 @@ export interface OrderDetail extends OrderListItem {
   client: Pick<UserProfile, 'id' | 'firstName' | 'lastName' | 'city' | 'country'> | null;
   offers: OfferDto[];
   files: OrderFileDto[];
+  /**
+   * Сдачи работы, от первой к последней. Как и файлы, видны только сторонам
+   * сделки; для остальных список пуст (ТЗ §4.1).
+   */
+  submissions: OrderSubmissionDto[];
+}
+
+/**
+ * Строка в списке «Мои предложения» компании (`GET /company/offers`).
+ *
+ * Заказ вложен целиком в том же виде, в каком он приходит в списке: правила
+ * видимости для компании одни и те же, и считает их одна и та же функция.
+ * Значит, у заказа с уже отклонённым предложением статус будет показан как
+ * `WAITING` — компания в нём больше не участвует (ТЗ §4.1).
+ */
+export interface CompanyOfferItem extends OfferDto {
+  order: OrderListItem;
 }
 
 /** Уведомление в колокольчике и в разделе «Уведомления». */

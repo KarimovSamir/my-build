@@ -5,6 +5,8 @@ import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
 import { FilesModule } from '../files/files.module.js';
 import { OrderStateMachine } from './order-state-machine.js';
 import { OrderTransitionService } from './order-transition.service.js';
+import { OrderWorkflowController } from './order-workflow.controller.js';
+import { OrderWorkflowService } from './order-workflow.service.js';
 import { OrdersController } from './orders.controller.js';
 import { OrdersService } from './orders.service.js';
 
@@ -19,11 +21,12 @@ import { OrdersService } from './orders.service.js';
  */
 @Module({
   imports: [FilesModule],
-  controllers: [OrdersController],
+  controllers: [OrdersController, OrderWorkflowController],
   providers: [
     OrderStateMachine,
     OrderTransitionService,
     OrdersService,
+    OrderWorkflowService,
     OwnershipGuard,
     ThrottleGuard,
   ],
