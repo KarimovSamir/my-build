@@ -19,7 +19,8 @@ npm run dev:api             # только backend
 ```
 
 API поднимается на `http://localhost:4000`, проверка живости —
-`GET /health` (200 при живой базе, 503 с причиной при недоступной).
+`GET /health`: отдаёт `database: "up" | "down"`, причина недоступности уходит
+в лог, а не в ответ.
 
 ## Переменные окружения
 
@@ -67,8 +68,12 @@ src/
   main.ts              точка входа
   bootstrap.ts         helmet, CORS, ValidationPipe, формат ошибок
   config/              проверка .env при старте
-  common/filters/      единый формат ошибок API
+  common/              guard'ы, фильтр ошибок, интерсепторы, семафор, isUuid
+  config/              проверка .env при старте
   prisma/              PrismaModule и PrismaService
+  supabase/            клиент с секретным ключом, проверка JWT по JWKS
   modules/health/      GET /health
-  modules/orders/      OrderStateMachine и транзакционная обёртка
+  modules/users/       GET и PATCH /profile
+  modules/files/       Storage, валидация файлов, GET /documents/:id/download
+  modules/orders/      CRUD заказов, OrderStateMachine и транзакционная обёртка
 ```
