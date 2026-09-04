@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import {
+  DEFAULT_PAGE_SIZE,
   formatOrderNumber,
   type OrderListItem,
   type Paginated,
@@ -40,6 +41,9 @@ export async function OrdersList({ filter }: { filter: OrdersFilter }) {
       status: filter.status,
       q: filter.q,
       page: filter.page,
+      // Размер страницы задаётся явно, а не берётся из умолчания backend:
+      // иначе смена умолчания на сервере молча меняла бы вид экрана.
+      pageSize: DEFAULT_PAGE_SIZE,
     },
   });
 

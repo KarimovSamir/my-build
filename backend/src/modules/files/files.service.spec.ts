@@ -1,12 +1,19 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FileOwnerType, OfferStatus } from '@mybuild/shared';
 
+import {
+  pdfBytes,
+  removeWrittenUploads,
+  writeUpload,
+} from '../../../test/support/uploads.js';
 import type { PrismaService } from '../../prisma/prisma.service.js';
+import type { PreparedFile } from './file-validation.js';
 import { FilesService } from './files.service.js';
 import type { StorageService } from './storage.service.js';
+import { prepareFile } from './uploaded-file.js';
 
 /**
  * Проверяет то, чего не видно в валидации: дедупликацию в пределах сдачи,
@@ -21,16 +28,22 @@ const CLIENT_ID = '22222222-2222-2222-2222-222222222222';
 const COMPANY_ID = '33333333-3333-3333-3333-333333333333';
 const STRANGER_ID = '44444444-4444-4444-4444-444444444444';
 
-function upload(name: string, content: string) {
-  return {
-    originalName: name,
-    mimeType: 'application/pdf',
-    buffer: Buffer.from(content),
-  };
+afterAll(() => {
+  removeWrittenUploads();
+});
+
+/** Проверенный файл на диске — ровно то, что теперь принимает `attachFiles`. */
+function upload(name: string, content: string): Promise<PreparedFile> {
+  return prepareFile(writeUpload(name, 'application/pdf', pdfBytes(content)));
 }
 
 function hashOf(content: string): string {
-  return createHash('sha256').update(Buffer.from(content)).digest('hex');
+  return createHash('sha256').update(pdfBytes(content)).digest('hex');
+}
+
+/** Ключ объекта в бакете — тот же, что строит `buildStorageKey`. */
+function keyOf(content: string, safeName: string): string {
+  return `orders/${ORDER_ID}/client/0/${hashOf(content).slice(0, 16)}-${safeName}`;
 }
 
 /** Заказ в подставной базе: предложения с их статусами, как в настоящей таблице. */
@@ -52,6 +65,8 @@ interface OrderFindUniqueArgs {
  */
 function createPrismaStub(overrides: {
   existingHashes?: string[];
+  /** Ключи объектов, на которые уже ссылаются строки в базе (проверка гонки). */
+  liveKeys?: string[];
   order?: StubOrder | null;
 }) {
   return {
@@ -64,8 +79,12 @@ function createPrismaStub(overrides: {
             createdAt: new Date('2026-09-03T10:00:00.000Z'),
           })),
       ),
-      findMany: vi.fn(async () =>
-        (overrides.existingHashes ?? []).map((fileHash) => ({ fileHash })),
+      // Один и тот же метод обслуживает два запроса: отсев дублей спрашивает
+      // хеши, уборка осиротевших объектов — ключи.
+      findMany: vi.fn(async (args: { select: Record<string, boolean> }) =>
+        args.select.storageKey
+          ? (overrides.liveKeys ?? []).map((storageKey) => ({ storageKey }))
+          : (overrides.existingHashes ?? []).map((fileHash) => ({ fileHash })),
       ),
       findUnique: vi.fn(async () => null),
     },
@@ -126,7 +145,7 @@ describe('FilesService.attachFiles', () => {
       orderId: ORDER_ID,
       ownerType: FileOwnerType.CLIENT,
       submissionRound: 0,
-      files: [upload('План.pdf', 'первый')],
+      files: [await upload('План.pdf', 'первый')],
     });
 
     expect(storage.upload).toHaveBeenCalledTimes(1);
@@ -152,7 +171,10 @@ describe('FilesService.attachFiles', () => {
       ownerType: FileOwnerType.CLIENT,
       submissionRound: 0,
       // Разные имена, одинаковое содержимое — дедуп идёт по SHA-256.
-      files: [upload('a.pdf', 'одно и то же'), upload('b.pdf', 'одно и то же')],
+      files: [
+        await upload('a.pdf', 'одно и то же'),
+        await upload('b.pdf', 'одно и то же'),
+      ],
     });
 
     expect(files).toHaveLength(1);
@@ -167,7 +189,7 @@ describe('FilesService.attachFiles', () => {
       orderId: ORDER_ID,
       ownerType: FileOwnerType.COMPANY,
       submissionRound: 2,
-      files: [upload('a.pdf', 'старый'), upload('b.pdf', 'новый')],
+      files: [await upload('a.pdf', 'старый'), await upload('b.pdf', 'новый')],
     });
 
     expect(files).toHaveLength(1);
@@ -181,7 +203,7 @@ describe('FilesService.attachFiles', () => {
       orderId: ORDER_ID,
       ownerType: FileOwnerType.COMPANY,
       submissionRound: 1,
-      files: [upload('a.pdf', 'старый')],
+      files: [await upload('a.pdf', 'старый')],
     });
 
     expect(files).toEqual([]);
@@ -194,7 +216,7 @@ describe('FilesService.attachFiles', () => {
       orderId: ORDER_ID,
       ownerType: FileOwnerType.COMPANY,
       submissionRound: 3,
-      files: [upload('акт.pdf', 'смета')],
+      files: [await upload('акт.pdf', 'смета')],
     });
 
     expect(storage.upload.mock.calls[0]![0]).toContain('/company/3/');
@@ -211,7 +233,7 @@ describe('FilesService.attachFiles', () => {
         orderId: ORDER_ID,
         ownerType: FileOwnerType.CLIENT,
         submissionRound: 0,
-        files: [upload('a.pdf', 'первый'), upload('b.pdf', 'второй')],
+        files: [await upload('a.pdf', 'первый'), await upload('b.pdf', 'второй')],
       }),
     ).rejects.toThrow('база недоступна');
 
@@ -219,9 +241,17 @@ describe('FilesService.attachFiles', () => {
     expect(storage.remove.mock.calls[0]![0]).toHaveLength(2);
   });
 
-  it('убирает объекты, чьи строки не создались из-за гонки', async () => {
-    const prisma = createPrismaStub({});
-    // skipDuplicates: вторая строка не создалась, объект остался бы висеть.
+  it('не трогает объект чужой строки, выигравшей гонку', async () => {
+    // Тот же файл под тем же именем пришёл двумя запросами разом: строку
+    // создал первый, наша не создалась из-за уникального ограничения.
+    // Ключ у обеих одинаковый (в нём хеш содержимого), и удалять его нельзя —
+    // иначе у чужой строки не останется объекта.
+    const prisma = createPrismaStub({
+      // Что база вернёт на запрос «какие ключи сейчас в ходу»: наша строка
+      // по первому файлу и чужая — по второму.
+      liveKeys: [keyOf('первый', 'a.pdf'), keyOf('второй', 'b.pdf')],
+    });
+
     prisma.orderFile.createManyAndReturn.mockImplementationOnce(
       async ({ data }: { data: Record<string, unknown>[] }) => [
         { ...data[0], id: 'file-0', createdAt: new Date() },
@@ -232,10 +262,33 @@ describe('FilesService.attachFiles', () => {
       orderId: ORDER_ID,
       ownerType: FileOwnerType.CLIENT,
       submissionRound: 0,
-      files: [upload('a.pdf', 'первый'), upload('b.pdf', 'второй')],
+      files: [await upload('a.pdf', 'первый'), await upload('b.pdf', 'второй')],
     });
 
     expect(storage.remove).toHaveBeenCalledTimes(1);
+    expect(storage.remove.mock.calls[0]![0]).toEqual([]);
+  });
+
+  it('убирает объект, на который не сослалась ни одна строка', async () => {
+    // То же содержимое, но пришло под другим именем: ключ отличается, чужая
+    // строка на него не ссылается — этот объект действительно осиротел.
+    const prisma = createPrismaStub({
+      liveKeys: [keyOf('первый', 'a.pdf'), keyOf('второй', 'drugoe-imya.pdf')],
+    });
+
+    prisma.orderFile.createManyAndReturn.mockImplementationOnce(
+      async ({ data }: { data: Record<string, unknown>[] }) => [
+        { ...data[0], id: 'file-0', createdAt: new Date() },
+      ],
+    );
+
+    await createService(prisma, storage).attachFiles({
+      orderId: ORDER_ID,
+      ownerType: FileOwnerType.CLIENT,
+      submissionRound: 0,
+      files: [await upload('a.pdf', 'первый'), await upload('b.pdf', 'второй')],
+    });
+
     expect(storage.remove.mock.calls[0]![0]).toEqual([
       expect.stringContaining(`${hashOf('второй').slice(0, 16)}-b.pdf`),
     ]);
@@ -251,18 +304,27 @@ describe('FilesService.attachFiles', () => {
       }),
     ).rejects.toThrow(BadRequestException);
   });
+});
 
-  it('не трогает хранилище, если хоть один файл не прошёл проверку', async () => {
+describe('FilesService.prepareUploads', () => {
+  it('не пропускает пачку, если хоть один файл не прошёл проверку', async () => {
+    const storage = createStorageStub();
+
     await expect(
-      createService(createPrismaStub({}), storage).attachFiles({
-        orderId: ORDER_ID,
-        ownerType: FileOwnerType.CLIENT,
-        submissionRound: 0,
-        files: [upload('ok.pdf', 'первый'), upload('virus.exe', 'второй')],
-      }),
+      createService(createPrismaStub({}), storage).prepareUploads([
+        writeUpload('ok.pdf', 'application/pdf', pdfBytes('первый')),
+        writeUpload('virus.exe', 'application/pdf', pdfBytes('второй')),
+      ]),
     ).rejects.toThrow(BadRequestException);
 
+    // Проверка идёт до создания заказа, поэтому в хранилище не уходит ничего.
     expect(storage.upload).not.toHaveBeenCalled();
+  });
+
+  it('не принимает пустой список', async () => {
+    await expect(
+      createService(createPrismaStub({}), createStorageStub()).prepareUploads([]),
+    ).rejects.toThrow(BadRequestException);
   });
 });
 

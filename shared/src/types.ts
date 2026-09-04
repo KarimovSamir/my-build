@@ -113,7 +113,12 @@ export interface OrderDetail extends OrderListItem {
   clientCompletionComment: string | null;
   correctionComment: string | null;
   updatedAt: IsoDateString;
-  client: Pick<UserProfile, 'id' | 'firstName' | 'lastName' | 'city' | 'country'>;
+  /**
+   * Заказчик. Виден только сторонам сделки — владельцу и компании-исполнителю;
+   * для остальных `null` (ТЗ §4.1, приватность). Адрес объекта при этом виден
+   * всем: по нему компания и решает, браться ли за заказ.
+   */
+  client: Pick<UserProfile, 'id' | 'firstName' | 'lastName' | 'city' | 'country'> | null;
   offers: OfferDto[];
   files: OrderFileDto[];
 }

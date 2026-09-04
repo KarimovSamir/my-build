@@ -6,7 +6,6 @@
  */
 
 import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
-import { createHash } from 'node:crypto';
 
 import {
   ALLOWED_FILE_EXTENSIONS_HINT,
@@ -17,11 +16,21 @@ import {
   type FileOwnerType,
 } from '@mybuild/shared';
 
-/** Файл, пришедший на загрузку. Форма своя, не multer'овская: сервис не должен зависеть от транспорта. */
+/**
+ * Файл, пришедший на загрузку.
+ *
+ * Содержимое лежит во временном файле на диске, а не в памяти: десять файлов
+ * по 20 МБ в буферах — это 200 МБ на один запрос, чего инстанс с 512 МБ
+ * не переживёт. Форма своя, не multer'овская: сервис не должен зависеть
+ * от транспорта.
+ */
 export interface UploadedFileInput {
   originalName: string;
   mimeType: string;
-  buffer: Buffer;
+  /** Путь к временному файлу. Удаляется после ответа, чей бы он ни был. */
+  path: string;
+  /** Сколько байт реально записано на диск. */
+  sizeBytes: number;
 }
 
 /** Файл, прошедший проверку: тип канонизирован, содержимое посчитано. */
@@ -33,7 +42,7 @@ export interface PreparedFile {
   sizeBytes: number;
   /** SHA-256 содержимого — по нему идёт дедупликация (ТЗ §4.1). */
   fileHash: string;
-  buffer: Buffer;
+  path: string;
 }
 
 /**
@@ -70,31 +79,63 @@ const TRANSLIT: Record<string, string> = {
 };
 
 /**
- * Проверить файл и посчитать всё, что нужно для записи.
- * Бросает 400 на недопустимый тип и 413 на превышение размера.
+ * Размер файла. Считается по тому, сколько байт реально доехало, а не по
+ * тому, что заявил клиент в multipart.
  */
-export function prepareFile(file: UploadedFileInput): PreparedFile {
-  // Размер берём по содержимому, а не по тому, что заявил клиент.
-  const sizeBytes = file.buffer.byteLength;
-
+export function assertUploadSize(originalName: string, sizeBytes: number): void {
   if (sizeBytes === 0) {
-    throw new BadRequestException(`Файл «${file.originalName}» пустой`);
+    throw new BadRequestException(`Файл «${originalName}» пустой`);
   }
 
   if (sizeBytes > MAX_FILE_SIZE_BYTES) {
     throw new PayloadTooLargeException(
-      `Файл «${file.originalName}» больше ${MAX_FILE_SIZE_BYTES / 1024 / 1024} МБ`,
+      `Файл «${originalName}» больше ${MAX_FILE_SIZE_BYTES / 1024 / 1024} МБ`,
     );
   }
+}
 
-  return {
-    originalName: file.originalName,
-    safeName: sanitizeFileName(file.originalName),
-    mimeType: resolveMimeType(file.originalName, file.mimeType),
-    sizeBytes,
-    fileHash: createHash('sha256').update(file.buffer).digest('hex'),
-    buffer: file.buffer,
-  };
+/** Сколько первых байт файла нужно, чтобы узнать его формат. */
+export const FILE_HEAD_BYTES = 16;
+
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+/**
+ * Подпись формата в первых байтах файла.
+ *
+ * `application/dxf` в таблице нет намеренно: DXF — текстовый обменный формат,
+ * и однозначного начала у него не существует (файл может открываться и
+ * секцией `0\nSECTION`, и строкой комментария `999`).
+ */
+const FILE_SIGNATURES: Partial<Record<AllowedFileMimeType, (head: Buffer) => boolean>> = {
+  'application/pdf': (head) => head.subarray(0, 5).toString('latin1') === '%PDF-',
+  'image/png': (head) => head.subarray(0, 8).equals(PNG_MAGIC),
+  'image/jpeg': (head) => head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff,
+  'image/webp': (head) =>
+    head.subarray(0, 4).toString('latin1') === 'RIFF' &&
+    head.subarray(8, 12).toString('latin1') === 'WEBP',
+  // DWG начинается с версии формата: AC1015, AC1018, AC1032 и так далее.
+  'image/vnd.dwg': (head) => /^AC\d{4}$/.test(head.subarray(0, 6).toString('latin1')),
+};
+
+/**
+ * Сверить содержимое с типом (ТЗ §6).
+ *
+ * Расширение и заголовок запроса задаёт клиент, поэтому `.pdf` с произвольными
+ * байтами внутри проходил бы обе проверки. Здесь смотрим на сам файл: так
+ * в бакет не попадёт исполняемый файл под видом чертежа.
+ */
+export function assertFileSignature(
+  originalName: string,
+  mimeType: AllowedFileMimeType,
+  head: Buffer,
+): void {
+  const matches = FILE_SIGNATURES[mimeType];
+
+  if (matches && !matches(head)) {
+    throw new BadRequestException(
+      `Файл «${originalName}»: содержимое не похоже на ${fileExtension(originalName).slice(1).toUpperCase()}`,
+    );
+  }
 }
 
 /**

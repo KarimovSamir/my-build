@@ -26,6 +26,19 @@ export const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 /** Сколько файлов принимается за один запрос: и на форме, и в multer. */
 export const MAX_FILES_PER_REQUEST = 10;
 
+/**
+ * Потолок на весь запрос с файлами.
+ *
+ * Лимит на отдельный файл не ограничивает запрос целиком: десять файлов
+ * по 20 МБ — это 200 МБ, которые сервер обязан куда-то принять. Запас сверх
+ * произведения — на текстовые поля формы и разделители multipart.
+ *
+ * Проверяется по заголовку `Content-Length` до разбора тела, то есть до того,
+ * как хоть один байт будет записан.
+ */
+export const MAX_UPLOAD_REQUEST_BYTES =
+  MAX_FILES_PER_REQUEST * MAX_FILE_SIZE_BYTES + 1024 * 1024;
+
 export const ALLOWED_FILE_MIME_TYPES = [
   'application/pdf',
   'image/png',

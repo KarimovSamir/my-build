@@ -9,6 +9,7 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   DEFAULT_PAGE_SIZE,
+  DELETABLE_ORDER_STATUSES,
   EXECUTOR_OFFER_STATUSES,
   FileOwnerType,
   OrderStatus,
@@ -37,6 +38,9 @@ import {
  * массив: копия делается один раз здесь, а не в каждом запросе.
  */
 const EXECUTOR_STATUSES = [...EXECUTOR_OFFER_STATUSES];
+const DELETABLE_STATUSES = [...DELETABLE_ORDER_STATUSES];
+
+const ORDER_NOT_DELETABLE = 'Заказ уже в работе — его нельзя удалить. Дождитесь завершения';
 
 /** Предложение исполнителя — из него берётся колонка «Подрядчик». */
 const EXECUTOR_OFFER_SELECT = {
@@ -67,17 +71,20 @@ export class OrdersService {
   /**
    * Создать заказ вместе с приложенными файлами.
    *
-   * Файлы проверяются уже после создания строки: их валидация требует
-   * содержимого, а ключ объекта в хранилище — идентификатора заказа. Поэтому
-   * при отказе на файлах заказ удаляется целиком, и наружу это выглядит как
-   * «ничего не создалось». Номера заказов при этом идут с пропусками — это
-   * нормально для autoincrement и пользователю не видно.
+   * Порядок: сначала проверка файлов, потом строка заказа, потом загрузка.
+   * Проверка не требует идентификатора заказа, а вот ключ объекта в хранилище
+   * — требует; поэтому отказ по типу или размеру файла происходит до того,
+   * как в базе что-то появится, и откатывать нечего. Откат остаётся только
+   * на случай сбоя самого хранилища или базы. Номера заказов при этом идут
+   * с пропусками — это нормально для autoincrement и пользователю не видно.
    */
   async create(
     clientId: string,
     dto: CreateOrderDto,
     uploads: UploadedFileInput[],
   ): Promise<OrderDetail> {
+    const files = uploads.length > 0 ? await this.files.prepareUploads(uploads) : [];
+
     const order = await this.prisma.order.create({
       data: {
         clientId,
@@ -93,19 +100,18 @@ export class OrdersService {
       },
     });
 
-    if (uploads.length > 0) {
+    if (files.length > 0) {
       try {
         await this.files.attachFiles({
           orderId: order.id,
           ownerType: FileOwnerType.CLIENT,
           // Файлы клиента всегда относятся к нулевой сдаче (ТЗ §3).
           submissionRound: 0,
-          files: uploads,
+          files,
         });
       } catch (error) {
-        // Откат best-effort: наружу должна уйти причина отказа (например,
-        // «такой тип загрузить нельзя» — это 400), а не ошибка уборки,
-        // которая превратила бы понятный отказ в 500.
+        // Откат best-effort: наружу должна уйти исходная причина отказа,
+        // а не ошибка уборки, которая превратила бы понятный отказ в 500.
         try {
           await this.prisma.order.delete({ where: { id: order.id } });
         } catch (rollbackError) {
@@ -189,17 +195,27 @@ export class OrdersService {
    * Порядок важен: сначала читаем ключи, потом удаляем строку, и только затем
    * убираем объекты из бакета. Строки `OrderFile` уходят каскадом, а объекты
    * хранилища — нет, и после удаления строк их ключи узнать уже неоткуда.
+   *
+   * Статус проверяется дважды. Первая проверка — по снимку, который сделал
+   * `OwnershipGuard`: она даёт понятный отказ до всякой работы. Вторая живёт
+   * в самом `DELETE`: между чтением заказа и удалением клиент мог принять
+   * предложение (Фаза 4), и безусловное удаление снесло бы заказ вместе
+   * с начатыми работами.
    */
   async remove(orderId: string, status: OrderStatus): Promise<void> {
     if (!canDeleteOrder(status)) {
-      throw new ConflictException(
-        'Заказ уже в работе — его нельзя удалить. Дождитесь завершения',
-      );
+      throw new ConflictException(ORDER_NOT_DELETABLE);
     }
 
     const storageKeys = await this.files.listStorageKeys(orderId);
 
-    await this.prisma.order.delete({ where: { id: orderId } });
+    const { count } = await this.prisma.order.deleteMany({
+      where: { id: orderId, status: { in: DELETABLE_STATUSES } },
+    });
+
+    if (count === 0) {
+      throw new ConflictException(ORDER_NOT_DELETABLE);
+    }
 
     await this.files.removeStorageObjects(storageKeys);
   }

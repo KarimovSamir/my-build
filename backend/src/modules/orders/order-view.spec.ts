@@ -111,6 +111,10 @@ describe('toOrderDetail — клиент-владелец', () => {
     expect(view.contractorName).toBe('ООО «3333»');
   });
 
+  it('видит самого себя как заказчика', () => {
+    expect(view.client).toMatchObject({ id: CLIENT_ID });
+  });
+
   it('видит только предложения, которые ещё в игре', () => {
     expect(view.offers.map((item) => item.companyId)).toEqual([EXECUTOR_ID]);
   });
@@ -178,6 +182,12 @@ describe('toOrderDetail — компания, которая в заказе н�
     expect(view.clientCompletionComment).toBeNull();
     expect(view.files).toEqual([]);
     expect(view.offers).toEqual([]);
+  });
+
+  it('не видит, кто заказчик', () => {
+    // Иначе имя и город клиента отдавались бы по любому UUID заказа.
+    expect(toOrderDetail(order(), { id: OUTSIDER_ID }).client).toBeNull();
+    expect(toOrderDetail(order(), { id: RIVAL_ID }).client).toBeNull();
   });
 
   it('компания с невыбранным предложением тоже не видит прогресса', () => {

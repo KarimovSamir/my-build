@@ -14,14 +14,15 @@ import {
 } from '@mybuild/shared';
 
 import type { OrderFile } from '../../generated/prisma/client.js';
+import { Semaphore } from '../../common/semaphore.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import {
   buildStorageKey,
-  prepareFile,
   sanitizeFileName,
   type PreparedFile,
   type UploadedFileInput,
 } from './file-validation.js';
+import { prepareFile, readFileBuffer } from './uploaded-file.js';
 import { StorageService } from './storage.service.js';
 
 /**
@@ -35,12 +36,25 @@ import { StorageService } from './storage.service.js';
  */
 const PARTICIPATING_OFFER_STATUSES = [...EXECUTOR_OFFER_STATUSES];
 
+/**
+ * Сколько файлов процесс отправляет в хранилище одновременно.
+ *
+ * Тело объекта Supabase принимает буфером, то есть на время загрузки файл
+ * лежит в памяти. Ограничитель частоты считает по пользователю и от нескольких
+ * параллельных клиентов не спасает, поэтому потолок нужен общий на процесс:
+ * четыре слота по 20 МБ — это 80 МБ пика, что переживает и инстанс с 512 МБ.
+ */
+const MAX_PARALLEL_UPLOADS = 4;
+
+const uploadSlots = new Semaphore(MAX_PARALLEL_UPLOADS);
+
 export interface AttachFilesParams {
   orderId: string;
   ownerType: FileOwnerType;
   /** Номер сдачи: 0 у файлов клиента, у компании — текущая сдача (ТЗ §4.1). */
   submissionRound: number;
-  files: UploadedFileInput[];
+  /** Уже проверенные файлы — см. `prepareUploads`. */
+  files: PreparedFile[];
 }
 
 @Injectable()
@@ -51,7 +65,22 @@ export class FilesService {
   ) {}
 
   /**
-   * Проверить, сохранить в бакет и записать в базу.
+   * Проверить файлы: размер, тип, содержимое и SHA-256.
+   *
+   * Отдельный шаг, потому что вызывается до того, как в базе появится строка,
+   * к которой файлы прикрепляются: отказ по файлу тогда не требует отката.
+   * Содержимое читается с диска потоком — в памяти файл целиком не оказывается.
+   */
+  async prepareUploads(files: UploadedFileInput[]): Promise<PreparedFile[]> {
+    if (files.length === 0) {
+      throw new BadRequestException('Не приложен ни один файл');
+    }
+
+    return Promise.all(files.map(prepareFile));
+  }
+
+  /**
+   * Сохранить проверенные файлы в бакет и записать в базу.
    *
    * Возвращает только то, что действительно добавилось: дубликаты внутри
    * сдачи молча пропускаются (ТЗ §4.1), и пустой массив — нормальный ответ
@@ -64,8 +93,7 @@ export class FilesService {
       throw new BadRequestException('Не приложен ни один файл');
     }
 
-    const prepared = params.files.map(prepareFile);
-    const fresh = await this.dropDuplicates(orderId, submissionRound, prepared);
+    const fresh = await this.dropDuplicates(orderId, submissionRound, params.files);
 
     if (fresh.length === 0) {
       return [];
@@ -76,11 +104,16 @@ export class FilesService {
     );
 
     try {
-      await Promise.all(
-        fresh.map((file, index) =>
-          this.storage.upload(keys[index]!, file.buffer, file.mimeType),
-        ),
-      );
+      // Строго по одному: параллельная загрузка держала бы в памяти все файлы
+      // запроса разом. Семафор ограничивает уже число запросов, идущих
+      // в хранилище одновременно.
+      for (const [index, file] of fresh.entries()) {
+        // Последовательность здесь — смысл правки, а не недосмотр.
+        // oxlint-disable-next-line no-await-in-loop
+        await uploadSlots.run(async () =>
+          this.storage.upload(keys[index]!, await readFileBuffer(file.path), file.mimeType),
+        );
+      }
 
       const rows = await this.prisma.orderFile.createManyAndReturn({
         data: fresh.map((file, index) => ({
@@ -99,10 +132,9 @@ export class FilesService {
         skipDuplicates: true,
       });
 
-      // Объекты, чьи строки не создались из-за той самой гонки, в бакете
-      // не нужны: на них никто не сошлётся.
-      const saved = new Set(rows.map((row) => row.storageKey));
-      await this.storage.remove(keys.filter((key) => !saved.has(key)));
+      if (rows.length < fresh.length) {
+        await this.removeOrphanObjects(orderId, submissionRound, fresh, keys);
+      }
 
       return rows.map(toOrderFileDto);
     } catch (error) {
@@ -200,6 +232,35 @@ export class FilesService {
    */
   async removeStorageObjectsForOrder(orderId: string): Promise<void> {
     await this.storage.remove(await this.listStorageKeys(orderId));
+  }
+
+  /**
+   * Убрать объекты, на которые не сослалась ни одна строка.
+   *
+   * Часть строк не создалась из-за гонки: `skipDuplicates` пропустил их,
+   * потому что параллельный запрос успел записать тот же файл в ту же сдачу.
+   * Просто удалить «несохранённые» ключи нельзя — у чужой строки ключ ровно
+   * тот же (в нём хеш содержимого), и удаление оставило бы её без объекта.
+   * Поэтому спрашиваем базу, какие ключи сейчас в ходу, и убираем остальные:
+   * осиротеть может только объект с другим именем файла при том же содержимом.
+   */
+  private async removeOrphanObjects(
+    orderId: string,
+    submissionRound: number,
+    fresh: PreparedFile[],
+    keys: string[],
+  ): Promise<void> {
+    const inUse = await this.prisma.orderFile.findMany({
+      where: {
+        orderId,
+        submissionRound,
+        fileHash: { in: fresh.map((file) => file.fileHash) },
+      },
+      select: { storageKey: true },
+    });
+
+    const live = new Set(inUse.map((row) => row.storageKey));
+    await this.storage.remove(keys.filter((key) => !live.has(key)));
   }
 
   /**

@@ -164,7 +164,9 @@ export function toOrderDetail(
     clientCompletionComment: view.isParty ? order.clientCompletionComment : null,
     correctionComment: view.isParty ? order.correctionComment : null,
     updatedAt: order.updatedAt.toISOString(),
-    client: order.client,
+    // Имя и город заказчика — только сторонам сделки. Компания, которая
+    // в заказе не участвует, получает его карточку по любому UUID.
+    client: view.isParty ? order.client : null,
     offers: visibleOffers(order, view),
     // Доступ к файлам совпадает с проверкой в FilesService: задание клиента
     // и сдачи компании видят только стороны сделки.

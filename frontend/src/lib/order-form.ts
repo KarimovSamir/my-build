@@ -93,7 +93,9 @@ export function validateOrderForm(values: OrderFormValues): OrderFormErrors {
   const squareMeters = squareMetersError(values.squareMeters);
   if (squareMeters) errors.squareMeters = squareMeters;
 
-  const budget = values.clientBudget.trim();
+  // Запятая допускается так же, как в площади: соседние поля не должны
+  // вести себя по-разному — «45000,50» форма отклоняла, «62,5» принимала.
+  const budget = normalizeNumber(values.clientBudget);
   if (budget && !MONEY_PATTERN.test(budget)) {
     errors.clientBudget = "Бюджет — сумма вида 150000 или 150000.50";
   }
@@ -126,7 +128,7 @@ export function toOrderFormData(values: OrderFormValues, files: File[]): FormDat
   body.set("address", values.address.trim());
   body.set("squareMeters", normalizeNumber(values.squareMeters));
 
-  const budget = values.clientBudget.trim();
+  const budget = normalizeNumber(values.clientBudget);
   if (budget) body.set("clientBudget", budget);
 
   const date = values.desiredStartDate.trim();
@@ -193,9 +195,16 @@ export function addFiles(
   return { files, rejected };
 }
 
-/** Запятая в числе — привычный десятичный разделитель, backend ждёт точку. */
+/**
+ * Запятая в числе — привычный десятичный разделитель, backend ждёт точку.
+ *
+ * Заменяются все запятые, а не первая: «1,234,5» иначе превращалось бы
+ * в «1.234,5» и отсекалось сообщением про формат, хотя причина в другом.
+ * Строка с несколькими разделителями всё равно не пройдёт проверку —
+ * но по понятному правилу, а не по остатку от замены.
+ */
 function normalizeNumber(value: string): string {
-  return value.trim().replace(",", ".");
+  return value.trim().replaceAll(",", ".");
 }
 
 function squareMetersError(raw: string): string | undefined {

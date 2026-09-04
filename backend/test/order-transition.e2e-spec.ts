@@ -5,6 +5,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { OfferStatus, OrderStatus } from '@mybuild/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { validateEnv } from '../src/config/env.validation.js';
 import {
   NotificationType,
   ObjectType,
@@ -16,7 +17,10 @@ import { OrderEventType } from '../src/modules/orders/order-state-machine.js';
 import { OrderTransitionService } from '../src/modules/orders/order-transition.service.js';
 import { PrismaModule } from '../src/prisma/prisma.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
-import { createE2eUser, dropE2eUsers } from './support/e2e-users.js';
+import { e2eSuite } from './support/e2e-users.js';
+
+/** Свой набор пользователей: уборка не заденет фикстуры соседних файлов. */
+const users = e2eSuite('transition');
 
 /**
  * Проверяет обёртку state-машины на настоящей базе: что переход не только
@@ -41,7 +45,14 @@ describe('OrderTransitionService (e2e)', () => {
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
       imports: [
-        ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env'] }),
+        // Настройки те же, что в `AppModule`: без `validate` тест поднялся бы
+        // на окружении, с которым прод-сборка не стартует вовсе (Т-Н4).
+        ConfigModule.forRoot({
+          isGlobal: true,
+          cache: true,
+          envFilePath: ['.env'],
+          validate: validateEnv,
+        }),
         PrismaModule,
         OrdersModule,
       ],
@@ -54,17 +65,17 @@ describe('OrderTransitionService (e2e)', () => {
 
     // Следы прерванных прогонов: тест, упавший по таймауту, до afterAll
     // не доходит и оставляет своих пользователей в базе.
-    await dropE2eUsers();
+    await users.dropUsers();
 
-    clientId = (await createE2eUser('client', { role: Role.CLIENT })).id;
+    clientId = (await users.createUser('client', { role: Role.CLIENT })).id;
     companyAId = (
-      await createE2eUser('company-a', {
+      await users.createUser('company-a', {
         role: Role.COMPANY,
         companyName: 'ООО «Тест А»',
       })
     ).id;
     companyBId = (
-      await createE2eUser('company-b', {
+      await users.createUser('company-b', {
         role: Role.COMPANY,
         companyName: 'ООО «Тест Б»',
       })
@@ -72,7 +83,7 @@ describe('OrderTransitionService (e2e)', () => {
   });
 
   afterAll(async () => {
-    await dropE2eUsers();
+    await users.dropUsers();
     await moduleRef?.close();
   });
 

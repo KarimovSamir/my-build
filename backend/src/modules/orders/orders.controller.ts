@@ -35,8 +35,11 @@ import {
   type OrderAccessContext,
 } from '../../common/guards/ownership.guard.js';
 import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
+import { UploadSizeGuard } from '../../common/guards/upload-size.guard.js';
+import { TempUploadCleanupInterceptor } from '../../common/interceptors/temp-upload-cleanup.interceptor.js';
 import type { AuthUser } from '../auth/auth-user.js';
 import type { UploadedFileInput } from '../files/file-validation.js';
+import { UPLOAD_TEMP_DIR } from '../files/uploaded-file.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { ListOrdersQueryDto } from './dto/list-orders.dto.js';
 import { OrdersService } from './orders.service.js';
@@ -51,13 +54,17 @@ import { OrdersService } from './orders.service.js';
 
 /**
  * То, что multer кладёт в запрос. Пакет `@types/multer` не ставим: из всего
- * его описания нам нужны три поля, а лишняя зависимость — лишний повод
+ * его описания нам нужны четыре поля, а лишняя зависимость — лишний повод
  * для конфликта версий.
+ *
+ * `buffer` здесь нет намеренно: файлы пишутся во временный каталог, а не
+ * в память процесса.
  */
 interface MulterFile {
   originalname: string;
   mimetype: string;
-  buffer: Buffer;
+  path: string;
+  size: number;
 }
 
 @Controller('orders')
@@ -67,16 +74,25 @@ export class OrdersController {
   /**
    * Создать заказ вместе с файлами (ТЗ §4.1).
    *
+   * `dest` вместо памяти: multer пишет файлы во временный каталог, иначе
+   * содержимое всего запроса (до 10 × 20 МБ) держалось бы в куче процесса.
+   * Убирает их `TempUploadCleanupInterceptor` — он идёт первым, чтобы
+   * охватить и разбор multipart, и отказ валидации DTO.
+   *
    * `defParamCharset: 'utf8'` обязателен: по умолчанию multer читает имена
    * файлов из multipart как latin1, и «План.pdf» попал бы в базу как
    * «ÐÐ»Ð°Ð½.pdf».
    */
   @Post()
   @Roles(Role.CLIENT)
-  @UseGuards(ThrottleGuard)
+  // `UploadSizeGuard` — до интерсепторов: заведомо неподъёмный запрос
+  // отбивается по Content-Length, не записав ни байта.
+  @UseGuards(ThrottleGuard, UploadSizeGuard)
   @Throttle({ limit: 20, ttl: 60_000 })
   @UseInterceptors(
+    TempUploadCleanupInterceptor,
     FilesInterceptor('files', MAX_FILES_PER_REQUEST, {
+      dest: UPLOAD_TEMP_DIR,
       limits: { fileSize: MAX_FILE_SIZE_BYTES, files: MAX_FILES_PER_REQUEST },
       defParamCharset: 'utf8',
     }),
@@ -128,6 +144,7 @@ function toUploads(files: MulterFile[] | undefined): UploadedFileInput[] {
   return (files ?? []).map((file) => ({
     originalName: file.originalname,
     mimeType: file.mimetype,
-    buffer: file.buffer,
+    path: file.path,
+    sizeBytes: file.size,
   }));
 }

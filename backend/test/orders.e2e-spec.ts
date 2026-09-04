@@ -15,13 +15,13 @@ import {
 } from '@mybuild/shared';
 
 import { FilesService } from '../src/modules/files/files.service.js';
+import { prepareFile } from '../src/modules/files/uploaded-file.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
-import {
-  createE2eUser,
-  dropE2eUsers,
-  signInE2eUser,
-  type E2eUser,
-} from './support/e2e-users.js';
+import { e2eSuite, signInE2eUser, type E2eUser } from './support/e2e-users.js';
+
+/** Свой набор пользователей: уборка не заденет фикстуры соседних файлов. */
+const users = e2eSuite('orders');
+import { pdfBytes, pngBytes, removeWrittenUploads, writeUpload } from './support/uploads.js';
 
 /**
  * Маршруты заказов на живой базе (DoD подфазы 3.2): создание с файлами,
@@ -34,8 +34,13 @@ import {
  * Бакет должен существовать: `npm run storage:setup -w backend`.
  */
 
-const PDF = Buffer.from('%PDF-1.4 план квартиры');
-const PNG = Buffer.from('\x89PNG фото объекта');
+const PDF = pdfBytes('план квартиры');
+const PNG = pngBytes('фото объекта');
+
+/** Файл в том виде, в каком его отдаёт multer: содержимое лежит на диске. */
+function upload(originalName: string, mimeType: string, content: Buffer) {
+  return prepareFile(writeUpload(originalName, mimeType, content));
+}
 
 /** Завтрашний день — допустимая желаемая дата начала. */
 function tomorrow(): string {
@@ -54,12 +59,15 @@ describe('Заказы (e2e)', () => {
   let stranger: E2eUser;
   let executor: E2eUser;
   let outsider: E2eUser;
+  /** Только для теста ограничителя частоты: его лимит выбирается целиком. */
+  let throttled: E2eUser;
 
   let clientToken: string;
   let listerToken: string;
   let strangerToken: string;
   let executorToken: string;
   let outsiderToken: string;
+  let throttledToken: string;
 
   /** Заказы «читателя списков»: их состав фиксирован, чтобы счёт сходился. */
   let waitingId: string;
@@ -109,20 +117,21 @@ describe('Заказы (e2e)', () => {
   }
 
   beforeAll(async () => {
-    await dropE2eUsers();
+    await users.dropUsers();
 
-    [client, lister, stranger, executor, outsider] = await Promise.all([
-      createE2eUser('orders-client', { role: Role.CLIENT, firstName: 'Анна' }),
-      createE2eUser('orders-lister', { role: Role.CLIENT, firstName: 'Борис' }),
-      createE2eUser('orders-stranger', { role: Role.CLIENT, firstName: 'Виктор' }),
-      createE2eUser('orders-executor', {
+    [client, lister, stranger, executor, outsider, throttled] = await Promise.all([
+      users.createUser('orders-client', { role: Role.CLIENT, firstName: 'Анна' }),
+      users.createUser('orders-lister', { role: Role.CLIENT, firstName: 'Борис' }),
+      users.createUser('orders-stranger', { role: Role.CLIENT, firstName: 'Виктор' }),
+      users.createUser('orders-executor', {
         role: Role.COMPANY,
         companyName: 'ООО «Строймир»',
       }),
-      createE2eUser('orders-outsider', {
+      users.createUser('orders-outsider', {
         role: Role.COMPANY,
         companyName: 'ООО «Посторонняя»',
       }),
+      users.createUser('orders-throttled', { role: Role.CLIENT, firstName: 'Глеб' }),
     ]);
 
     const { AppModule } = await import('../src/app.module.js');
@@ -137,14 +146,21 @@ describe('Заказы (e2e)', () => {
     prisma = app.get(PrismaService);
     files = app.get(FilesService);
 
-    [clientToken, listerToken, strangerToken, executorToken, outsiderToken] =
-      await Promise.all([
-        signInE2eUser(client),
-        signInE2eUser(lister),
-        signInE2eUser(stranger),
-        signInE2eUser(executor),
-        signInE2eUser(outsider),
-      ]);
+    [
+      clientToken,
+      listerToken,
+      strangerToken,
+      executorToken,
+      outsiderToken,
+      throttledToken,
+    ] = await Promise.all([
+      signInE2eUser(client),
+      signInE2eUser(lister),
+      signInE2eUser(stranger),
+      signInE2eUser(executor),
+      signInE2eUser(outsider),
+      signInE2eUser(throttled),
+    ]);
 
     // Строго по очереди: список сортируется по времени создания, и при
     // параллельной вставке порядок оказался бы случайным.
@@ -176,7 +192,7 @@ describe('Заказы (e2e)', () => {
       orderId: inProgressId,
       ownerType: 'CLIENT',
       submissionRound: 0,
-      files: [{ originalName: 'Задание.pdf', mimeType: 'application/pdf', buffer: PDF }],
+      files: [await upload('Задание.pdf', 'application/pdf', PDF)],
     });
   });
 
@@ -188,7 +204,8 @@ describe('Заказы (e2e)', () => {
         .map((id) => files.removeStorageObjectsForOrder(id).catch(() => undefined)),
     );
     await app?.close();
-    await dropE2eUsers();
+    removeWrittenUploads();
+    await users.dropUsers();
   });
 
   describe('POST /orders', () => {
@@ -324,6 +341,29 @@ describe('Заказы (e2e)', () => {
       expect(await prisma.order.count({ where: { clientId: client.id } })).toBe(before);
     });
 
+    it('файл с чужим содержимым под видом PDF отменяет создание заказа', async () => {
+      // Расширение и заявленный тип клиент задаёт сам — проверяем первые байты.
+      const before = await prisma.order.count({ where: { clientId: client.id } });
+
+      const response = await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${clientToken}`)
+        .field('title', 'Заказ с подменённым файлом')
+        .field('category', OrderCategory.PLAN_CREATION)
+        .field('objectType', ObjectType.APARTMENT)
+        .field('description', 'Описание достаточной длины')
+        .field('address', 'Москва, ул. Тестовая, 11')
+        .field('squareMeters', '50')
+        .attach('files', Buffer.from('MZ\x90\x00исполняемый'), {
+          filename: 'план.pdf',
+          contentType: 'application/pdf',
+        });
+
+      expect(response.status).toBe(400);
+      expect(String(response.body.message)).toContain('содержимое не похоже');
+      expect(await prisma.order.count({ where: { clientId: client.id } })).toBe(before);
+    });
+
     it('компании создавать заказы нельзя', async () => {
       const response = await request(app.getHttpServer())
         .post('/orders')
@@ -447,6 +487,26 @@ describe('Заказы (e2e)', () => {
       expect(response.body.total).toBe(0);
     });
 
+    it('подстановочные символы LIKE ищутся буквально', async () => {
+      // Без экранирования «%» совпал бы со всеми заказами, «_» — с любым символом.
+      const percent = await request(app.getHttpServer())
+        .get('/orders')
+        .query({ q: '%' })
+        .set('Authorization', `Bearer ${listerToken}`);
+
+      expect(percent.status).toBe(200);
+      expect(percent.body.total).toBe(0);
+
+      // «Ремонт_квартиры» без экранирования совпало бы с «Ремонт квартиры…»:
+      // подчёркивание в LIKE заменяет любой один символ.
+      const underscore = await request(app.getHttpServer())
+        .get('/orders')
+        .query({ q: 'Ремонт_квартиры' })
+        .set('Authorization', `Bearer ${listerToken}`);
+
+      expect(underscore.body.total).toBe(0);
+    });
+
     it('поиск без совпадений отдаёт пустую страницу, а не ошибку', async () => {
       const response = await request(app.getHttpServer())
         .get('/orders')
@@ -539,6 +599,22 @@ describe('Заказы (e2e)', () => {
       });
       // Задание клиента компания видит: по нему она и подаёт предложение.
       expect(response.body.description).toBeTruthy();
+      // А вот кто заказчик — нет (ТЗ §4.1, приватность).
+      expect(response.body.client).toBeNull();
+    });
+
+    it('стороны сделки заказчика видят', async () => {
+      const [owner, executorView] = await Promise.all([
+        request(app.getHttpServer())
+          .get(`/orders/${inProgressId}`)
+          .set('Authorization', `Bearer ${listerToken}`),
+        request(app.getHttpServer())
+          .get(`/orders/${inProgressId}`)
+          .set('Authorization', `Bearer ${executorToken}`),
+      ]);
+
+      expect(owner.body.client).toMatchObject({ id: lister.id, firstName: 'Борис' });
+      expect(executorView.body.client).toMatchObject({ id: lister.id });
     });
 
     it('чужому клиенту отдаёт 404, а не 403: чужой заказ для него не существует', async () => {
@@ -659,7 +735,7 @@ describe('Заказы (e2e)', () => {
         orderId: order.id,
         ownerType: 'CLIENT',
         submissionRound: 0,
-        files: [{ originalName: 'смета.pdf', mimeType: 'application/pdf', buffer: PDF }],
+        files: [await upload('смета.pdf', 'application/pdf', PDF)],
       });
 
       const response = await request(app.getHttpServer())
@@ -721,15 +797,19 @@ describe('Заказы (e2e)', () => {
    * что он действительно висит на маршруте создания заказа (ТЗ §6).
    *
    * Запросы намеренно невалидные — guard'ы отрабатывают раньше валидации,
-   * поэтому лимит считается, а база не трогается. Пользователь отдельный:
-   * иначе тест съел бы лимит у остальных.
+   * поэтому лимит считается, а база не трогается.
+   *
+   * Пользователь заведён ровно под этот тест и больше нигде не используется:
+   * окно ограничителя живёт в памяти приложения и переносится между тестами
+   * внутри файла, поэтому любой `POST /orders` от того же пользователя ниже
+   * по файлу упирался бы в исчерпанный лимит (находка Т-Н5).
    */
   describe('ограничение частоты запросов', () => {
     it('после лимита POST /orders отдаёт 429 и Retry-After', async () => {
       const send = () =>
         request(app.getHttpServer())
           .post('/orders')
-          .set('Authorization', `Bearer ${strangerToken}`)
+          .set('Authorization', `Bearer ${throttledToken}`)
           .field('title', 'x');
 
       const statuses: number[] = [];

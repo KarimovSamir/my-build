@@ -2,14 +2,11 @@ import { FileText, Image as ImageIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import {
-  FileOwnerType,
   canDeleteOrder,
   formatOrderNumber,
-  isExecutorOffer,
   objectTypeLabels,
   orderCategoryLabels,
   type OrderDetail,
-  type OrderFileDto,
 } from "@/lib/types";
 
 import { DeleteOrderDialog } from "@/components/orders/delete-order-dialog";
@@ -18,6 +15,11 @@ import { ComingSoon, PageHeader } from "@/components/page-shell";
 import { OrderStatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatArea, formatDate, formatFileSize, formatMoney } from "@/lib/format";
+import {
+  emptyClientFilesMessage,
+  resolveOrderDetailAccess,
+  type OrderDetailAccess,
+} from "@/lib/order-access";
 
 /**
  * Карточка заказа (ТЗ §7, «Детали заказа»).
@@ -38,23 +40,10 @@ export function OrderDetailView({
   /** Кто смотрит. `null` — сессия пропала между рендером и запросом. */
   viewerId: string | null;
 }) {
-  const isOwner = viewerId !== null && order.client.id === viewerId;
+  // Кто смотрит и что ему видно — в `lib/order-access.ts`: правило приватности
+  // проверяется тестом, а не глазами по разметке.
+  const access = resolveOrderDetailAccess(order, viewerId);
   const orderLabel = formatOrderNumber(order.orderNumber);
-
-  // Сторона сделки — клиент заказа либо компания, чьё предложение приняли.
-  // Только им API отдаёт файлы (ТЗ §4.1), и различать это нужно здесь:
-  // «файлов нет» и «файлы не показаны» приходят одинаково пустым списком.
-  const isParty =
-    isOwner ||
-    order.offers.some(
-      (offer) => offer.companyId === viewerId && isExecutorOffer(offer.status),
-    );
-
-  // Файлы клиента — это задание. Сдачи компании (`submissionRound` > 0)
-  // показываются отдельным блоком, и он появится в Фазе 4.
-  const clientFiles = order.files.filter(
-    (file) => file.ownerType === FileOwnerType.CLIENT,
-  );
 
   return (
     <>
@@ -69,7 +58,7 @@ export function OrderDetailView({
           </span>
         }
         action={
-          isOwner && canDeleteOrder(order.status) ? (
+          access.isOwner && canDeleteOrder(order.status) ? (
             <DeleteOrderDialog orderId={order.id} orderLabel={orderLabel} />
           ) : null
         }
@@ -86,7 +75,7 @@ export function OrderDetailView({
             </CardContent>
           </Card>
 
-          <ClientFilesCard files={clientFiles} isOwner={isOwner} isParty={isParty} />
+          <ClientFilesCard access={access} />
 
           <ComingSoon title="Предложения компаний" phase="Фазе 4">
             Цена, срок и комментарий каждой компании — с выбором исполнителя
@@ -159,15 +148,9 @@ export function OrderDetailView({
 }
 
 /** Файлы задания. Их видят только стороны сделки — остальным API их не отдаёт. */
-function ClientFilesCard({
-  files,
-  isOwner,
-  isParty,
-}: {
-  files: OrderFileDto[];
-  isOwner: boolean;
-  isParty: boolean;
-}) {
+function ClientFilesCard({ access }: { access: OrderDetailAccess }) {
+  const files = access.clientFiles;
+
   return (
     <Card>
       <CardHeader>
@@ -176,7 +159,7 @@ function ClientFilesCard({
 
       <CardContent>
         {files.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{emptyFilesMessage(isOwner, isParty)}</p>
+          <p className="text-muted-foreground text-sm">{emptyClientFilesMessage(access)}</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {files.map((file) => (
@@ -205,20 +188,6 @@ function ClientFilesCard({
       </CardContent>
     </Card>
   );
-}
-
-/**
- * Почему список файлов пуст.
- *
- * Посторонней компании файлы не отдаются вовсе, и написать ей «файлов нет»
- * было бы неправдой: они могут быть, просто не для неё.
- */
-function emptyFilesMessage(isOwner: boolean, isParty: boolean): string {
-  if (!isParty) return "Файлы задания видны компании, чьё предложение принято.";
-
-  return isOwner
-    ? "Вы не приложили файлы к этому заказу."
-    : "Клиент не приложил файлы к этому заказу.";
 }
 
 /**

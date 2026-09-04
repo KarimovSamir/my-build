@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { MAX_ORDER_NUMBER, OfferStatus } from '@mybuild/shared';
 
-import { buildSearchConditions } from './order-search.js';
+import { buildSearchConditions, escapeLike } from './order-search.js';
 
 /**
  * Поиск по списку заказов (ТЗ §4.1).
@@ -73,5 +73,30 @@ describe('buildSearchConditions', () => {
 
   it('строка из одних нулей не ломает разбор', () => {
     expect(orderNumberIn(buildSearchConditions('007829'))).toBe(7829);
+  });
+
+  it('подстановочные символы уходят в запрос экранированными', () => {
+    const conditions = buildSearchConditions('50%_скидка');
+
+    expect(conditions[0]).toEqual({
+      title: { contains: '50\\%\\_скидка', mode: 'insensitive' },
+    });
+  });
+});
+
+describe('escapeLike', () => {
+  it('экранирует то, что LIKE считает шаблоном', () => {
+    // Без этого запрос «%» совпадает со всеми заказами, а «_» — с любым символом.
+    expect(escapeLike('%')).toBe('\\%');
+    expect(escapeLike('Ремонт_квартиры')).toBe('Ремонт\\_квартиры');
+  });
+
+  it('обратную косую черту экранирует первой', () => {
+    // Иначе она экранировала бы уже добавленные нами символы.
+    expect(escapeLike('C:\\плану%')).toBe('C:\\\\плану\\%');
+  });
+
+  it('обычную строку не трогает', () => {
+    expect(escapeLike('Кровля склада')).toBe('Кровля склада');
   });
 });

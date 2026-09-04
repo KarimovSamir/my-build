@@ -9,12 +9,10 @@ import { Role } from '@mybuild/shared';
 
 import { Roles } from '../src/common/decorators/roles.decorator.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
-import {
-  createE2eUser,
-  dropE2eUsers,
-  signInE2eUser,
-  type E2eUser,
-} from './support/e2e-users.js';
+import { e2eSuite, signInE2eUser, type E2eUser } from './support/e2e-users.js';
+
+/** Свой набор пользователей: уборка не заденет фикстуры соседних файлов. */
+const users = e2eSuite('auth');
 
 /**
  * Проверяет модель доступа целиком, на живом Supabase (ТЗ §10, DoD Фазы 2):
@@ -43,9 +41,9 @@ describe('Аутентификация и доступ (e2e)', () => {
   let companyToken: string;
 
   beforeAll(async () => {
-    await dropE2eUsers();
+    await users.dropUsers();
 
-    client = await createE2eUser('auth-client', {
+    client = await users.createUser('auth-client', {
       role: Role.CLIENT,
       firstName: 'Анна',
       lastName: 'Тестова',
@@ -53,7 +51,7 @@ describe('Аутентификация и доступ (e2e)', () => {
       city: 'Москва',
       country: 'Россия',
     });
-    company = await createE2eUser('auth-company', {
+    company = await users.createUser('auth-company', {
       role: Role.COMPANY,
       firstName: 'Иван',
       phone: '+7 900 000-22-22',
@@ -80,7 +78,7 @@ describe('Аутентификация и доступ (e2e)', () => {
 
   afterAll(async () => {
     await app?.close();
-    await dropE2eUsers();
+    await users.dropUsers();
   });
 
   describe('профиль создаётся триггером из метаданных регистрации', () => {
@@ -267,7 +265,7 @@ describe('Аутентификация и доступ (e2e)', () => {
     });
 
     it('у неподтверждённого пользователя false', async () => {
-      const pending = await createE2eUser(
+      const pending = await users.createUser(
         'auth-unconfirmed',
         { role: Role.CLIENT, firstName: 'Не', phone: '+7 900 000-33-33' },
         { confirmEmail: false },

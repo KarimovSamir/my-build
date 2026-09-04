@@ -26,11 +26,26 @@ const monthsShort = [
 
 const amountFormatter = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
 
-/** Сумма в том виде, в каком её показывает интерфейс: «45 000 USD» (ТЗ §7). */
+/**
+ * Сумма в том виде, в каком её показывает интерфейс: «45 000 USD» (ТЗ §7).
+ *
+ * Считается по строке, а не через `Number`: суммы приходят строками именно
+ * затем, чтобы не проходить через число с плавающей точкой (`MoneyString`).
+ * Прогонять их через `Number` ради форматирования — терять смысл типа.
+ *
+ * Неразрывный пробел (U+00A0) между разрядами — тот же, что ставит `Intl`
+ * для русской локали: сумма не должна разрываться переносом строки.
+ */
 export function formatMoney(value: MoneyString): string {
-  const amount = Number(value);
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim());
 
-  return Number.isFinite(amount) ? `${amountFormatter.format(amount)} USD` : value;
+  if (!match) return value;
+
+  // Хвостовые нули не показываем: «150000.00» — это «150 000», а не «150 000,00».
+  const fraction = (match[2] ?? "").slice(0, 2).replaceAll(/0+$/g, "");
+  const whole = match[1]!.replaceAll(/\B(?=(\d{3})+(?!\d))/g, " ");
+
+  return `${whole}${fraction ? `,${fraction}` : ""} USD`;
 }
 
 /** Площадь в виде «62,5 м²». */

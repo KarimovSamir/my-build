@@ -10,9 +10,14 @@ import { ObjectType, OrderCategory } from '../src/generated/prisma/client.js';
 import { FilesModule } from '../src/modules/files/files.module.js';
 import { FilesService } from '../src/modules/files/files.service.js';
 import { StorageService } from '../src/modules/files/storage.service.js';
+import { prepareFile } from '../src/modules/files/uploaded-file.js';
 import { PrismaModule } from '../src/prisma/prisma.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
-import { createE2eUser, dropE2eUsers } from './support/e2e-users.js';
+import { e2eSuite } from './support/e2e-users.js';
+
+/** Свой набор пользователей: уборка не заденет фикстуры соседних файлов. */
+const users = e2eSuite('files');
+import { pdfBytes, pngBytes, removeWrittenUploads, writeUpload } from './support/uploads.js';
 
 /**
  * Проверяет модуль файлов на живом Supabase: объект действительно попадает
@@ -24,8 +29,8 @@ import { createE2eUser, dropE2eUsers } from './support/e2e-users.js';
  *
  * Бакет должен существовать: `npm run storage:setup -w backend`.
  */
-function upload(originalName: string, mimeType: string, buffer: Buffer) {
-  return { originalName, mimeType, buffer };
+function upload(originalName: string, mimeType: string, content: Buffer) {
+  return prepareFile(writeUpload(originalName, mimeType, content));
 }
 
 describe('FilesService (e2e)', () => {
@@ -39,8 +44,8 @@ describe('FilesService (e2e)', () => {
   let outsiderId: string;
   let orderId: string;
 
-  const planContent = Buffer.from('PDF-план квартиры, версия клиента');
-  const photoContent = Buffer.from('PNG-фото объекта');
+  const planContent = pdfBytes('план квартиры, версия клиента');
+  const photoContent = pngBytes('фото объекта');
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -57,17 +62,17 @@ describe('FilesService (e2e)', () => {
     files = moduleRef.get(FilesService);
     storage = moduleRef.get(StorageService);
 
-    await dropE2eUsers();
+    await users.dropUsers();
 
-    clientId = (await createE2eUser('files-client', { role: Role.CLIENT })).id;
+    clientId = (await users.createUser('files-client', { role: Role.CLIENT })).id;
     executorId = (
-      await createE2eUser('files-executor', {
+      await users.createUser('files-executor', {
         role: Role.COMPANY,
         companyName: 'ООО «Исполнитель»',
       })
     ).id;
     outsiderId = (
-      await createE2eUser('files-outsider', {
+      await users.createUser('files-outsider', {
         role: Role.COMPANY,
         companyName: 'ООО «Посторонняя»',
       })
@@ -108,8 +113,9 @@ describe('FilesService (e2e)', () => {
   afterAll(async () => {
     // Каскад удаляет строки OrderFile, но не объекты в бакете — их убираем сами.
     if (orderId) await files.removeStorageObjectsForOrder(orderId);
-    await dropE2eUsers();
+    await users.dropUsers();
     await moduleRef?.close();
+    removeWrittenUploads();
   });
 
   it('сохраняет файлы клиента, отбрасывая повтор внутри сдачи', async () => {
@@ -118,10 +124,10 @@ describe('FilesService (e2e)', () => {
       ownerType: FileOwnerType.CLIENT,
       submissionRound: 0,
       files: [
-        upload('План квартиры.pdf', 'application/pdf', planContent),
+        await upload('План квартиры.pdf', 'application/pdf', planContent),
         // То же содержимое под другим именем — в базу попасть не должно.
-        upload('копия плана.pdf', 'application/pdf', planContent),
-        upload('Фото.png', 'image/png', photoContent),
+        await upload('копия плана.pdf', 'application/pdf', planContent),
+        await upload('Фото.png', 'image/png', photoContent),
       ],
     });
 
@@ -143,7 +149,7 @@ describe('FilesService (e2e)', () => {
       orderId,
       ownerType: FileOwnerType.CLIENT,
       submissionRound: 0,
-      files: [upload('План квартиры.pdf', 'application/pdf', planContent)],
+      files: [await upload('План квартиры.pdf', 'application/pdf', planContent)],
     });
 
     expect(saved).toEqual([]);
@@ -155,7 +161,7 @@ describe('FilesService (e2e)', () => {
       orderId,
       ownerType: FileOwnerType.COMPANY,
       submissionRound: 1,
-      files: [upload('План квартиры.pdf', 'application/pdf', planContent)],
+      files: [await upload('План квартиры.pdf', 'application/pdf', planContent)],
     });
 
     expect(saved).toHaveLength(1);
@@ -211,12 +217,19 @@ describe('FilesService (e2e)', () => {
 
   it('файл с недопустимым типом до хранилища не доходит', async () => {
     await expect(
-      files.attachFiles({
-        orderId,
-        ownerType: FileOwnerType.CLIENT,
-        submissionRound: 0,
-        files: [upload('смета.xlsx', 'application/vnd.ms-excel', Buffer.from('x'))],
-      }),
+      files.prepareUploads([
+        writeUpload('смета.xlsx', 'application/vnd.ms-excel', Buffer.from('x')),
+      ]),
+    ).rejects.toMatchObject({ status: 400 });
+
+    expect(await prisma.orderFile.count({ where: { orderId } })).toBe(3);
+  });
+
+  it('файл с чужим содержимым под видом PDF до хранилища не доходит', async () => {
+    await expect(
+      files.prepareUploads([
+        writeUpload('обманка.pdf', 'application/pdf', Buffer.from('MZ исполняемый')),
+      ]),
     ).rejects.toMatchObject({ status: 400 });
 
     expect(await prisma.orderFile.count({ where: { orderId } })).toBe(3);

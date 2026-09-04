@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 /**
  * Проверяет, что приложение поднимается целиком и честно сообщает о состоянии.
@@ -10,23 +10,34 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  * сервер не падает, а `/health` отдаёт 503. Проверка «база жива» появится,
  * когда в CI будет реальное подключение.
  */
+
+/**
+ * Окружение с мёртвой базой. Ставится через `vi.stubEnv`, а не записью
+ * в `process.env`: подмена снимается в `afterAll`, и соседние файлы получают
+ * настоящий `DATABASE_URL` независимо от того, изолирует ли их пул тестов
+ * (находка Т-Н1). Прямое присваивание переживало бы файл.
+ */
+const DEAD_DATABASE_ENV = {
+  NODE_ENV: 'test',
+  PORT: '4000',
+  CORS_ORIGINS: 'http://localhost:3000',
+  DATABASE_URL: 'postgresql://user:pass@127.0.0.1:1/postgres',
+  DIRECT_URL: 'postgresql://user:pass@127.0.0.1:1/postgres',
+  SUPABASE_URL: 'https://example.supabase.co',
+  SUPABASE_SECRET_KEY: 'sb_secret_test',
+  SUPABASE_JWKS_URL: 'https://example.supabase.co/auth/v1/.well-known/jwks.json',
+  SUPABASE_JWT_ISSUER: 'https://example.supabase.co/auth/v1',
+  SUPABASE_JWT_AUDIENCE: 'authenticated',
+  SUPABASE_STORAGE_BUCKET: 'order-files',
+};
+
 describe('Health (e2e)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
-    Object.assign(process.env, {
-      NODE_ENV: 'test',
-      PORT: '4000',
-      CORS_ORIGINS: 'http://localhost:3000',
-      DATABASE_URL: 'postgresql://user:pass@127.0.0.1:1/postgres',
-      DIRECT_URL: 'postgresql://user:pass@127.0.0.1:1/postgres',
-      SUPABASE_URL: 'https://example.supabase.co',
-      SUPABASE_SECRET_KEY: 'sb_secret_test',
-      SUPABASE_JWKS_URL: 'https://example.supabase.co/auth/v1/.well-known/jwks.json',
-      SUPABASE_JWT_ISSUER: 'https://example.supabase.co/auth/v1',
-      SUPABASE_JWT_AUDIENCE: 'authenticated',
-      SUPABASE_STORAGE_BUCKET: 'order-files',
-    });
+    for (const [name, value] of Object.entries(DEAD_DATABASE_ENV)) {
+      vi.stubEnv(name, value);
+    }
 
     const { AppModule } = await import('../src/app.module.js');
     const { configureApp } = await import('../src/bootstrap.js');
@@ -42,6 +53,7 @@ describe('Health (e2e)', () => {
 
   afterAll(async () => {
     await app?.close();
+    vi.unstubAllEnvs();
   });
 
   it('отдаёт 503, когда база недоступна', async () => {
