@@ -99,6 +99,18 @@ export function acceptsOffers(status: OrderStatus): boolean {
   return OFFER_ELIGIBLE_ORDER_STATUSES.includes(status);
 }
 
+/**
+ * Предложение ждёт выбора клиента.
+ *
+ * Из этого статуса — и только из него — компания вправе изменить своё
+ * предложение или отозвать его: то же предусловие проверяет state-машина
+ * (`OFFER_PRECONDITIONS` для `OFFER_WITHDRAWN`). Разойдись они — интерфейс
+ * показал бы кнопку, на которую сервер отвечает 409.
+ */
+export function isPendingOffer(status: OfferStatus): boolean {
+  return status === OfferStatus.SENT;
+}
+
 /** Предложение выбыло из выбора, и компания может прислать новое (ТЗ §4.1). */
 export function canResubmitOffer(status: OfferStatus): boolean {
   return RESUBMITTABLE_OFFER_STATUSES.includes(status);

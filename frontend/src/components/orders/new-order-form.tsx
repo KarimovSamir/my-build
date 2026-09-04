@@ -27,11 +27,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiRequestError } from "@/lib/api";
+import { apiErrorMessages } from "@/lib/api-errors";
 import { browserApi } from "@/lib/api.client";
+import { todayIsoDate } from "@/lib/form-input";
 import {
   emptyOrderForm,
-  todayIsoDate,
   toOrderFormData,
   validateOrderForm,
   type OrderFormErrors,
@@ -89,7 +89,16 @@ export function NewOrderForm() {
       // роутера без только что созданной строки.
       router.refresh();
     } catch (error) {
-      setFormError(submitErrorMessages(error));
+      // Сообщения валидации приходят списком строк без имени поля, поэтому
+      // показать их под конкретным полем нельзя — и не нужно: то же самое
+      // форма проверяет до отправки, а сюда доезжает разве что расхождение
+      // правил.
+      setFormError(
+        apiErrorMessages(
+          error,
+          "Не удалось отправить заказ. Проверьте соединение и попробуйте ещё раз",
+        ),
+      );
       setPending(false);
     }
   }
@@ -320,25 +329,4 @@ function SelectField<T extends string>({
       <FieldMessage id={`${id}-error`} error={error} />
     </div>
   );
-}
-
-/**
- * Ответ API в виде сообщений над кнопкой.
- *
- * Сообщения валидации приходят списком строк без имени поля, поэтому показать
- * их под конкретным полем нельзя — и не нужно: то же самое форма проверяет
- * до отправки, а сюда доезжает разве что расхождение правил.
- */
-function submitErrorMessages(error: unknown): string[] {
-  if (!(error instanceof ApiRequestError)) {
-    return ["Не удалось отправить заказ. Проверьте соединение и попробуйте ещё раз"];
-  }
-
-  if (error.statusCode === 401) {
-    return ["Сессия истекла. Войдите заново и повторите отправку"];
-  }
-
-  const messages = error.validationMessages;
-
-  return messages.length > 0 ? messages : [error.message];
 }

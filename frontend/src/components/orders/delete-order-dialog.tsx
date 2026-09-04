@@ -16,7 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ApiRequestError } from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-errors";
 import { browserApi } from "@/lib/api.client";
 
 /**
@@ -55,7 +55,9 @@ export function DeleteOrderDialog({
       // роутера вместе с только что удалённой строкой.
       router.refresh();
     } catch (error) {
-      toast.error("Не удалось удалить заказ", { description: describe(error) });
+      toast.error("Не удалось удалить заказ", {
+        description: apiErrorMessage(error, "Проверьте соединение и попробуйте ещё раз"),
+      });
       setPending(false);
       setOpen(false);
       // Статус мог измениться прямо сейчас — перечитываем страницу, чтобы
@@ -95,14 +97,4 @@ export function DeleteOrderDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function describe(error: unknown): string {
-  if (!(error instanceof ApiRequestError)) {
-    return "Проверьте соединение и попробуйте ещё раз";
-  }
-
-  if (error.statusCode === 401) return "Сессия истекла. Войдите заново";
-
-  return error.message;
 }

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   MAX_FILES_PER_REQUEST,
@@ -8,11 +8,11 @@ import {
   ORDER_LIMITS,
 } from "@/lib/types";
 
+import { todayIsoDate } from "./form-input";
 import {
   addFiles,
   emptyOrderForm,
   fileRejectionReason,
-  todayIsoDate,
   toOrderFormData,
   validateOrderForm,
   type OrderFormValues,
@@ -46,10 +46,6 @@ function isoDateShifted(days: number): string {
 
   return date.toISOString().slice(0, 10);
 }
-
-afterEach(() => {
-  vi.useRealTimers();
-});
 
 describe("validateOrderForm", () => {
   it("правильно заполненную форму пропускает", () => {
@@ -141,17 +137,6 @@ describe("validateOrderForm", () => {
       .toBeUndefined();
     expect(validateOrderForm(form({ desiredStartDate: isoDateShifted(1) })).desiredStartDate)
       .toBeUndefined();
-  });
-});
-
-describe("todayIsoDate", () => {
-  it("считает день по UTC, а не по часовому поясу браузера", () => {
-    // Тот же день, с которым сравнивает backend: разойдись они — календарь
-    // предлагал бы дату, которую сервер отклонит.
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-09-04T23:30:00.000Z"));
-
-    expect(todayIsoDate()).toBe("2026-09-04");
   });
 });
 

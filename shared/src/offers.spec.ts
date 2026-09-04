@@ -10,6 +10,7 @@ import {
   canResubmitOffer,
   isActiveOffer,
   isExecutorOffer,
+  isPendingOffer,
 } from './offers.js';
 
 /**
@@ -147,5 +148,17 @@ describe('списки статусов выведены один из друг�
       OfferStatus.NOT_ACCEPTED,
       OfferStatus.WITHDRAWN,
     ]);
+  });
+});
+
+describe('isPendingOffer', () => {
+  it('ждёт выбора клиента только отправленное предложение', () => {
+    expect(isPendingOffer(OfferStatus.SENT)).toBe(true);
+  });
+
+  it.each(
+    Object.values(OfferStatus).filter((status) => status !== OfferStatus.SENT),
+  )('%s изменить и отозвать уже нельзя', (status) => {
+    expect(isPendingOffer(status)).toBe(false);
   });
 });

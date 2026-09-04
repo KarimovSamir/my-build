@@ -1,17 +1,48 @@
-import { ComingSoon, PageHeader } from "@/components/page-shell";
+import { Suspense } from "react";
+
+import { CardListSkeleton } from "@/components/list-parts";
+import { ListSearch } from "@/components/list-search";
+import { AvailableOrdersList } from "@/components/offers/available-orders-list";
+import { PageHeader } from "@/components/page-shell";
+import { Card, CardContent } from "@/components/ui/card";
+import { availableFilterKey, parseAvailableFilter } from "@/lib/available-filter";
 
 export const metadata = { title: "Доступные заказы" };
 
-export default function AvailableOrdersPage() {
+/**
+ * Лента доступных заказов (ТЗ §4.1, §7).
+ *
+ * Поиск рендерится сразу, а сама лента — под `<Suspense>` с ключом по фильтру:
+ * при смене выборки скелет показывается только на месте списка, поэтому поле
+ * поиска не перерисовывается и не теряет фокус при наборе.
+ */
+export default async function AvailableOrdersPage({
+  searchParams,
+}: PageProps<"/available">) {
+  const filter = parseAvailableFilter(await searchParams);
+
   return (
     <>
       <PageHeader
         title="Доступные заказы"
-        description="Заказы, по которым вы ещё не отправляли предложение"
+        description="Заказы, которые ищут исполнителя. Предложите цену и срок — клиент выберет из предложений"
       />
-      <ComingSoon phase="Фазе 4">
-        Лента заказов с бюджетом клиента и формой отправки предложения
-      </ComingSoon>
+
+      <Card>
+        <CardContent>
+          <ListSearch
+            id="available-search"
+            basePath="/available"
+            value={filter.q}
+            label="Поиск заказов"
+            placeholder="Поиск по номеру или названию заказа"
+          />
+        </CardContent>
+      </Card>
+
+      <Suspense key={availableFilterKey(filter)} fallback={<CardListSkeleton />}>
+        <AvailableOrdersList filter={filter} />
+      </Suspense>
     </>
   );
 }

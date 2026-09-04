@@ -9,9 +9,10 @@ import {
   type Paginated,
 } from "@/lib/types";
 
+import { EmptyCard, OutOfRange, PaginationBar } from "@/components/list-parts";
 import { OrderStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -54,7 +55,10 @@ export async function OrdersList({ filter }: { filter: OrdersFilter }) {
   return (
     <Card className="gap-0 p-0">
       {page.items.length === 0 ? (
-        <OutOfRange filter={filter} />
+        <OutOfRange
+          href={ordersHref({ status: filter.status, q: filter.q })}
+          label="На этой странице заказов нет"
+        />
       ) : (
         <>
           <div className="hidden md:block">
@@ -68,7 +72,13 @@ export async function OrdersList({ filter }: { filter: OrdersFilter }) {
         </>
       )}
 
-      <PaginationBar filter={filter} page={page} />
+      <PaginationBar
+        shown={page.items.length}
+        total={page.total}
+        page={filter.page}
+        totalPages={page.totalPages}
+        hrefFor={(next) => ordersHref({ ...filter, page: next })}
+      />
     </Card>
   );
 }
@@ -229,63 +239,6 @@ function Money({ order }: { order: OrderListItem }) {
   );
 }
 
-function PaginationBar({
-  filter,
-  page,
-}: {
-  filter: OrdersFilter;
-  page: Paginated<OrderListItem>;
-}) {
-  return (
-    <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm">
-      <span>
-        Показано {page.items.length} из {page.total}
-      </span>
-
-      <div className="flex gap-2">
-        <PageLink
-          href={ordersHref({ ...filter, page: filter.page - 1 })}
-          disabled={filter.page <= 1}
-        >
-          Назад
-        </PageLink>
-        <PageLink
-          href={ordersHref({ ...filter, page: filter.page + 1 })}
-          disabled={filter.page >= page.totalPages}
-        >
-          Вперёд
-        </PageLink>
-      </div>
-    </div>
-  );
-}
-
-function PageLink({
-  href,
-  disabled,
-  children,
-}: {
-  href: string;
-  disabled: boolean;
-  children: ReactNode;
-}) {
-  if (disabled) {
-    return (
-      <Button variant="outline" size="sm" disabled>
-        {children}
-      </Button>
-    );
-  }
-
-  return (
-    <Button variant="outline" size="sm" asChild>
-      <Link href={href} scroll={false}>
-        {children}
-      </Link>
-    </Button>
-  );
-}
-
 /** Заказов нет вовсе — или нет по текущему фильтру. Это разные экраны. */
 function EmptyState({ filter }: { filter: OrdersFilter }) {
   if (isEmptyFilter(filter)) {
@@ -316,38 +269,3 @@ function EmptyState({ filter }: { filter: OrdersFilter }) {
   );
 }
 
-/** Страница за пределами выборки: заказы есть, но не на этой странице. */
-function OutOfRange({ filter }: { filter: OrdersFilter }) {
-  return (
-    <div className="flex flex-col items-center gap-3 px-4 py-14 text-center">
-      <p className="text-sm font-medium">На этой странице заказов нет</p>
-      <Button variant="outline" size="sm" asChild>
-        <Link href={ordersHref({ status: filter.status, q: filter.q })}>
-          К первой странице
-        </Link>
-      </Button>
-    </div>
-  );
-}
-
-function EmptyCard({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <Card>
-      <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-        <div>
-          <p className="font-medium">{title}</p>
-          <p className="text-muted-foreground mt-1 text-sm">{description}</p>
-        </div>
-        {children}
-      </CardContent>
-    </Card>
-  );
-}

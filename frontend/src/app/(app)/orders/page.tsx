@@ -2,9 +2,9 @@ import { Plus } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { ListSearch } from "@/components/list-search";
 import { OrdersList } from "@/components/orders/orders-list";
 import { OrdersListSkeleton } from "@/components/orders/orders-list-skeleton";
-import { OrdersSearch } from "@/components/orders/orders-search";
 import { OrdersStatusTabs } from "@/components/orders/orders-status-tabs";
 import { PageHeader } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,14 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
 
       <Card>
         <CardContent className="flex flex-col gap-3">
-          <OrdersSearch filter={filter} />
+          <ListSearch
+            id="orders-search"
+            basePath="/orders"
+            params={{ status: filter.status }}
+            value={filter.q}
+            label="Поиск заказов"
+            placeholder="Поиск по номеру, названию или подрядчику"
+          />
           <OrdersStatusTabs filter={filter} />
         </CardContent>
       </Card>

@@ -21,6 +21,8 @@ import {
   type OrderCategory,
 } from "@/lib/types";
 
+import { isCalendarDate, isPastDate, normalizeNumber } from "./form-input";
+
 /** Значения полей формы. Всё строками — так их отдаёт браузер. */
 export interface OrderFormValues {
   title: string;
@@ -50,17 +52,6 @@ export const emptyOrderForm: OrderFormValues = {
   desiredStartDate: "",
   address: "",
 };
-
-/**
- * Сегодняшний день по UTC в виде `ГГГГ-ММ-ДД`.
- *
- * Именно по UTC, а не по часовому поясу браузера: с этой же границей сравнивает
- * дату backend, и разойдись они — календарь предлагал бы день, который сервер
- * отклонит.
- */
-export function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 /** Проверка всей формы. Пустой объект — можно отправлять. */
 export function validateOrderForm(values: OrderFormValues): OrderFormErrors {
@@ -101,9 +92,9 @@ export function validateOrderForm(values: OrderFormValues): OrderFormErrors {
   }
 
   const date = values.desiredStartDate.trim();
-  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  if (date && !isCalendarDate(date)) {
     errors.desiredStartDate = "Некорректная желаемая дата начала";
-  } else if (date && date < todayIsoDate()) {
+  } else if (date && isPastDate(date)) {
     errors.desiredStartDate = "Желаемая дата начала не может быть в прошлом";
   }
 
@@ -193,18 +184,6 @@ export function addFiles(
   }
 
   return { files, rejected };
-}
-
-/**
- * Запятая в числе — привычный десятичный разделитель, backend ждёт точку.
- *
- * Заменяются все запятые, а не первая: «1,234,5» иначе превращалось бы
- * в «1.234,5» и отсекалось сообщением про формат, хотя причина в другом.
- * Строка с несколькими разделителями всё равно не пройдёт проверку —
- * но по понятному правилу, а не по остатку от замены.
- */
-function normalizeNumber(value: string): string {
-  return value.trim().replaceAll(",", ".");
 }
 
 function squareMetersError(raw: string): string | undefined {
