@@ -103,6 +103,8 @@ export class FilesService {
       buildStorageKey(orderId, ownerType, submissionRound, file),
     );
 
+    let rows: OrderFile[];
+
     try {
       // Строго по одному: параллельная загрузка держала бы в памяти все файлы
       // запроса разом. Семафор ограничивает уже число запросов, идущих
@@ -115,7 +117,7 @@ export class FilesService {
         );
       }
 
-      const rows = await this.prisma.orderFile.createManyAndReturn({
+      rows = await this.prisma.orderFile.createManyAndReturn({
         data: fresh.map((file, index) => ({
           orderId,
           storageKey: keys[index]!,
@@ -131,17 +133,21 @@ export class FilesService {
         // на загрузке файлов незачем.
         skipDuplicates: true,
       });
-
-      if (rows.length < fresh.length) {
-        await this.removeOrphanObjects(orderId, submissionRound, fresh, keys);
-      }
-
-      return rows.map(toOrderFileDto);
     } catch (error) {
       // Загруженное без строки в базе — мусор, который уже никто не найдёт.
       await this.storage.remove(keys);
       throw error;
     }
+
+    // Уборка идёт уже вне `catch`: строки созданы, и с этого момента удалять
+    // пачку целиком нельзя — часть ключей принадлежит им. Сбой самой уборки
+    // (а она ходит в базу) оставил бы в бакете лишний объект, но не тронул бы
+    // объекты живых строк.
+    if (rows.length < fresh.length) {
+      await this.removeOrphanObjects(orderId, submissionRound, fresh, keys);
+    }
+
+    return rows.map(toOrderFileDto);
   }
 
   /** Ссылка на скачивание. Доступна только участникам заказа (ТЗ §6). */

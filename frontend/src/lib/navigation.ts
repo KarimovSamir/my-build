@@ -10,7 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import type { Role } from "@/lib/types";
+import { Role } from "@/lib/types";
 
 export interface NavItem {
   href: string;
@@ -68,7 +68,7 @@ const companyNavigation: NavSection[] = [
 ];
 
 export function getNavigation(role: Role): NavSection[] {
-  return role === "COMPANY" ? companyNavigation : clientNavigation;
+  return role === Role.COMPANY ? companyNavigation : clientNavigation;
 }
 
 /**
@@ -94,8 +94,8 @@ export const SESSION_ISSUE_PAGES = {
  * не существует — ведём на служебный экран с объяснением.
  */
 export function getHomeHref(role: Role | null): string {
-  if (role === "COMPANY") return "/available";
-  if (role === "CLIENT") return "/orders";
+  if (role === Role.COMPANY) return "/available";
+  if (role === Role.CLIENT) return "/orders";
 
   return SESSION_ISSUE_PAGES.missingRole;
 }

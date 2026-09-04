@@ -47,6 +47,17 @@ describe('таблица расширений', () => {
     }
   });
 
+  it('каждый разрешённый тип достижим через таблицу расширений', () => {
+    // Обратная сторона проверки выше. Без неё в список попадал бы тип, который
+    // ни одно расширение не даёт: union шире множества значений, которые
+    // вообще могут оказаться в `OrderFile.mimeType` (находка R3-Н3).
+    const reachable = new Set<string>(Object.values(FILE_EXTENSION_MIME));
+
+    for (const mime of ALLOWED_FILE_MIME_TYPES) {
+      expect(reachable).toContain(mime);
+    }
+  });
+
   it('у каждого расширения ключ начинается с точки и записан в нижнем регистре', () => {
     for (const extension of ALLOWED_FILE_EXTENSIONS) {
       expect(extension).toMatch(/^\.[a-z0-9]+$/);

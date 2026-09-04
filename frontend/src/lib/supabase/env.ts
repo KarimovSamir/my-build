@@ -17,7 +17,7 @@ export function supabaseCredentials(): { url: string; key: string } {
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     throw new Error(
       'Не заданы NEXT_PUBLIC_SUPABASE_URL и NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ' +
-        'в frontend/.env.local (шаблон — frontend/env.example)',
+        'в frontend/.env (шаблон — frontend/env.example)',
     );
   }
 

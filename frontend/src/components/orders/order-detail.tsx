@@ -14,6 +14,7 @@ import { DownloadFileButton } from "@/components/orders/download-file-button";
 import { ComingSoon, PageHeader } from "@/components/page-shell";
 import { OrderStatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { isImageMimeType } from "@/lib/file-kind";
 import { formatArea, formatDate, formatFileSize, formatMoney } from "@/lib/format";
 import {
   emptyClientFilesMessage,
@@ -226,7 +227,7 @@ function Empty({ children }: { children: ReactNode }) {
 }
 
 function FileIcon({ mimeType }: { mimeType: string }) {
-  const Icon = mimeType.startsWith("image/") ? ImageIcon : FileText;
+  const Icon = isImageMimeType(mimeType) ? ImageIcon : FileText;
 
   return <Icon className="text-muted-foreground size-4" aria-hidden />;
 }

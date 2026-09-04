@@ -294,6 +294,36 @@ describe('FilesService.attachFiles', () => {
     ]);
   });
 
+  it('сбой уборки не уносит объекты уже созданных строк', async () => {
+    // Уборка осиротевших объектов сама ходит в базу. Раньше её отказ попадал
+    // во внешний `catch`, и тот удалял всю пачку ключей — включая ключи строк,
+    // которые только что создались: строки остались бы без объектов (R3-Н1).
+    const prisma = createPrismaStub({});
+
+    prisma.orderFile.createManyAndReturn.mockImplementationOnce(
+      async ({ data }: { data: Record<string, unknown>[] }) => [
+        { ...data[0], id: 'file-0', createdAt: new Date() },
+      ],
+    );
+    prisma.orderFile.findMany.mockImplementation(async (args: {
+      select: Record<string, boolean>;
+    }) => {
+      if (args.select.storageKey) throw new Error('база не ответила');
+      return [];
+    });
+
+    await expect(
+      createService(prisma, storage).attachFiles({
+        orderId: ORDER_ID,
+        ownerType: FileOwnerType.CLIENT,
+        submissionRound: 0,
+        files: [await upload('a.pdf', 'первый'), await upload('b.pdf', 'второй')],
+      }),
+    ).rejects.toThrow('база не ответила');
+
+    expect(storage.remove).not.toHaveBeenCalled();
+  });
+
   it('не принимает пустой список файлов', async () => {
     await expect(
       createService(createPrismaStub({}), storage).attachFiles({

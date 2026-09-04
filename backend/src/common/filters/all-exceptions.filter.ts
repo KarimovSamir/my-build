@@ -50,21 +50,43 @@ export class AllExceptionsFilter implements ExceptionFilter {
         return {
           statusCode: status,
           message: shaped.message ?? exception.message,
-          error: shaped.error ?? HttpStatus[status] ?? 'Error',
+          error: shaped.error ?? statusName(status),
         };
       }
 
       return {
         statusCode: status,
         message: typeof payload === 'string' ? payload : exception.message,
-        error: HttpStatus[status] ?? 'Error',
+        error: statusName(status),
       };
     }
 
     return {
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
       message: 'Внутренняя ошибка сервера',
-      error: 'Internal Server Error',
+      error: statusName(HttpStatus.INTERNAL_SERVER_ERROR),
     };
   }
+}
+
+/**
+ * Имя статуса для поля `error` — в том же виде, в каком его подставляет сам
+ * Nest: `Not Found`, `Bad Request`, `Internal Server Error`.
+ *
+ * Раньше это место писало то `Not Found` (готовое тело исключения), то
+ * `NOT_FOUND` (`HttpStatus[status]`), и единый формат ошибки из ТЗ §5
+ * соблюдался по составу полей, но не по их виду. Собственные коды исключений
+ * (`InvalidStateTransition` и подобные) сюда не попадают — они приходят
+ * в теле исключения и отдаются как есть.
+ */
+function statusName(status: number): string {
+  const name: string | undefined = HttpStatus[status];
+
+  if (!name) return 'Error';
+
+  return name
+    .toLowerCase()
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }

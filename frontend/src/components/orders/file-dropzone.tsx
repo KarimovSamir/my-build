@@ -11,6 +11,7 @@ import {
 } from "@/lib/types";
 
 import { Button } from "@/components/ui/button";
+import { isImageFileName } from "@/lib/file-kind";
 import { formatFileSize } from "@/lib/format";
 import { addFiles } from "@/lib/order-form";
 import { cn } from "@/lib/utils";
@@ -174,7 +175,7 @@ function SelectedFile({
 }
 
 function FileIcon({ name }: { name: string }) {
-  const Icon = /\.(png|jpe?g|webp)$/i.test(name) ? ImageIcon : FileText;
+  const Icon = isImageFileName(name) ? ImageIcon : FileText;
 
   return <Icon className="text-muted-foreground size-4" aria-hidden />;
 }
@@ -182,7 +183,7 @@ function FileIcon({ name }: { name: string }) {
 /** Превью картинки из памяти браузера. Ссылка освобождается вместе со строкой. */
 function useImagePreview(file: File): string | null {
   const url = useMemo(
-    () => (file.type.startsWith("image/") ? URL.createObjectURL(file) : null),
+    () => (isImageFileName(file.name) ? URL.createObjectURL(file) : null),
     [file],
   );
 

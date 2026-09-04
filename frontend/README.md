@@ -13,7 +13,7 @@ Next.js 16 (App Router) + Tailwind 4 + shadcn/ui. Интерфейс на рус
 
 ```bash
 npm install                             # из корня
-cp frontend/env.example frontend/.env.local   # заполнить значения
+cp frontend/env.example frontend/.env    # заполнить значения
 npm run dev                             # frontend + backend вместе
 npm run dev:web                         # только frontend
 ```

@@ -53,12 +53,19 @@ export const MAX_FILES_PER_REQUEST = 10;
 export const MAX_UPLOAD_REQUEST_BYTES =
   MAX_FILES_PER_REQUEST * MAX_FILE_SIZE_BYTES + 1024 * 1024;
 
+/**
+ * Типы, которые записываются в `OrderFile.mimeType`.
+ *
+ * Здесь только канонические значения — ровно те, что отдаёт `FILE_EXTENSION_MIME`.
+ * Синонимы, которыми файл может представиться в запросе (`application/acad`,
+ * `image/x-dwg` и прочие), живут отдельной таблицей на backend
+ * (`MIME_ALIASES`): это входные значения, и в базу они не попадают.
+ */
 export const ALLOWED_FILE_MIME_TYPES = [
   'application/pdf',
   'image/png',
   'image/jpeg',
   'image/webp',
-  'application/acad',
   'image/vnd.dwg',
   'application/dxf',
 ] as const;
