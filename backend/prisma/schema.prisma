@@ -66,6 +66,9 @@ enum NotificationType {
   OFFER_RECEIVED
   OFFER_ACCEPTED
   OFFER_REJECTED
+  /// Компания отозвала предложение — узнаёт клиент (решение пользователя
+  /// от 4 сентября 2026; в списке ТЗ §3 этого значения нет).
+  OFFER_WITHDRAWN
   WORK_SUBMITTED
   WORK_CONFIRMED
   WORK_DISPUTED

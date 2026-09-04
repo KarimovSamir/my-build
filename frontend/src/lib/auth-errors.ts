@@ -23,6 +23,16 @@ const messages: Record<string, string> = {
   validation_failed: "Проверьте заполнение полей",
 };
 
+/**
+ * Отказ триггера, создающего профиль.
+ *
+ * Триггер проверяет метаданные регистрации (роль, имя, телефон, длины полей)
+ * и на неподходящие бросает исключение с русским текстом. До браузера этот
+ * текст доезжает не всегда: на пути `signUp` GoTrue подменяет его общей
+ * английской фразой и код ошибки не ставит вовсе.
+ */
+const TRIGGER_FAILURE = /database error (saving|creating) new user/i;
+
 /** Понятный текст ошибки для формы. Неизвестный код — общая формулировка. */
 export function authErrorMessage(error: unknown): string {
   if (error instanceof AuthError) {
@@ -30,8 +40,12 @@ export function authErrorMessage(error: unknown): string {
 
     if (known) return known;
 
-    // Профиль создаёт триггер, и его ошибки приезжают как ошибка базы:
-    // текст на русском написан в самой миграции, поэтому показываем как есть.
+    if (TRIGGER_FAILURE.test(error.message)) {
+      return "Проверьте данные профиля: имя, телефон или название компании не приняты";
+    }
+
+    // Текст триггера на русском написан в самой миграции — когда он всё-таки
+    // доезжает, показываем как есть: точнее общей формулировки.
     if (error.code === "unexpected_failure" && error.message) {
       return error.message;
     }

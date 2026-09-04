@@ -78,6 +78,7 @@ export const notificationTypeLabels: Record<NotificationType, string> = {
   OFFER_RECEIVED: 'Новое предложение',
   OFFER_ACCEPTED: 'Предложение принято',
   OFFER_REJECTED: 'Предложение отклонено',
+  OFFER_WITHDRAWN: 'Предложение отозвано',
   WORK_SUBMITTED: 'Работа сдана',
   WORK_CONFIRMED: 'Работа принята',
   WORK_DISPUTED: 'Работа отправлена на доработку',

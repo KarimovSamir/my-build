@@ -64,11 +64,18 @@ export type FileOwnerType = (typeof FileOwnerType)[keyof typeof FileOwnerType];
  * Тип уведомления.
  * Создание заказа сюда не входит: оно уходит broadcast'ом в `company-feed`
  * и записей в БД не порождает (ТЗ §3, §8).
+ *
+ * `OFFER_WITHDRAWN` в списке ТЗ §3 отсутствует и добавлен по решению
+ * пользователя от 4 сентября 2026: отзыв предложения возвращает заказ
+ * в поиск исполнителя, то есть меняет его статус чужими руками, и клиента
+ * об этом надо известить (ТЗ §8). Ни один из прежних типов этому не подходит:
+ * «Предложение отклонено» описывает действие самого клиента.
  */
 export const NotificationType = {
   OFFER_RECEIVED: 'OFFER_RECEIVED',
   OFFER_ACCEPTED: 'OFFER_ACCEPTED',
   OFFER_REJECTED: 'OFFER_REJECTED',
+  OFFER_WITHDRAWN: 'OFFER_WITHDRAWN',
   WORK_SUBMITTED: 'WORK_SUBMITTED',
   WORK_CONFIRMED: 'WORK_CONFIRMED',
   WORK_DISPUTED: 'WORK_DISPUTED',

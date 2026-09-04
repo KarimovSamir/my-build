@@ -516,4 +516,108 @@ describe('OrderTransitionService: запись эффектов', () => {
 
     expect(rejected.tx.order.update).not.toHaveBeenCalled();
   });
+
+  it('отзыв предложения уведомляет клиента, а не компанию', async () => {
+    // Заказ возвращается в поиск исполнителя чужими руками — клиент обязан
+    // об этом узнать (ТЗ §8, находка R1-С1).
+    const applied = await createService(prisma).apply({
+      type: OrderEventType.OFFER_WITHDRAWN,
+      orderId: ORDER_ID,
+      offerId: OFFER_A,
+    });
+
+    expect(applied.notifications).toHaveLength(1);
+    expect(applied.notifications[0]).toMatchObject({
+      userId: CLIENT_ID,
+      type: NotificationType.OFFER_WITHDRAWN,
+      orderId: ORDER_ID,
+    });
+  });
+});
+
+/**
+ * Отправка предложения по ТЗ §4.1 — upsert: к моменту перехода строка уже
+ * переписана в `SENT`. Читай сервис статус из базы, предусловие всегда видело
+ * бы `SENT` и молча перестало бы что-либо проверять (находка R1-С2).
+ */
+describe('OrderTransitionService: статус предложения до записи', () => {
+  it('берёт статус из команды, а не из уже переписанной строки', async () => {
+    const prisma = createPrismaStub({
+      order: orderRow(OrderStatus.AWAITING_CONFIRMATION),
+      // В базе — то, что записал вызывающий код: предложение уже в `SENT`.
+      offers: [
+        {
+          id: OFFER_A,
+          companyId: COMPANY_A,
+          status: OfferStatus.SENT,
+          proposedPrice: '9500.00',
+        },
+      ],
+    });
+
+    await expect(
+      createService(prisma).apply({
+        type: OrderEventType.OFFER_SUBMITTED,
+        orderId: ORDER_ID,
+        offerId: OFFER_A,
+        // А до записи компания работала по заказу — присылать предложение нельзя.
+        offerStatusBefore: OfferStatus.ACCEPTED,
+      }),
+    ).rejects.toMatchObject({ status: 409, response: { error: 'InvalidOfferStatus' } });
+
+    expect(prisma.tx.order.update).not.toHaveBeenCalled();
+  });
+
+  it('у нового предложения статуса нет — переход проходит', async () => {
+    const prisma = createPrismaStub({
+      order: orderRow(OrderStatus.WAITING),
+      offers: [
+        {
+          id: OFFER_A,
+          companyId: COMPANY_A,
+          status: OfferStatus.SENT,
+          proposedPrice: '9500.00',
+          companyName: 'ООО «Стройград»',
+        },
+      ],
+    });
+
+    const applied = await createService(prisma).apply({
+      type: OrderEventType.OFFER_SUBMITTED,
+      orderId: ORDER_ID,
+      offerId: OFFER_A,
+      offerStatusBefore: null,
+    });
+
+    expect(applied.nextStatus).toBe(OrderStatus.AWAITING_CONFIRMATION);
+    expect(applied.notifications[0]).toMatchObject({
+      userId: CLIENT_ID,
+      type: NotificationType.OFFER_RECEIVED,
+    });
+  });
+
+  it('повторная отправка после отказа клиента проходит', async () => {
+    const prisma = createPrismaStub({
+      order: orderRow(OrderStatus.WAITING),
+      offers: [
+        {
+          id: OFFER_A,
+          companyId: COMPANY_A,
+          status: OfferStatus.SENT,
+          proposedPrice: '9500.00',
+        },
+      ],
+    });
+
+    const applied = await createService(prisma).apply({
+      type: OrderEventType.OFFER_SUBMITTED,
+      orderId: ORDER_ID,
+      offerId: OFFER_A,
+      offerStatusBefore: OfferStatus.REJECTED,
+    });
+
+    expect(applied.offerUpdates).toEqual([
+      { offerId: OFFER_A, companyId: COMPANY_A, status: OfferStatus.SENT },
+    ]);
+  });
 });

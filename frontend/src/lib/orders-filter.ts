@@ -7,7 +7,7 @@
  * понимали параметры одинаково.
  */
 
-import { OrderStatus } from "@/lib/types";
+import { MAX_PAGE, OrderStatus } from "@/lib/types";
 
 export interface OrdersFilter {
   /** null — вкладка «Все заказы». */
@@ -88,5 +88,7 @@ function readQuery(value: string | string[] | undefined): string {
 function readPage(value: string | string[] | undefined): number {
   const page = Number(first(value));
 
-  return Number.isSafeInteger(page) && page >= 1 ? page : 1;
+  // Потолок тот же, что у backend (`MAX_PAGE`): страница за его пределами
+  // вернулась бы ответом 400, а не пустым списком.
+  return Number.isSafeInteger(page) && page >= 1 && page <= MAX_PAGE ? page : 1;
 }

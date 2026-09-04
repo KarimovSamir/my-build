@@ -47,15 +47,32 @@ export interface OrderStateContext {
   status: OrderStatus;
 }
 
-interface OfferRef {
+/** Кого касается событие: предложение и компания за ним. */
+interface OfferOwner {
   offerId: string;
   companyId: string;
+}
+
+interface OfferRef extends OfferOwner {
   /**
    * Статус предложения на момент события. Без него машина решала бы переход
    * по одному лишь статусу заказа, и уже отклонённое предложение можно было
    * бы отклонить второй раз, пока заказ ждёт выбора из других.
    */
   offerStatus: OfferStatus;
+}
+
+/**
+ * То же для события «компания прислала предложение».
+ *
+ * Статус здесь — тот, что был у предложения **до** записи вызывающим кодом,
+ * а `null` означает «предложения ещё не было, оно создаётся сейчас». Разница
+ * принципиальная: отправка предложения по ТЗ §4.1 — это upsert, и если читать
+ * статус из базы после записи, там всегда окажется `SENT`, то есть проверка
+ * предусловия перестанет что-либо значить, ничем себя не выдав.
+ */
+interface SubmittedOfferRef extends OfferOwner {
+  offerStatus: OfferStatus | null;
 }
 
 /** Чужое предложение того же заказа, всё ещё ждущее решения клиента. */
@@ -65,7 +82,10 @@ export interface RivalOffer {
 }
 
 export type OrderEvent =
-  | ({ type: typeof OrderEventType.OFFER_SUBMITTED; companyName: string } & OfferRef)
+  | ({
+      type: typeof OrderEventType.OFFER_SUBMITTED;
+      companyName: string;
+    } & SubmittedOfferRef)
   /**
    * `otherActiveOffers` — сколько предложений в статусе SENT останется
    * у заказа, кроме этого. Ноль означает, что клиенту больше не из чего
@@ -197,7 +217,7 @@ function orderRef(context: OrderStateContext): string {
 }
 
 /** Сменить статус предложения, по которому пришло событие. */
-function setOfferStatus(offer: OfferRef, status: OfferStatus): OrderSideEffect {
+function setOfferStatus(offer: OfferOwner, status: OfferStatus): OrderSideEffect {
   return {
     kind: 'SET_OFFER_STATUS',
     offerId: offer.offerId,
@@ -241,13 +261,28 @@ const offerSubmitted: TransitionHandler = (context, event) => {
   };
 };
 
+/** Кому и о чём сообщить, когда предложение выбыло из выбора. */
+interface LeftSelectionNotice {
+  /** `client` — владелец заказа, `company` — компания за предложением. */
+  to: 'client' | 'company';
+  type: NotificationType;
+  /** Текст после номера и названия заказа. */
+  body: string;
+}
+
 /**
  * Предложение выбыло из выбора. Заказ возвращается в поиск исполнителя
  * только если это было последнее активное предложение.
+ *
+ * Уведомление адресовано той стороне, которая ничего не делала: клиент
+ * отклонил — узнаёт компания, компания отозвала — узнаёт клиент. Сообщать
+ * человеку о его же действии незачем, а молчать нельзя: отзыв возвращает
+ * заказ в поиск исполнителя чужими руками, и это ровно тот случай, для
+ * которого ТЗ §8 требует уведомления вместе с переходом.
  */
 function offerLeftSelection(
   offerStatus: OfferStatus,
-  notifyCompany: NotificationType | null,
+  notice: LeftSelectionNotice,
 ): TransitionHandler {
   return (context, event) => {
     if (
@@ -257,24 +292,19 @@ function offerLeftSelection(
       throw unexpected(event);
     }
 
-    const effects: OrderSideEffect[] = [setOfferStatus(event, offerStatus)];
-
-    if (notifyCompany) {
-      effects.push(
-        notify(
-          event.companyId,
-          notifyCompany,
-          `${orderRef(context)}: ваше предложение отклонено`,
-        ),
-      );
-    }
-
     return {
       nextStatus:
         event.otherActiveOffers > 0
           ? OrderStatus.AWAITING_CONFIRMATION
           : OrderStatus.WAITING,
-      effects,
+      effects: [
+        setOfferStatus(event, offerStatus),
+        notify(
+          notice.to === 'client' ? context.clientId : event.companyId,
+          notice.type,
+          `${orderRef(context)}: ${notice.body}`,
+        ),
+      ],
     };
   };
 }
@@ -391,11 +421,16 @@ const TRANSITIONS: TransitionTable = {
     // Заказ уже в этом статусе, но событие разрешено: предложение от ещё
     // одной компании — норма, а не конфликт.
     [OrderEventType.OFFER_SUBMITTED]: offerSubmitted,
-    [OrderEventType.OFFER_WITHDRAWN]: offerLeftSelection(OfferStatus.WITHDRAWN, null),
-    [OrderEventType.OFFER_REJECTED]: offerLeftSelection(
-      OfferStatus.REJECTED,
-      NotificationType.OFFER_REJECTED,
-    ),
+    [OrderEventType.OFFER_WITHDRAWN]: offerLeftSelection(OfferStatus.WITHDRAWN, {
+      to: 'client',
+      type: NotificationType.OFFER_WITHDRAWN,
+      body: 'компания отозвала своё предложение',
+    }),
+    [OrderEventType.OFFER_REJECTED]: offerLeftSelection(OfferStatus.REJECTED, {
+      to: 'company',
+      type: NotificationType.OFFER_REJECTED,
+      body: 'ваше предложение отклонено',
+    }),
     [OrderEventType.OFFER_ACCEPTED]: offerAccepted,
   },
 
@@ -435,16 +470,40 @@ export class OrderStateMachine {
 
     // Статус заказа проверяется первым: он описывает переход целиком,
     // а статус предложения — только право этого предложения в нём участвовать.
-    if (!OFFER_PRECONDITIONS[event.type].includes(event.offerStatus)) {
-      throw new InvalidOfferStatusError(event.offerStatus, event.type);
+    // `null` бывает у одного события — «компания прислала предложение» — и
+    // означает, что предложения ещё не было: предусловию нечего проверять.
+    const { offerStatus } = event;
+
+    if (offerStatus !== null && !OFFER_PRECONDITIONS[event.type].includes(offerStatus)) {
+      throw new InvalidOfferStatusError(offerStatus, event.type);
     }
 
     return { fromStatus: context.status, ...handler(context, event) };
   }
 
-  /** Разрешено ли событие в текущем статусе. Для показа кнопок в интерфейсе. */
-  can(status: OrderStatus, event: OrderEventType): boolean {
-    return Boolean(TRANSITIONS[status][event]);
+  /**
+   * Разрешено ли событие. Для показа кнопок в интерфейсе.
+   *
+   * Статус предложения необязателен, но его стоит передавать везде, где кнопка
+   * относится к конкретному предложению: без него ответ учитывает только статус
+   * заказа, и в `AWAITING_CONFIRMATION` кнопка «Отклонить» покажется даже
+   * у предложения, отклонённого минуту назад, — а сервер ответит 409.
+   * `null` означает «предложения ещё нет» и предусловий не имеет.
+   */
+  can(
+    status: OrderStatus,
+    event: OrderEventType,
+    offerStatus?: OfferStatus | null,
+  ): boolean {
+    if (!TRANSITIONS[status][event]) {
+      return false;
+    }
+
+    if (offerStatus === undefined || offerStatus === null) {
+      return true;
+    }
+
+    return OFFER_PRECONDITIONS[event].includes(offerStatus);
   }
 }
 

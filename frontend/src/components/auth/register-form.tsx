@@ -15,7 +15,13 @@ import {
 import { authErrorMessage } from "@/lib/auth-errors";
 import { getHomeHref } from "@/lib/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { isValidPhone, PHONE_ERROR_MESSAGE, Role, roleLabels } from "@/lib/types";
+import {
+  isValidPhone,
+  PHONE_ERROR_MESSAGE,
+  PROFILE_LIMITS,
+  Role,
+  roleLabels,
+} from "@/lib/types";
 
 /**
  * Регистрация (ТЗ §5).
@@ -24,6 +30,10 @@ import { isValidPhone, PHONE_ERROR_MESSAGE, Role, roleLabels } from "@/lib/types
  * из метаданных, которые уходят в `signUp`. Поэтому набор полей здесь
  * обязан совпадать с тем, что ждёт триггер: роль, имя, телефон, а для
  * компании ещё и название.
+ *
+ * Пределы длины берутся из `shared/` — теми же числами триггер отвечает
+ * на слишком длинное значение исключением. Здесь они стоят, чтобы человек
+ * упёрся в границу поля, а не в ошибку регистрации.
  */
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -131,6 +141,7 @@ export function RegisterForm() {
           label="Название компании"
           placeholder="ООО «СтройГрад»"
           hint="Его увидит клиент в списке предложений"
+          maxLength={PROFILE_LIMITS.companyName}
           required
         />
       ) : null}
@@ -141,6 +152,7 @@ export function RegisterForm() {
           name="firstName"
           label="Имя"
           autoComplete="given-name"
+          maxLength={PROFILE_LIMITS.firstName}
           required
         />
         <Field
@@ -148,6 +160,7 @@ export function RegisterForm() {
           name="lastName"
           label="Фамилия"
           autoComplete="family-name"
+          maxLength={PROFILE_LIMITS.lastName}
         />
       </div>
 
@@ -158,12 +171,25 @@ export function RegisterForm() {
         label="Телефон"
         autoComplete="tel"
         placeholder="+7 900 000-00-00"
+        maxLength={PROFILE_LIMITS.phone}
         required
       />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="city" name="city" label="Город" autoComplete="address-level2" />
-        <Field id="country" name="country" label="Страна" autoComplete="country-name" />
+        <Field
+          id="city"
+          name="city"
+          label="Город"
+          autoComplete="address-level2"
+          maxLength={PROFILE_LIMITS.city}
+        />
+        <Field
+          id="country"
+          name="country"
+          label="Страна"
+          autoComplete="country-name"
+          maxLength={PROFILE_LIMITS.country}
+        />
       </div>
 
       <Field

@@ -266,15 +266,24 @@ describe('OrderStateMachine — побочные эффекты', () => {
     expect(result.nextStatus).toBe(OrderStatus.WAITING);
   });
 
-  it('отзыв не создаёт уведомлений: компания отзывает своё предложение сама', () => {
+  it('отзыв уведомляет клиента, а не саму компанию', () => {
+    // Отзыв возвращает заказ в поиск исполнителя чужими руками — клиент обязан
+    // об этом узнать (ТЗ §8). Компании сообщать о её же действии незачем.
     const { effects } = machine.transition(
       contextIn(OrderStatus.AWAITING_CONFIRMATION),
       events.OFFER_WITHDRAWN,
     );
 
-    expect(effects.filter((effect) => effect.kind === 'CREATE_NOTIFICATION')).toHaveLength(
-      0,
+    const notifications = effects.filter(
+      (effect) => effect.kind === 'CREATE_NOTIFICATION',
     );
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      userId: CLIENT_ID,
+      type: NotificationType.OFFER_WITHDRAWN,
+      body: expect.stringContaining('ORD-7829'),
+    });
   });
 
   it('отклонение предложения уведомляет компанию', () => {
@@ -434,6 +443,118 @@ describe('OrderStateMachine — статус предложения', () => {
         offerStatus: OfferStatus.NOT_ACCEPTED,
       }),
     ).toThrow(InvalidStateTransitionError);
+  });
+
+  /**
+   * Статус «до записи» — не украшение, а единственный способ проверить
+   * предусловие для отправки предложения: она по ТЗ §4.1 upsert, и статус
+   * в базе к этому моменту уже переписан на `SENT`.
+   */
+  describe('отправка предложения смотрит на статус до записи', () => {
+    it('у нового предложения статуса нет, и предусловию нечего проверять', () => {
+      const result = machine.transition(contextIn(OrderStatus.WAITING), {
+        ...events.OFFER_SUBMITTED,
+        type: OrderEventType.OFFER_SUBMITTED,
+        offerStatus: null,
+      });
+
+      expect(result.nextStatus).toBe(OrderStatus.AWAITING_CONFIRMATION);
+      expect(result.effects).toContainEqual({
+        kind: 'SET_OFFER_STATUS',
+        offerId: OFFER_ID,
+        companyId: COMPANY_ID,
+        status: OfferStatus.SENT,
+      });
+    });
+
+    it.each([OfferStatus.SENT, OfferStatus.WITHDRAWN, OfferStatus.REJECTED, OfferStatus.NOT_ACCEPTED])(
+      'разрешает повторную отправку из статуса %s',
+      (offerStatus) => {
+        expect(
+          machine.transition(contextIn(OrderStatus.AWAITING_CONFIRMATION), {
+            ...events.OFFER_SUBMITTED,
+            type: OrderEventType.OFFER_SUBMITTED,
+            offerStatus,
+          }).nextStatus,
+        ).toBe(OrderStatus.AWAITING_CONFIRMATION);
+      },
+    );
+
+    it.each([
+      OfferStatus.ACCEPTED,
+      OfferStatus.WORK_SUBMITTED,
+      OfferStatus.BACK_FOR_OVERRIDE,
+      OfferStatus.COMPLETED,
+    ])('не даёт отправить предложение из исполнительского статуса %s', (offerStatus) => {
+      expect(() =>
+        machine.transition(contextIn(OrderStatus.AWAITING_CONFIRMATION), {
+          ...events.OFFER_SUBMITTED,
+          type: OrderEventType.OFFER_SUBMITTED,
+          offerStatus,
+        }),
+      ).toThrow(InvalidOfferStatusError);
+    });
+  });
+});
+
+/**
+ * `can()` показывает кнопки в интерфейсе. Без статуса предложения он отвечает
+ * по одному статусу заказа, и кнопка «Отклонить» появлялась бы у предложения,
+ * отклонённого минуту назад, — а сервер отвечал бы 409.
+ */
+describe('OrderStateMachine.can', () => {
+  it('без статуса предложения отвечает по статусу заказа', () => {
+    expect(machine.can(OrderStatus.AWAITING_CONFIRMATION, OrderEventType.OFFER_REJECTED)).toBe(
+      true,
+    );
+    expect(machine.can(OrderStatus.WAITING, OrderEventType.OFFER_REJECTED)).toBe(false);
+  });
+
+  it('со статусом предложения учитывает и его', () => {
+    expect(
+      machine.can(
+        OrderStatus.AWAITING_CONFIRMATION,
+        OrderEventType.OFFER_REJECTED,
+        OfferStatus.SENT,
+      ),
+    ).toBe(true);
+
+    // То же предложение, но уже отклонённое: кнопки быть не должно.
+    expect(
+      machine.can(
+        OrderStatus.AWAITING_CONFIRMATION,
+        OrderEventType.OFFER_REJECTED,
+        OfferStatus.REJECTED,
+      ),
+    ).toBe(false);
+  });
+
+  it('запрещённый статус заказа перевешивает подходящий статус предложения', () => {
+    expect(
+      machine.can(OrderStatus.COMPLETED, OrderEventType.WORK_SUBMITTED, OfferStatus.ACCEPTED),
+    ).toBe(false);
+  });
+
+  it('`null` — предложения ещё нет, предусловий у него не бывает', () => {
+    expect(machine.can(OrderStatus.WAITING, OrderEventType.OFFER_SUBMITTED, null)).toBe(true);
+  });
+
+  it('ответ сходится с тем, что делает сам переход', () => {
+    // Иначе интерфейс и сервер разойдутся молча.
+    for (const status of allStatuses) {
+      for (const event of allEvents) {
+        const offerStatus = events[event].offerStatus ?? OfferStatus.SENT;
+
+        let allowed = true;
+        try {
+          machine.transition(contextIn(status), { ...events[event], offerStatus });
+        } catch {
+          allowed = false;
+        }
+
+        expect(machine.can(status, event, offerStatus)).toBe(allowed);
+      }
+    }
   });
 });
 

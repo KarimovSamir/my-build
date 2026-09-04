@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { PHONE_DIGITS, PHONE_MAX_LENGTH, isValidPhone } from './profile.js';
+import {
+  PHONE_DIGITS,
+  PHONE_MAX_LENGTH,
+  PROFILE_LIMITS,
+  isValidPhone,
+} from './profile.js';
 
 /**
  * Одно правило на форму регистрации и на `PATCH /profile`: разъедься они —
@@ -41,11 +46,37 @@ describe('isValidPhone', () => {
     expect(isValidPhone('0'.repeat(PHONE_DIGITS.max + 1))).toBe(false);
   });
 
-  it('не пропускает номер длиннее колонки `User.phone`', () => {
+  it('не пропускает номер длиннее допустимой строки', () => {
     // Цифр в пределах нормы, а разделителей столько, что строка не поместится.
     const padded = `+7${' '.repeat(PHONE_MAX_LENGTH)}9000000000`;
 
     expect(padded.length).toBeGreaterThan(PHONE_MAX_LENGTH);
     expect(isValidPhone(padded)).toBe(false);
+  });
+});
+
+/**
+ * Те же числа проверяют двое: DTO `PATCH /profile` и триггер
+ * `handle_auth_user_upsert`, через который профиль создаётся при регистрации.
+ * В SQL их приходится писать литералами — тест сторожит хотя бы то, что
+ * значения в `shared/` не изменятся незаметно для миграции.
+ */
+describe('PROFILE_LIMITS', () => {
+  it('совпадает с числами, записанными в триггере регистрации', () => {
+    expect(PROFILE_LIMITS).toEqual({
+      firstName: 100,
+      lastName: 100,
+      city: 100,
+      country: 100,
+      companyName: 200,
+      phone: PHONE_MAX_LENGTH,
+    });
+  });
+
+  it('каждый предел — положительное целое', () => {
+    for (const limit of Object.values(PROFILE_LIMITS)) {
+      expect(Number.isSafeInteger(limit)).toBe(true);
+      expect(limit).toBeGreaterThan(0);
+    }
   });
 });

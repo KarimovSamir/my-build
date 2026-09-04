@@ -6,6 +6,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
+  MAX_PAGE,
   ObjectType,
   OfferStatus,
   OrderCategory,
@@ -541,6 +542,31 @@ describe('Заказы (e2e)', () => {
         .set('Authorization', `Bearer ${listerToken}`);
 
       expect(response.status).toBe(400);
+    });
+
+    it.each([MAX_PAGE + 1, 1e20, Number.MAX_SAFE_INTEGER])(
+      'номер страницы %s отклоняет с 400, а не падает с 500',
+      async (page) => {
+        // Из номера считается `skip`, и без потолка огромное значение уходило
+        // в Prisma, где падало `PrismaClientValidationError`, то есть 500
+        // на обычном параметре адреса (находка R3-С1).
+        const response = await request(app.getHttpServer())
+          .get('/orders')
+          .query({ page })
+          .set('Authorization', `Bearer ${listerToken}`);
+
+        expect(response.status).toBe(400);
+      },
+    );
+
+    it('последнюю разрешённую страницу принимает', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/orders')
+        .query({ page: MAX_PAGE })
+        .set('Authorization', `Bearer ${listerToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ items: [], page: MAX_PAGE });
     });
 
     it('компании список заказов клиента недоступен', async () => {

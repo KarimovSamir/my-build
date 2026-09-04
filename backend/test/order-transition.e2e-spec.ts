@@ -129,6 +129,7 @@ describe('OrderTransitionService (e2e)', () => {
       type: OrderEventType.OFFER_SUBMITTED,
       orderId: order.id,
       offerId: offerA.id,
+      offerStatusBefore: null,
     });
     expect(submitted.order.status).toBe(OrderStatus.AWAITING_CONFIRMATION);
     expect(submitted.notifications).toHaveLength(1);
@@ -223,6 +224,7 @@ describe('OrderTransitionService (e2e)', () => {
       type: OrderEventType.OFFER_SUBMITTED,
       orderId: order.id,
       offerId: offerA.id,
+      offerStatusBefore: null,
     });
     await transitions.apply({
       type: OrderEventType.OFFER_ACCEPTED,
@@ -256,11 +258,13 @@ describe('OrderTransitionService (e2e)', () => {
       type: OrderEventType.OFFER_SUBMITTED,
       orderId: order.id,
       offerId: offerA.id,
+      offerStatusBefore: null,
     });
     await transitions.apply({
       type: OrderEventType.OFFER_SUBMITTED,
       orderId: order.id,
       offerId: offerB.id,
+      offerStatusBefore: null,
     });
 
     const rejected = await transitions.apply({
@@ -308,11 +312,13 @@ describe('OrderTransitionService (e2e)', () => {
       type: OrderEventType.OFFER_SUBMITTED,
       orderId: order.id,
       offerId: offerA.id,
+      offerStatusBefore: null,
     });
     await transitions.apply({
       type: OrderEventType.OFFER_SUBMITTED,
       orderId: order.id,
       offerId: offerB.id,
+      offerStatusBefore: null,
     });
 
     const firstWithdraw = await transitions.apply({
@@ -331,5 +337,15 @@ describe('OrderTransitionService (e2e)', () => {
     expect(
       (await prisma.offer.findUniqueOrThrow({ where: { id: offerA.id } })).status,
     ).toBe(OfferStatus.WITHDRAWN);
+
+    // Заказ вернулся в поиск исполнителя не по воле клиента — он обязан
+    // об этом узнать (ТЗ §8, находка R1-С1). Здесь же проверяется, что новое
+    // значение enum-а действительно принимается базой.
+    const notified = await prisma.notification.findMany({
+      where: { orderId: order.id, type: NotificationType.OFFER_WITHDRAWN },
+    });
+
+    expect(notified).toHaveLength(2);
+    expect(notified.every((row) => row.userId === clientId)).toBe(true);
   });
 });

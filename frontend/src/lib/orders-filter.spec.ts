@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { OrderStatus } from "@/lib/types";
+import { MAX_PAGE, OrderStatus } from "@/lib/types";
 
 import {
   isEmptyFilter,
@@ -44,6 +44,14 @@ describe("parseOrdersFilter", () => {
 
   it("читает номер страницы", () => {
     expect(parseOrdersFilter({ page: "3" }).page).toBe(3);
+    expect(parseOrdersFilter({ page: String(MAX_PAGE) }).page).toBe(MAX_PAGE);
+  });
+
+  it("страницу за потолком backend читает как первую", () => {
+    // Иначе запрос ушёл бы в API и вернулся ответом 400, а не пустым списком.
+    for (const page of [MAX_PAGE + 1, 1e15, Number.MAX_SAFE_INTEGER]) {
+      expect(parseOrdersFilter({ page: String(page) }).page).toBe(1);
+    }
   });
 
   it("из повторяющегося параметра берёт первое значение", () => {

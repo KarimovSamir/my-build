@@ -7,6 +7,7 @@ import {
   FILE_EXTENSION_MIME,
   MAX_FILES_PER_REQUEST,
   MAX_FILE_SIZE_BYTES,
+  MAX_PAGE,
   MAX_PAGE_SIZE,
   MAX_UPLOAD_REQUEST_BYTES,
   fileExtension,
@@ -73,5 +74,14 @@ describe('лимиты', () => {
 
   it('размер страницы по умолчанию не больше потолка', () => {
     expect(DEFAULT_PAGE_SIZE).toBeLessThanOrEqual(MAX_PAGE_SIZE);
+  });
+
+  it('самый дальний возможный `skip` остаётся обычным целым', () => {
+    // Из номера страницы считается `skip`; значение, которое не выражается
+    // безопасным целым, Prisma не принимает — запрос падает на 500.
+    const skip = (MAX_PAGE - 1) * MAX_PAGE_SIZE;
+
+    expect(Number.isSafeInteger(skip)).toBe(true);
+    expect(skip).toBeLessThan(Number.MAX_SAFE_INTEGER);
   });
 });

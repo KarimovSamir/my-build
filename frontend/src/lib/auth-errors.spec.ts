@@ -26,11 +26,23 @@ describe("authErrorMessage", () => {
     );
   });
 
-  it("ошибку триггера показывает как есть", () => {
+  it("ошибку триггера показывает как есть, когда её текст доехал", () => {
     // Профиль создаёт триггер миграции, и текст там уже написан по-русски.
     expect(
       authErrorMessage(authError("unexpected_failure", "Не указано название компании")),
     ).toBe("Не указано название компании");
+  });
+
+  it("общую фразу GoTrue про отказ базы переводит в подсказку по полям", () => {
+    // На пути `signUp` GoTrue подменяет текст триггера этой фразой и кода
+    // ошибки не ставит вовсе — иначе пользователь увидел бы английский текст
+    // «Не удалось выполнить запрос» без единого намёка, что именно не так.
+    const expected = "Проверьте данные профиля: имя, телефон или название компании не приняты";
+
+    expect(authErrorMessage(new AuthError("Database error saving new user"))).toBe(expected);
+    expect(
+      authErrorMessage(authError("unexpected_failure", "Database error creating new user")),
+    ).toBe(expected);
   });
 
   it("неизвестный код Supabase даёт общую формулировку", () => {

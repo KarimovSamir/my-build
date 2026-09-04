@@ -30,7 +30,21 @@ import {
  * находит его сам — так его нельзя перепутать.
  */
 export type OrderTransitionCommand =
-  | { type: typeof OrderEventType.OFFER_SUBMITTED; orderId: string; offerId: string }
+  | {
+      type: typeof OrderEventType.OFFER_SUBMITTED;
+      orderId: string;
+      offerId: string;
+      /**
+       * Статус предложения **до** того, как вызывающий код его записал;
+       * `null` — предложение создаётся этим же запросом.
+       *
+       * Поле обязательное и читается вместо статуса из базы намеренно.
+       * Отправка предложения по ТЗ §4.1 — upsert, то есть к моменту вызова
+       * строка уже переписана в `SENT`, и проверка предусловия, читай она базу,
+       * всегда видела бы `SENT` и молча превратилась бы в пустую формальность.
+       */
+      offerStatusBefore: OfferStatus | null;
+    }
   | { type: typeof OrderEventType.OFFER_WITHDRAWN; orderId: string; offerId: string }
   | { type: typeof OrderEventType.OFFER_REJECTED; orderId: string; offerId: string }
   | { type: typeof OrderEventType.OFFER_ACCEPTED; orderId: string; offerId: string }
@@ -218,6 +232,8 @@ export class OrderTransitionService {
         return {
           type: command.type,
           ...ref,
+          // Статус берётся из команды, а не из строки: см. `offerStatusBefore`.
+          offerStatus: command.offerStatusBefore,
           companyName: offer.company.companyName ?? 'Компания',
         };
 
