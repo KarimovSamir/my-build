@@ -1,5 +1,5 @@
 /**
- * Что клиент может сделать с заказом прямо сейчас (ТЗ §4, §4.1).
+ * Что стороны могут сделать с заказом прямо сейчас (ТЗ §4, §4.1).
  *
  * Состав кнопок считается той же функцией, что решает на сервере, — общей
  * `canTransition` из `shared/`. Написать здесь свои условия («статус
@@ -16,6 +16,8 @@
 import {
   OrderEventType,
   canTransition,
+  canUploadWork,
+  canVerifyArea,
   isExecutorOffer,
   isPendingOffer,
   type OfferDto,
@@ -23,6 +25,7 @@ import {
 } from "@/lib/types";
 
 import type { OrderDetailAccess } from "./order-access";
+import type { SubmissionsView } from "./submissions";
 
 /** Предложение и решения, которые клиент может по нему принять. */
 export interface OfferDecision {
@@ -84,5 +87,68 @@ export function resolveClientActions(
     canDisputeWork:
       executorOffer !== null &&
       canTransition(order.status, OrderEventType.WORK_DISPUTED, executorOffer.status),
+  };
+}
+
+/** Что компания может сделать с заказом прямо сейчас (ТЗ §4.1). */
+export interface OrderCompanyActions {
+  /**
+   * Своё предложение — единственное, которое компания вообще видит (ТЗ §4.1,
+   * приватность). `null` — компания по заказу не предлагалась.
+   */
+  ownOffer: OfferDto | null;
+  /** Предложение принято: заказ выполняет эта компания. */
+  isExecutor: boolean;
+  /** Можно добавить файлы в свою сдачу. */
+  canAddFiles: boolean;
+  /** Можно сдать работу клиенту. */
+  canSubmitWork: boolean;
+  /** Можно уточнить площадь объекта. */
+  canVerifyArea: boolean;
+}
+
+const NOTHING_FOR_COMPANY: OrderCompanyActions = {
+  ownOffer: null,
+  isExecutor: false,
+  canAddFiles: false,
+  canSubmitWork: false,
+  canVerifyArea: false,
+};
+
+/**
+ * Действия компании по заказу.
+ *
+ * Клиенту здесь ловить нечего: своё предложение он не подаёт, а список чужих
+ * разбирает `resolveClientActions`. Сдача работы — единственное место, где
+ * к статусу заказа добавляется условие сверх таблицы переходов: сдавать нечего,
+ * пока в открытом раунде нет ни одного файла. То же самое проверяет сервер
+ * (409 «нечего сдавать»), и без этой проверки кнопка обещала бы невозможное.
+ */
+export function resolveCompanyActions(
+  order: OrderDetail,
+  access: OrderDetailAccess,
+  submissions: SubmissionsView,
+  /** Кто смотрит. `null` — сессия пропала между рендером и запросом. */
+  viewerId: string | null,
+): OrderCompanyActions {
+  if (access.isOwner || viewerId === null) return NOTHING_FOR_COMPANY;
+
+  const ownOffer = order.offers.find((offer) => offer.companyId === viewerId) ?? null;
+
+  if (!ownOffer || !isExecutorOffer(ownOffer.status)) {
+    return { ...NOTHING_FOR_COMPANY, ownOffer };
+  }
+
+  const open = submissions.open;
+
+  return {
+    ownOffer,
+    isExecutor: true,
+    canAddFiles: canUploadWork(order.status),
+    canSubmitWork:
+      canTransition(order.status, OrderEventType.WORK_SUBMITTED, ownOffer.status) &&
+      open !== null &&
+      open.files.length > 0,
+    canVerifyArea: canVerifyArea(order.status),
   };
 }

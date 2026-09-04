@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  FileOwnerType,
   ObjectType,
   OfferStatus,
   OrderCategory,
   OrderStatus,
   type OfferDto,
   type OrderDetail,
+  type OrderFileDto,
 } from "@/lib/types";
 
 import { resolveOrderDetailAccess } from "./order-access";
-import { resolveClientActions } from "./order-actions";
+import { resolveClientActions, resolveCompanyActions } from "./order-actions";
+import { resolveSubmissions } from "./submissions";
 
 const CLIENT_ID = "6f1c7a0e-0000-4000-8000-000000000001";
 const COMPANY_A = "6f1c7a0e-0000-4000-8000-000000000002";
@@ -202,5 +205,146 @@ describe("resolveClientActions — приёмка работы", () => {
 
     expect(actions.canConfirmWork).toBe(false);
     expect(actions.canDisputeWork).toBe(false);
+  });
+});
+
+/** Действия компании — как их считает страница заказа. */
+function companyActionsFor(detail: OrderDetail, viewerId: string | null) {
+  const access = resolveOrderDetailAccess(detail, viewerId);
+
+  return resolveCompanyActions(detail, access, resolveSubmissions(detail), viewerId);
+}
+
+function companyFile(round: number): OrderFileDto {
+  return {
+    id: `file-${round}`,
+    orderId: "order-1",
+    ownerType: FileOwnerType.COMPANY,
+    submissionRound: round,
+    originalName: "план.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 1024,
+    createdAt: "2026-09-01T00:00:00.000Z",
+  };
+}
+
+/** Открытая сдача с файлом: то, из чего складывается готовность сдавать. */
+function readyToSubmit(status: OrderStatus, offerStatus: OfferStatus): OrderDetail {
+  return order({
+    status,
+    offers: [offer(COMPANY_A, offerStatus)],
+    files: [companyFile(1)],
+    submissions: [
+      { round: 1, comment: "Готово", submittedAt: null, createdAt: "2026-09-02T00:00:00.000Z" },
+    ],
+  });
+}
+
+describe("resolveCompanyActions", () => {
+  it("клиенту не даёт ничего, даже на своём заказе", () => {
+    const actions = companyActionsFor(
+      readyToSubmit(OrderStatus.IN_PROGRESS, OfferStatus.ACCEPTED),
+      CLIENT_ID,
+    );
+
+    expect(actions).toEqual({
+      ownOffer: null,
+      isExecutor: false,
+      canAddFiles: false,
+      canSubmitWork: false,
+      canVerifyArea: false,
+    });
+  });
+
+  it("компании с предложением на выбор показывает его, но работать не даёт", () => {
+    const actions = companyActionsFor(
+      order({ offers: [offer(COMPANY_A, OfferStatus.SENT)] }),
+      COMPANY_A,
+    );
+
+    expect(actions.ownOffer?.status).toBe(OfferStatus.SENT);
+    expect(actions.isExecutor).toBe(false);
+    expect(actions.canAddFiles).toBe(false);
+    expect(actions.canVerifyArea).toBe(false);
+  });
+
+  it("исполнителю в работе даёт файлы и площадь", () => {
+    const actions = companyActionsFor(
+      order({ status: OrderStatus.IN_PROGRESS, offers: [offer(COMPANY_A, OfferStatus.ACCEPTED)] }),
+      COMPANY_A,
+    );
+
+    expect(actions.isExecutor).toBe(true);
+    expect(actions.canAddFiles).toBe(true);
+    expect(actions.canVerifyArea).toBe(true);
+    // Загруженных файлов нет — сдавать нечего, и сервер ответил бы 409.
+    expect(actions.canSubmitWork).toBe(false);
+  });
+
+  it("сдать работу даёт, только когда в открытой сдаче есть файл", () => {
+    const actions = companyActionsFor(
+      readyToSubmit(OrderStatus.IN_PROGRESS, OfferStatus.ACCEPTED),
+      COMPANY_A,
+    );
+
+    expect(actions.canSubmitWork).toBe(true);
+  });
+
+  it("после доработки снова даёт загрузить файлы и пересдать", () => {
+    const actions = companyActionsFor(
+      readyToSubmit(OrderStatus.COMPLETION_DISPUTED, OfferStatus.BACK_FOR_OVERRIDE),
+      COMPANY_A,
+    );
+
+    expect(actions.canAddFiles).toBe(true);
+    expect(actions.canSubmitWork).toBe(true);
+  });
+
+  it("пока работа у клиента, файлы не добавляются, а площадь уточняется", () => {
+    const actions = companyActionsFor(
+      order({
+        status: OrderStatus.AWAITING_COMPLETION_CONFIRMATION,
+        offers: [offer(COMPANY_A, OfferStatus.WORK_SUBMITTED)],
+        files: [companyFile(1)],
+        submissions: [
+          {
+            round: 1,
+            comment: "Готово",
+            submittedAt: "2026-09-03T00:00:00.000Z",
+            createdAt: "2026-09-02T00:00:00.000Z",
+          },
+        ],
+      }),
+      COMPANY_A,
+    );
+
+    expect(actions.canAddFiles).toBe(false);
+    expect(actions.canSubmitWork).toBe(false);
+    expect(actions.canVerifyArea).toBe(true);
+  });
+
+  it("на завершённом заказе не остаётся ни одного действия", () => {
+    const actions = companyActionsFor(
+      order({
+        status: OrderStatus.COMPLETED,
+        offers: [offer(COMPANY_A, OfferStatus.COMPLETED)],
+      }),
+      COMPANY_A,
+    );
+
+    expect(actions.isExecutor).toBe(true);
+    expect(actions.canAddFiles).toBe(false);
+    expect(actions.canSubmitWork).toBe(false);
+    expect(actions.canVerifyArea).toBe(false);
+  });
+
+  it("без сессии действий нет", () => {
+    const actions = companyActionsFor(
+      readyToSubmit(OrderStatus.IN_PROGRESS, OfferStatus.ACCEPTED),
+      null,
+    );
+
+    expect(actions.ownOffer).toBeNull();
+    expect(actions.isExecutor).toBe(false);
   });
 });

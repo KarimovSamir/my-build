@@ -9,11 +9,14 @@ import {
   type OrderDetail,
 } from "@/lib/types";
 
+import { CompanyOfferCard } from "@/components/orders/company-offer-card";
 import { CompletionCard } from "@/components/orders/completion-card";
 import { DeleteOrderDialog } from "@/components/orders/delete-order-dialog";
 import { DownloadFileButton } from "@/components/orders/download-file-button";
 import { OrderOffersCard } from "@/components/orders/order-offers";
-import { ComingSoon, PageHeader } from "@/components/page-shell";
+import { SubmissionsCard } from "@/components/orders/submissions-card";
+import { WorkCard } from "@/components/orders/work-card";
+import { PageHeader } from "@/components/page-shell";
 import { OrderStatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { isImageMimeType } from "@/lib/file-kind";
@@ -23,7 +26,8 @@ import {
   resolveOrderDetailAccess,
   type OrderDetailAccess,
 } from "@/lib/order-access";
-import { resolveClientActions } from "@/lib/order-actions";
+import { resolveClientActions, resolveCompanyActions } from "@/lib/order-actions";
+import { resolveSubmissions } from "@/lib/submissions";
 
 /**
  * Карточка заказа (ТЗ §7, «Детали заказа»).
@@ -33,9 +37,9 @@ import { resolveClientActions } from "@/lib/order-actions";
  * файлов, цены и срока. Здесь решается только одно ролевое: удалять заказ
  * может лишь его клиент.
  *
- * Предложения и приёмка работы — здесь же, состав кнопок считает
- * `resolveClientActions` по таблице переходов. Место сдач работы пока
- * размечено заглушкой: их показывает подфаза 4.5.
+ * Предложения, приёмка и сдачи работы — здесь же. Состав кнопок считают
+ * `resolveClientActions` и `resolveCompanyActions` по общей таблице переходов,
+ * а не условия по статусу, написанные в разметке.
  */
 export function OrderDetailView({
   order,
@@ -49,6 +53,8 @@ export function OrderDetailView({
   // проверяется тестом, а не глазами по разметке.
   const access = resolveOrderDetailAccess(order, viewerId);
   const actions = resolveClientActions(order, access);
+  const submissions = resolveSubmissions(order);
+  const company = resolveCompanyActions(order, access, submissions, viewerId);
   const orderLabel = formatOrderNumber(order.orderNumber);
 
   return (
@@ -85,23 +91,24 @@ export function OrderDetailView({
 
           {access.isOwner ? <OrderOffersCard orderId={order.id} actions={actions} /> : null}
 
-          {/* Компания видит здесь только своё предложение, и показывает его
-              подфаза 4.5 вместе с её действиями по заказу. Заказ, в котором
-              компания не участвует, приходит вовсе без предложений — тогда
-              и места под них нет. */}
-          {!access.isOwner && order.offers.length > 0 ? (
-            <ComingSoon title="Ваше предложение" phase="подфазе 4.5">
-              Цена и срок, которые вы предложили, и действия по заказу
-            </ComingSoon>
+          {/* Компания видит здесь только своё предложение. Заказ, в котором
+              она не участвует, приходит вовсе без предложений — тогда и места
+              под них нет. */}
+          {company.ownOffer ? (
+            <CompanyOfferCard
+              order={order}
+              offer={company.ownOffer}
+              isExecutor={company.isExecutor}
+            />
           ) : null}
+
+          <WorkCard order={order} actions={company} submissions={submissions} />
 
           {access.isParty ? (
             <>
               <CompletionCard order={order} actions={actions} isOwner={access.isOwner} />
 
-              <ComingSoon title="Сдачи работ" phase="подфазе 4.5">
-                Файлы и комментарий последней сдачи, история предыдущих
-              </ComingSoon>
+              <SubmissionsCard submissions={submissions} isOwner={access.isOwner} />
             </>
           ) : null}
         </div>

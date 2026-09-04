@@ -81,7 +81,7 @@ export function validateOrderForm(values: OrderFormValues): OrderFormErrors {
     errors.address = lengthMessage("Адрес объекта", ORDER_LIMITS.address);
   }
 
-  const squareMeters = squareMetersError(values.squareMeters);
+  const squareMeters = validateSquareMeters(values.squareMeters);
   if (squareMeters) errors.squareMeters = squareMeters;
 
   // Запятая допускается так же, как в площади: соседние поля не должны
@@ -186,7 +186,14 @@ export function addFiles(
   return { files, rejected };
 }
 
-function squareMetersError(raw: string): string | undefined {
+/**
+ * Проверка площади. `undefined` — значение годится.
+ *
+ * Общая для заказа и для уточнения исполнителем: это одна и та же величина,
+ * просто посчитанная другой стороной, и границы у неё те же
+ * (`ORDER_LIMITS.squareMeters`, `VerifiedAreaDto`).
+ */
+export function validateSquareMeters(raw: string): string | undefined {
   const value = normalizeNumber(raw);
 
   if (!value) return "Укажите площадь объекта";
