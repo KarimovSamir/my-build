@@ -8,36 +8,29 @@
  *
  * Применяет эффекты и открывает транзакцию сервис-обёртка
  * `OrderTransitionService`. Здесь их только описывают.
+ *
+ * Сами правила («какое событие допустимо в каком статусе») лежат в `shared/`:
+ * по ним интерфейс собирает состав кнопок. Здесь к ним добавляются обработчики
+ * — то, что происходит при переходе.
  */
 
 import { ConflictException, Injectable } from '@nestjs/common';
 import {
   NotificationType,
+  OFFER_PRECONDITIONS,
   OfferStatus,
+  OrderEventType,
   OrderStatus,
+  canTransition,
   notificationTypeLabels,
+  type AllowedOrderEvent,
 } from '@mybuild/shared';
 
 import { orderRef } from './order-notification.js';
 
-/** События, которые двигают заказ по статусам. */
-export const OrderEventType = {
-  /** Компания отправила или обновила предложение. */
-  OFFER_SUBMITTED: 'OFFER_SUBMITTED',
-  /** Компания отозвала своё предложение. */
-  OFFER_WITHDRAWN: 'OFFER_WITHDRAWN',
-  /** Клиент отклонил предложение. */
-  OFFER_REJECTED: 'OFFER_REJECTED',
-  /** Клиент принял предложение. */
-  OFFER_ACCEPTED: 'OFFER_ACCEPTED',
-  /** Компания сдала работу (первая сдача или пересдача после доработки). */
-  WORK_SUBMITTED: 'WORK_SUBMITTED',
-  /** Клиент подтвердил выполнение. */
-  WORK_CONFIRMED: 'WORK_CONFIRMED',
-  /** Клиент отправил работу на доработку. */
-  WORK_DISPUTED: 'WORK_DISPUTED',
-} as const;
-export type OrderEventType = (typeof OrderEventType)[keyof typeof OrderEventType];
+// Событие приходит в сигнатурах всего модуля заказов — реэкспорт избавляет
+// вызывающий код от второго импорта рядом с этим.
+export { OrderEventType };
 
 /** Снимок заказа, которого достаточно для решения о переходе. */
 export interface OrderStateContext {
@@ -177,39 +170,21 @@ export class InvalidOfferStatusError extends ConflictException {
   }
 }
 
-/**
- * Статусы предложения, из которых событие имеет смысл.
- *
- * Статус заказа этого не заменяет: пока заказ ждёт выбора из нескольких
- * предложений, он остаётся в `AWAITING_CONFIRMATION` — и без этой таблицы
- * одно и то же предложение можно было бы отклонить дважды.
- *
- * `OFFER_SUBMITTED` разрешён из всех статусов, кроме исполнительских:
- * компания вправе прислать предложение заново после отзыва, отказа клиента
- * или проигрыша, но не тогда, когда уже работает по заказу.
- */
-const OFFER_PRECONDITIONS: Record<OrderEventType, readonly OfferStatus[]> = {
-  [OrderEventType.OFFER_SUBMITTED]: [
-    OfferStatus.SENT,
-    OfferStatus.WITHDRAWN,
-    OfferStatus.REJECTED,
-    OfferStatus.NOT_ACCEPTED,
-  ],
-  [OrderEventType.OFFER_WITHDRAWN]: [OfferStatus.SENT],
-  [OrderEventType.OFFER_REJECTED]: [OfferStatus.SENT],
-  [OrderEventType.OFFER_ACCEPTED]: [OfferStatus.SENT],
-  [OrderEventType.WORK_SUBMITTED]: [OfferStatus.ACCEPTED, OfferStatus.BACK_FOR_OVERRIDE],
-  [OrderEventType.WORK_CONFIRMED]: [OfferStatus.WORK_SUBMITTED],
-  [OrderEventType.WORK_DISPUTED]: [OfferStatus.WORK_SUBMITTED],
-};
-
 type TransitionHandler = (
   context: OrderStateContext,
   event: OrderEvent,
 ) => Omit<OrderTransitionResult, 'fromStatus'>;
 
+/**
+ * Обработчик на каждое событие, разрешённое в статусе, — и ни одного лишнего.
+ *
+ * Состав ключей выводится из `ORDER_TRANSITIONS`, а не пишется руками:
+ * забытый обработчик и обработчик на событие, которого в статусе быть не может,
+ * одинаково не собираются. Иначе таблица правил в `shared/` и таблица
+ * обработчиков здесь тихо разошлись бы.
+ */
 type TransitionTable = {
-  [S in OrderStatus]: Partial<Record<OrderEventType, TransitionHandler>>;
+  [S in OrderStatus]: { [E in AllowedOrderEvent<S>]: TransitionHandler };
 };
 
 /** Сменить статус предложения, по которому пришло событие. */
@@ -403,10 +378,8 @@ function unexpected(event: OrderEvent): Error {
 }
 
 /**
- * Таблица переходов ТЗ §4. Всё, чего здесь нет, — ошибка 409.
- *
- * Статус-ключи перечислены явно и проверяются типом: добавив статус в enum,
- * его нельзя забыть описать здесь — не соберётся.
+ * Обработчики переходов ТЗ §4. Какие события здесь возможны, решает
+ * `ORDER_TRANSITIONS` из `shared/`; всё, чего нет там, — ошибка 409.
  */
 const TRANSITIONS: TransitionTable = {
   [OrderStatus.WAITING]: {
@@ -414,8 +387,6 @@ const TRANSITIONS: TransitionTable = {
   },
 
   [OrderStatus.AWAITING_CONFIRMATION]: {
-    // Заказ уже в этом статусе, но событие разрешено: предложение от ещё
-    // одной компании — норма, а не конфликт.
     [OrderEventType.OFFER_SUBMITTED]: offerSubmitted,
     [OrderEventType.OFFER_WITHDRAWN]: offerLeftSelection(OfferStatus.WITHDRAWN, {
       to: 'client',
@@ -448,6 +419,24 @@ const TRANSITIONS: TransitionTable = {
   [OrderStatus.COMPLETED]: {},
 };
 
+/**
+ * Обработчик перехода или `undefined`, если события в этом статусе нет.
+ *
+ * Приведение нужно из-за самой строгости `TransitionTable`: у каждого статуса
+ * свой набор ключей, и обратиться к нему произвольным событием иначе нельзя.
+ * Оно безопасно ровно потому, что набор ключей выведен из `ORDER_TRANSITIONS`.
+ */
+function handlerFor(
+  status: OrderStatus,
+  event: OrderEventType,
+): TransitionHandler | undefined {
+  const handlers = TRANSITIONS[status] as Partial<
+    Record<OrderEventType, TransitionHandler>
+  >;
+
+  return handlers[event];
+}
+
 @Injectable()
 export class OrderStateMachine {
   /**
@@ -458,9 +447,14 @@ export class OrderStateMachine {
    * @throws InvalidOfferStatusError если событию не подходит статус предложения.
    */
   transition(context: OrderStateContext, event: OrderEvent): OrderTransitionResult {
-    const handler = TRANSITIONS[context.status][event.type];
+    const handler = handlerFor(context.status, event.type);
 
-    if (!handler) {
+    // Допустимость события решает `ORDER_TRANSITIONS`, а не наличие
+    // обработчика: лишняя строка в таблице обработчиков иначе разрешила бы
+    // на сервере то, чего интерфейс по той же таблице не показывает.
+    // Обратное невозможно по типам — обработчик разрешённого события забыть
+    // нельзя, сборка не пройдёт.
+    if (!handler || !canTransition(context.status, event.type)) {
       throw new InvalidStateTransitionError(context.status, event.type);
     }
 
@@ -480,26 +474,16 @@ export class OrderStateMachine {
   /**
    * Разрешено ли событие. Для показа кнопок в интерфейсе.
    *
-   * Статус предложения необязателен, но его стоит передавать везде, где кнопка
-   * относится к конкретному предложению: без него ответ учитывает только статус
-   * заказа, и в `AWAITING_CONFIRMATION` кнопка «Отклонить» покажется даже
-   * у предложения, отклонённого минуту назад, — а сервер ответит 409.
-   * `null` означает «предложения ещё нет» и предусловий не имеет.
+   * Считает `canTransition` из `shared/` — та же функция, что и на фронте:
+   * состав кнопок и ответ сервера обязаны сходиться, а два одинаковых
+   * условия в разных пакетах рано или поздно расходятся.
    */
   can(
     status: OrderStatus,
     event: OrderEventType,
     offerStatus?: OfferStatus | null,
   ): boolean {
-    if (!TRANSITIONS[status][event]) {
-      return false;
-    }
-
-    if (offerStatus === undefined || offerStatus === null) {
-      return true;
-    }
-
-    return OFFER_PRECONDITIONS[event].includes(offerStatus);
+    return canTransition(status, event, offerStatus);
   }
 }
 

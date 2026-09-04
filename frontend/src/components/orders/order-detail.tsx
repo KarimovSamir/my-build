@@ -9,8 +9,10 @@ import {
   type OrderDetail,
 } from "@/lib/types";
 
+import { CompletionCard } from "@/components/orders/completion-card";
 import { DeleteOrderDialog } from "@/components/orders/delete-order-dialog";
 import { DownloadFileButton } from "@/components/orders/download-file-button";
+import { OrderOffersCard } from "@/components/orders/order-offers";
 import { ComingSoon, PageHeader } from "@/components/page-shell";
 import { OrderStatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +23,7 @@ import {
   resolveOrderDetailAccess,
   type OrderDetailAccess,
 } from "@/lib/order-access";
+import { resolveClientActions } from "@/lib/order-actions";
 
 /**
  * Карточка заказа (ТЗ §7, «Детали заказа»).
@@ -30,8 +33,9 @@ import {
  * файлов, цены и срока. Здесь решается только одно ролевое: удалять заказ
  * может лишь его клиент.
  *
- * Предложения и сдачи работ появятся в Фазе 4 — их места размечены заглушками,
- * чтобы страница не перестраивалась заново, когда они приедут.
+ * Предложения и приёмка работы — здесь же, состав кнопок считает
+ * `resolveClientActions` по таблице переходов. Место сдач работы пока
+ * размечено заглушкой: их показывает подфаза 4.5.
  */
 export function OrderDetailView({
   order,
@@ -44,6 +48,7 @@ export function OrderDetailView({
   // Кто смотрит и что ему видно — в `lib/order-access.ts`: правило приватности
   // проверяется тестом, а не глазами по разметке.
   const access = resolveOrderDetailAccess(order, viewerId);
+  const actions = resolveClientActions(order, access);
   const orderLabel = formatOrderNumber(order.orderNumber);
 
   return (
@@ -78,13 +83,27 @@ export function OrderDetailView({
 
           <ClientFilesCard access={access} />
 
-          <ComingSoon title="Предложения компаний" phase="Фазе 4">
-            Цена, срок и комментарий каждой компании — с выбором исполнителя
-          </ComingSoon>
+          {access.isOwner ? <OrderOffersCard orderId={order.id} actions={actions} /> : null}
 
-          <ComingSoon title="Сдачи работ" phase="Фазе 4">
-            Файлы и комментарий последней сдачи, история предыдущих
-          </ComingSoon>
+          {/* Компания видит здесь только своё предложение, и показывает его
+              подфаза 4.5 вместе с её действиями по заказу. Заказ, в котором
+              компания не участвует, приходит вовсе без предложений — тогда
+              и места под них нет. */}
+          {!access.isOwner && order.offers.length > 0 ? (
+            <ComingSoon title="Ваше предложение" phase="подфазе 4.5">
+              Цена и срок, которые вы предложили, и действия по заказу
+            </ComingSoon>
+          ) : null}
+
+          {access.isParty ? (
+            <>
+              <CompletionCard order={order} actions={actions} isOwner={access.isOwner} />
+
+              <ComingSoon title="Сдачи работ" phase="подфазе 4.5">
+                Файлы и комментарий последней сдачи, история предыдущих
+              </ComingSoon>
+            </>
+          ) : null}
         </div>
 
         <div className="flex min-w-0 flex-col gap-6">
