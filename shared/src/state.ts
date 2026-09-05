@@ -14,6 +14,7 @@
  */
 
 import { OfferStatus, OrderStatus } from './enums.js';
+import { RESUBMITTABLE_OFFER_STATUSES } from './offers.js';
 
 /** События, которые двигают заказ по статусам (ТЗ §4). */
 export const OrderEventType = {
@@ -79,16 +80,22 @@ export type AllowedOrderEvent<S extends OrderStatus> =
  * предложений, он остаётся в `AWAITING_CONFIRMATION` — и без этой таблицы
  * одно и то же предложение можно было бы отклонить дважды.
  *
- * `OFFER_SUBMITTED` разрешён из всех статусов, кроме исполнительских:
- * компания вправе прислать предложение заново после отзыва, отказа клиента
- * или проигрыша, но не тогда, когда уже работает по заказу.
+ * `OFFER_SUBMITTED` разрешён из трёх статусов: предложение можно обновить,
+ * пока оно ждёт выбора, и прислать заново после собственного отзыва или отказа
+ * клиента. Второе берётся из `RESUBMITTABLE_OFFER_STATUSES` — того же списка,
+ * по которому строится лента доступных заказов: разойдись они, компания либо
+ * видела бы в ленте заказ, на который сервер отвечает 409, либо наоборот.
+ *
+ * `NOT_ACCEPTED` в этом списке отсутствует намеренно: проиграть выбор
+ * предложение может только вместе с уходом заказа в работу, а оттуда заказ
+ * в `WAITING`/`AWAITING_CONFIRMATION` уже не возвращается — предлагаться
+ * по нему некуда. Появись расторжение сделки, возвращающее заказ в поиск
+ * исполнителя, статус придётся вернуть в оба списка сразу.
  */
 export const OFFER_PRECONDITIONS: Record<OrderEventType, readonly OfferStatus[]> = {
   [OrderEventType.OFFER_SUBMITTED]: [
     OfferStatus.SENT,
-    OfferStatus.WITHDRAWN,
-    OfferStatus.REJECTED,
-    OfferStatus.NOT_ACCEPTED,
+    ...RESUBMITTABLE_OFFER_STATUSES,
   ],
   [OrderEventType.OFFER_WITHDRAWN]: [OfferStatus.SENT],
   [OrderEventType.OFFER_REJECTED]: [OfferStatus.SENT],

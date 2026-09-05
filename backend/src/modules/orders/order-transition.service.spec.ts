@@ -2,7 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  EXECUTING_OFFER_STATUSES,
+  EXECUTOR_OFFER_STATUSES,
   NotificationType,
   OfferStatus,
   OrderStatus,
@@ -256,7 +256,7 @@ describe('OrderTransitionService: поиск заказа и предложен�
     ).rejects.toThrow(ConflictException);
   });
 
-  it('ищет исполнителя по статусам «компания работает по заказу»', async () => {
+  it('ищет исполнителя по статусам «компания исполняет заказ»', async () => {
     const prisma = createPrismaStub({
       order: orderRow(OrderStatus.IN_PROGRESS),
       offers: [
@@ -276,7 +276,36 @@ describe('OrderTransitionService: поиск заказа и предложен�
 
     expect(applied.offerId).toBe(OFFER_A);
     expect(prisma.tx.offer.findFirst.mock.calls[0]![0].where).toMatchObject({
-      status: { in: [...EXECUTING_OFFER_STATUSES] },
+      status: { in: [...EXECUTOR_OFFER_STATUSES] },
+    });
+  });
+
+  /**
+   * У завершённого заказа исполнитель никуда не делся, поэтому действие по
+   * нему обязано упираться в таблицу переходов, а не в «исполнителя нет»:
+   * второе — просто неправда, и пользователь по ней ничего не поймёт.
+   */
+  it('по завершённому заказу отвечает запрещённым переходом, а не «нет исполнителя»', async () => {
+    const prisma = createPrismaStub({
+      order: orderRow(OrderStatus.COMPLETED),
+      offers: [
+        {
+          id: OFFER_A,
+          companyId: COMPANY_A,
+          status: OfferStatus.COMPLETED,
+          proposedPrice: '9500.00',
+        },
+      ],
+    });
+
+    await expect(
+      createService(prisma).apply({
+        type: OrderEventType.WORK_CONFIRMED,
+        orderId: ORDER_ID,
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: { error: 'InvalidStateTransition' },
     });
   });
 
@@ -356,7 +385,7 @@ describe('OrderTransitionService: запись эффектов', () => {
     });
     expect(applied.notifications[1]).toMatchObject({
       userId: COMPANY_B,
-      type: NotificationType.OFFER_REJECTED,
+      type: NotificationType.OFFER_NOT_ACCEPTED,
       orderId: ORDER_ID,
     });
   });

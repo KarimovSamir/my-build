@@ -7,7 +7,11 @@
  */
 
 import {
+  FileOwnerType,
+  OrderEventType,
   OrderStatus,
+  canTransition,
+  companySeesTaskFiles,
   isActiveOffer,
   isExecutorOffer,
   type IsoDateString,
@@ -178,11 +182,36 @@ export function toOrderDetail(
     // в заказе не участвует, получает его карточку по любому UUID.
     client: view.isParty ? order.client : null,
     offers: visibleOffers(order, view),
-    // Доступ к файлам совпадает с проверкой в FilesService: задание клиента
-    // и сдачи компании видят только стороны сделки.
-    files: view.isParty ? order.files : [],
+    files: visibleFiles(order, view),
     submissions: view.isParty ? order.submissions.map(toSubmissionDto) : [],
+    // Считается по настоящему статусу заказа: компании он виден как `WAITING`,
+    // и собранная по нему кнопка обещала бы то, на что сервер ответит 409.
+    canSubmitOffer:
+      !view.isOwner &&
+      canTransition(
+        order.status,
+        OrderEventType.OFFER_SUBMITTED,
+        view.ownOffer?.status ?? null,
+      ),
   };
+}
+
+/**
+ * Какие файлы показать.
+ *
+ * Сторонам сделки — все. Компании, которая исполнителем ещё не стала, —
+ * только задание клиента и только пока заказ принимает предложения: по этим
+ * файлам она и считает цену. Правило общее с `FilesService`, где по нему
+ * выдаётся signed URL, — иначе список и скачивание разошлись бы.
+ */
+function visibleFiles(order: OrderDetailRow, view: OrderVisibility): OrderFileDto[] {
+  if (view.isParty) return order.files;
+
+  if (!companySeesTaskFiles(order.status, view.ownOffer?.status ?? null)) {
+    return [];
+  }
+
+  return order.files.filter((file) => file.ownerType === FileOwnerType.CLIENT);
 }
 
 function toSubmissionDto(submission: SubmissionRow): OrderSubmissionDto {

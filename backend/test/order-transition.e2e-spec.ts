@@ -2,7 +2,7 @@ import 'dotenv/config';
 
 import { ConfigModule } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { OfferStatus, OrderStatus } from '@mybuild/shared';
+import { OfferStatus, OrderStatus, notificationTypeLabels } from '@mybuild/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { validateEnv } from '../src/config/env.validation.js';
@@ -154,9 +154,12 @@ describe('OrderTransitionService (e2e)', () => {
 
     // Проигравшая компания узнаёт о решении клиента тем же коммитом (ТЗ §8),
     // а Фаза 5 берёт из `offerUpdates` адресатов `offer:status_changed`.
+    // Тип — «не выбрано», а не «отклонено»: клиент это предложение
+    // не отклонял, и заголовок уведомления берётся из типа.
     expect(accepted.notifications[1]).toMatchObject({
       userId: companyBId,
-      type: NotificationType.OFFER_REJECTED,
+      type: NotificationType.OFFER_NOT_ACCEPTED,
+      title: notificationTypeLabels[NotificationType.OFFER_NOT_ACCEPTED],
     });
     expect(accepted.offerUpdates).toEqual([
       { offerId: offerA.id, companyId: companyAId, status: OfferStatus.ACCEPTED },

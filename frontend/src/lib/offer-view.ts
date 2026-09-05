@@ -9,7 +9,27 @@
  * Модуль чистый — ни React, ни fetch.
  */
 
-import { OfferStatus } from "@/lib/types";
+import { OfferStatus, type IsoDateString, type OfferDto } from "@/lib/types";
+
+/** Какую дату предложения показывать и как её подписать. */
+export interface OfferDate {
+  label: string;
+  iso: IsoDateString;
+}
+
+/**
+ * Дата под названием компании.
+ *
+ * Отправка предложения по ТЗ §4.1 — upsert: компания меняет цену и срок
+ * в той же строке, и `createdAt` после этого описывает уже не те условия,
+ * которые видит клиент. Поэтому изменённое предложение подписывается датой
+ * изменения — так же, как в разделе «Мои предложения» у самой компании.
+ */
+export function offerDate(offer: Pick<OfferDto, "createdAt" | "updatedAt">): OfferDate {
+  return offer.updatedAt === offer.createdAt
+    ? { label: "Предложение от", iso: offer.createdAt }
+    : { label: "Обновлено", iso: offer.updatedAt };
+}
 
 export interface OfferHint {
   text: string;
@@ -21,16 +41,25 @@ export interface OfferHint {
  * (`isPendingOffer`), и вместо текста показываются кнопки «Изменить»
  * и «Отозвать».
  *
- * Кнопки «Отправить заново» здесь нет намеренно: настоящий статус заказа
- * компании не виден (ТЗ §4.1, приватность), и заказ, который уже выполняет
- * кто-то другой, выглядит для неё как «ищет исполнителя». Такая кнопка
- * обещала бы то, на что сервер ответит 409. Заказы, по которым предложение
- * действительно можно прислать заново, перечисляет лента.
+ * `canResubmit` приходит только с карточки заказа: там рядом с подсказкой
+ * стоит настоящая кнопка «Отправить предложение», и звать в ленту за тем, что
+ * уже открыто на экране, незачем. В списке «Мои предложения» этого признака
+ * нет — там заказ приходит строкой списка, без права на предложение, — и
+ * подсказка отправляет в ленту.
+ *
+ * Само право считает backend по настоящему статусу заказа: компании он виден
+ * как «ищет исполнителя», даже если его давно кто-то выполняет (ТЗ §4.1), и
+ * кнопка, собранная по видимому статусу, обещала бы то, на что сервер ответит
+ * 409.
  *
  * Ветка `default` не нужна и вредна: перечислены все статусы, и новый
  * не соберётся, пока ему не напишут подсказку.
  */
-export function offerHint(status: OfferStatus, orderId: string): OfferHint | null {
+export function offerHint(
+  status: OfferStatus,
+  orderId: string,
+  canResubmit = false,
+): OfferHint | null {
   const openOrder = { href: `/orders/${orderId}`, label: "Открыть заказ" };
   const toFeed = { href: "/available", label: "К ленте заказов" };
 
@@ -46,15 +75,19 @@ export function offerHint(status: OfferStatus, orderId: string): OfferHint | nul
     case OfferStatus.COMPLETED:
       return { text: "Заказ завершён, клиент принял работу.", link: openOrder };
     case OfferStatus.REJECTED:
-      return {
-        text: "Клиент отклонил предложение. Если заказ ещё ищет исполнителя, он есть в ленте.",
-        link: toFeed,
-      };
+      return canResubmit
+        ? { text: "Клиент отклонил предложение. Можно отправить новое." }
+        : {
+            text: "Клиент отклонил предложение. Если заказ ещё ищет исполнителя, он есть в ленте.",
+            link: toFeed,
+          };
     case OfferStatus.WITHDRAWN:
-      return {
-        text: "Вы отозвали предложение. Если заказ ещё ищет исполнителя, он есть в ленте.",
-        link: toFeed,
-      };
+      return canResubmit
+        ? { text: "Вы отозвали предложение. Его можно отправить заново." }
+        : {
+            text: "Вы отозвали предложение. Если заказ ещё ищет исполнителя, он есть в ленте.",
+            link: toFeed,
+          };
     case OfferStatus.NOT_ACCEPTED:
       return { text: "Клиент выбрал предложение другой компании." };
   }

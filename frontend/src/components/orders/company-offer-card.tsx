@@ -21,6 +21,7 @@ export function CompanyOfferCard({
   order,
   offer,
   isExecutor,
+  canSubmitOffer,
 }: {
   order: OrderDetail;
   offer: OfferDto;
@@ -30,8 +31,16 @@ export function CompanyOfferCard({
    * одинаковые фразы подряд читаются как сбой, а не как объяснение.
    */
   isExecutor: boolean;
+  /** Заказ ещё принимает предложения — решает backend, см. `OrderDetail`. */
+  canSubmitOffer: boolean;
 }) {
-  const hint = isExecutor ? null : offerHint(offer.status, order.id);
+  const pending = isPendingOffer(offer.status);
+
+  // Отозванное и отклонённое предложение отправляется заново отсюда же:
+  // возвращать компанию в ленту за заказом, который у неё открыт, незачем.
+  const canResubmit = canSubmitOffer && !pending;
+
+  const hint = isExecutor ? null : offerHint(offer.status, order.id, canResubmit);
   const orderLabel = formatOrderNumber(order.orderNumber);
 
   // Ссылка «Открыть заказ» ведёт на страницу, которая сейчас открыта:
@@ -77,12 +86,45 @@ export function CompanyOfferCard({
           </p>
         ) : null}
 
-        {isPendingOffer(offer.status) ? (
+        {pending ? (
           <div className="flex flex-wrap gap-2">
             <OfferDialog order={order} offer={offer} />
             <WithdrawOfferDialog offerId={offer.id} orderLabel={orderLabel} />
           </div>
         ) : null}
+
+        {canResubmit ? (
+          <div className="flex flex-wrap gap-2">
+            <OfferDialog order={order} offer={offer} />
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Заказ, по которому компания ещё не предлагалась (ТЗ §7, «Детали заказа»).
+ *
+ * Раньше предложение отправлялось только из ленты, и кнопка «Подробнее» вела
+ * на страницу, где сделать было нечего. Показывается по `canSubmitOffer`
+ * из ответа API: видимый статус заказа для этого не годится — заказ, который
+ * уже кто-то выполняет, выглядит для компании как «ищет исполнителя» (ТЗ §4.1).
+ */
+export function SubmitOfferCard({ order }: { order: OrderDetail }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Предложение по заказу</CardTitle>
+      </CardHeader>
+
+      <CardContent className="flex flex-col items-start gap-4">
+        <p className="text-muted-foreground text-sm">
+          Вы ещё не предлагались по этому заказу. Укажите цену и срок — клиент
+          увидит предложение вместе с остальными.
+        </p>
+
+        <OfferDialog order={order} />
       </CardContent>
     </Card>
   );

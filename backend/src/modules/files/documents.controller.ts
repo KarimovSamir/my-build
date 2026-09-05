@@ -13,8 +13,9 @@ import { FilesService } from './files.service.js';
  * а единый список всех файлов по всем заказам (`GET /documents`) появится
  * в Фазе 6 и будет жить на этом же контроллере.
  *
- * Роль не проверяется намеренно: право на файл даёт участие в заказе, а не
- * роль в токене (`FilesService.assertOrderParticipant`).
+ * Права проверяет `FilesService.assertFileAccess`: их даёт связь с заказом,
+ * а не роль в токене. Роль всё же передаётся — по ней различается «любая
+ * компания» в правиле о файлах задания (ТЗ §4.1).
  */
 @Controller('documents')
 export class DocumentsController {
@@ -33,6 +34,6 @@ export class DocumentsController {
     @Param('id', new ParseUUIDPipe({ exceptionFactory: () => new NotFoundException('Файл не найден') }))
     fileId: string,
   ): Promise<DownloadLink> {
-    return this.files.getDownloadUrl(fileId, user.id);
+    return this.files.getDownloadUrl(fileId, { id: user.id, role: user.role });
   }
 }

@@ -70,11 +70,17 @@ export type FileOwnerType = (typeof FileOwnerType)[keyof typeof FileOwnerType];
  * в поиск исполнителя, то есть меняет его статус чужими руками, и клиента
  * об этом надо известить (ТЗ §8). Ни один из прежних типов этому не подходит:
  * «Предложение отклонено» описывает действие самого клиента.
+ *
+ * `OFFER_NOT_ACCEPTED` — по тому же основанию (решение пользователя
+ * от 5 сентября 2026): компания, чьё предложение проиграло выбор, уходит
+ * в `OfferStatus.NOT_ACCEPTED` — «Не выбрано», а не «Отклонено». Клиент её
+ * предложение не отклонял, он выбрал другое.
  */
 export const NotificationType = {
   OFFER_RECEIVED: 'OFFER_RECEIVED',
   OFFER_ACCEPTED: 'OFFER_ACCEPTED',
   OFFER_REJECTED: 'OFFER_REJECTED',
+  OFFER_NOT_ACCEPTED: 'OFFER_NOT_ACCEPTED',
   OFFER_WITHDRAWN: 'OFFER_WITHDRAWN',
   WORK_SUBMITTED: 'WORK_SUBMITTED',
   WORK_CONFIRMED: 'WORK_CONFIRMED',

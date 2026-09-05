@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { createHash } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FileOwnerType, OfferStatus } from '@mybuild/shared';
+import { FileOwnerType, OfferStatus, OrderStatus, Role } from '@mybuild/shared';
 
 import {
   pdfBytes,
@@ -49,13 +49,15 @@ function keyOf(content: string, safeName: string): string {
 /** Заказ в подставной базе: предложения с их статусами, как в настоящей таблице. */
 interface StubOrder {
   clientId: string;
+  /** Статус заказа. По умолчанию — тот, в котором заказ уже никого не ищет. */
+  status?: OrderStatus;
   offers: { companyId: string; status: OfferStatus }[];
 }
 
-/** Форма запроса, которую строит `assertOrderParticipant`. */
+/** Форма запроса, которую строит `assertFileAccess`. */
 interface OrderFindUniqueArgs {
   select: {
-    offers: { where: { companyId: string; status: { in: OfferStatus[] } } };
+    offers: { where: { companyId: string } };
   };
 }
 
@@ -69,7 +71,13 @@ function createPrismaStub(overrides: {
   liveKeys?: string[];
   order?: StubOrder | null;
 }) {
-  return {
+  const stub = {
+    /**
+     * Строки файлов пишутся в транзакции: вместе с ними идёт проверка
+     * вызывающего кода (`guard`), и она обязана видеть ту же транзакцию.
+     * Подставная отдаёт сам стенд — как настоящая отдаёт клиент транзакции.
+     */
+    $transaction: vi.fn(async <T>(run: (tx: typeof stub) => Promise<T>) => run(stub)),
     orderFile: {
       createManyAndReturn: vi.fn(
         async ({ data }: { data: Record<string, unknown>[] }) =>
@@ -97,17 +105,16 @@ function createPrismaStub(overrides: {
 
         return {
           clientId: order.clientId,
+          status: order.status ?? OrderStatus.IN_PROGRESS,
           offers: order.offers
-            .filter(
-              (offer) =>
-                offer.companyId === filter.companyId &&
-                filter.status.in.includes(offer.status),
-            )
-            .map((_, index) => ({ id: `offer-${index}` })),
+            .filter((offer) => offer.companyId === filter.companyId)
+            .map((offer) => ({ status: offer.status })),
         };
       }),
     },
   };
+
+  return stub;
 }
 
 function createStorageStub() {
@@ -241,6 +248,33 @@ describe('FilesService.attachFiles', () => {
     expect(storage.remove.mock.calls[0]![0]).toHaveLength(2);
   });
 
+  /**
+   * Проверка вызывающего кода идёт внутри той же транзакции, что и вставка:
+   * пока файлы едут в бакет, сдача могла закрыться, и строки писать уже нельзя.
+   */
+  it('не пишет строки, если проверка вызывающего кода отказала', async () => {
+    const prisma = createPrismaStub({});
+    const guard = vi.fn(async (_tx: unknown) => {
+      throw new Error('сдача уже отправлена');
+    });
+
+    await expect(
+      createService(prisma, storage).attachFiles({
+        orderId: ORDER_ID,
+        ownerType: FileOwnerType.COMPANY,
+        submissionRound: 1,
+        files: [await upload('акт.pdf', 'смета')],
+        guard,
+      }),
+    ).rejects.toThrow('сдача уже отправлена');
+
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(prisma.orderFile.createManyAndReturn).not.toHaveBeenCalled();
+    // Загруженное без строки — мусор, который уже никто не найдёт.
+    expect(storage.remove).toHaveBeenCalledTimes(1);
+    expect(storage.remove.mock.calls[0]![0]).toHaveLength(1);
+  });
+
   it('не трогает объект чужой строки, выигравшей гонку', async () => {
     // Тот же файл под тем же именем пришёл двумя запросами разом: строку
     // создал первый, наша не создалась из-за уникального ограничения.
@@ -358,28 +392,37 @@ describe('FilesService.prepareUploads', () => {
   });
 });
 
-describe('FilesService.assertOrderParticipant', () => {
+describe('FilesService.assertFileAccess', () => {
   function serviceFor(order: StubOrder | null): FilesService {
     return createService(createPrismaStub({ order }), createStorageStub());
   }
 
   const accepted = { companyId: COMPANY_ID, status: OfferStatus.ACCEPTED };
 
-  it('пускает клиента заказа', async () => {
+  /** Компания и посторонний клиент — разница между ними только в роли. */
+  const company = { id: COMPANY_ID, role: Role.COMPANY };
+  const stranger = { id: STRANGER_ID, role: Role.COMPANY };
+  const client = { id: CLIENT_ID, role: Role.CLIENT };
+
+  it('пускает клиента заказа к любому файлу', async () => {
+    const service = serviceFor({ clientId: CLIENT_ID, offers: [] });
+
     await expect(
-      serviceFor({ clientId: CLIENT_ID, offers: [] }).assertOrderParticipant(
-        ORDER_ID,
-        CLIENT_ID,
-      ),
+      service.assertFileAccess(ORDER_ID, client, FileOwnerType.CLIENT),
+    ).resolves.toBeUndefined();
+    await expect(
+      service.assertFileAccess(ORDER_ID, client, FileOwnerType.COMPANY),
     ).resolves.toBeUndefined();
   });
 
-  it('пускает компанию-исполнителя', async () => {
+  it('пускает компанию-исполнителя к сдачам и к заданию', async () => {
+    const service = serviceFor({ clientId: CLIENT_ID, offers: [accepted] });
+
     await expect(
-      serviceFor({ clientId: CLIENT_ID, offers: [accepted] }).assertOrderParticipant(
-        ORDER_ID,
-        COMPANY_ID,
-      ),
+      service.assertFileAccess(ORDER_ID, company, FileOwnerType.COMPANY),
+    ).resolves.toBeUndefined();
+    await expect(
+      service.assertFileAccess(ORDER_ID, company, FileOwnerType.CLIENT),
     ).resolves.toBeUndefined();
   });
 
@@ -387,23 +430,77 @@ describe('FilesService.assertOrderParticipant', () => {
     await expect(
       serviceFor({
         clientId: CLIENT_ID,
+        status: OrderStatus.COMPLETED,
         offers: [{ companyId: COMPANY_ID, status: OfferStatus.COMPLETED }],
-      }).assertOrderParticipant(ORDER_ID, COMPANY_ID),
+      }).assertFileAccess(ORDER_ID, company, FileOwnerType.COMPANY),
     ).resolves.toBeUndefined();
   });
 
-  it('не пускает компанию, чьё предложение только отправлено', async () => {
-    // Предложение подано — но выбрали не её, файлов заказа она не видит (ТЗ §4.1).
+  /**
+   * Задание клиента открыто, пока заказ принимает предложения: по нему компания
+   * и считает цену (решение пользователя от 5 сентября 2026). Сдачи чужой
+   * компании этим не открываются — они остаются сторонам сделки (ТЗ §4.1).
+   */
+  it.each([OrderStatus.WAITING, OrderStatus.AWAITING_CONFIRMATION])(
+    'открывает задание клиента любой компании, пока заказ в статусе %s',
+    async (status) => {
+      const service = serviceFor({ clientId: CLIENT_ID, status, offers: [] });
+
+      await expect(
+        service.assertFileAccess(ORDER_ID, stranger, FileOwnerType.CLIENT),
+      ).resolves.toBeUndefined();
+      await expect(
+        service.assertFileAccess(ORDER_ID, stranger, FileOwnerType.COMPANY),
+      ).rejects.toThrow(ForbiddenException);
+    },
+  );
+
+  it('закрывает задание, как только заказ ушёл в работу', async () => {
     await expect(
       serviceFor({
         clientId: CLIENT_ID,
-        offers: [{ companyId: COMPANY_ID, status: OfferStatus.SENT }],
-      }).assertOrderParticipant(ORDER_ID, COMPANY_ID),
+        status: OrderStatus.IN_PROGRESS,
+        offers: [{ companyId: COMPANY_ID, status: OfferStatus.NOT_ACCEPTED }],
+      }).assertFileAccess(ORDER_ID, company, FileOwnerType.CLIENT),
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('не пускает компанию, чьё предложение отозвано или отклонено', async () => {
+  /**
+   * «Любая компания» — это именно компания: без проверки роли задание одного
+   * клиента скачал бы другой, у которого к заказу нет никакого отношения.
+   */
+  it('не открывает задание постороннему клиенту', async () => {
+    await expect(
+      serviceFor({
+        clientId: CLIENT_ID,
+        status: OrderStatus.WAITING,
+        offers: [],
+      }).assertFileAccess(
+        ORDER_ID,
+        { id: STRANGER_ID, role: Role.CLIENT },
+        FileOwnerType.CLIENT,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('не пускает без роли в токене', async () => {
+    // Хук выключен — claim'а роли нет; «любая компания» тогда не подтверждается.
+    await expect(
+      serviceFor({
+        clientId: CLIENT_ID,
+        status: OrderStatus.WAITING,
+        offers: [],
+      }).assertFileAccess(
+        ORDER_ID,
+        { id: STRANGER_ID, role: null },
+        FileOwnerType.CLIENT,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('не пускает к сдачам компанию, чьё предложение отозвано или отклонено', async () => {
     const statuses = [
+      OfferStatus.SENT,
       OfferStatus.WITHDRAWN,
       OfferStatus.REJECTED,
       OfferStatus.NOT_ACCEPTED,
@@ -415,24 +512,25 @@ describe('FilesService.assertOrderParticipant', () => {
           serviceFor({
             clientId: CLIENT_ID,
             offers: [{ companyId: COMPANY_ID, status }],
-          }).assertOrderParticipant(ORDER_ID, COMPANY_ID),
+          }).assertFileAccess(ORDER_ID, company, FileOwnerType.COMPANY),
         ).rejects.toThrow(ForbiddenException),
       ),
     );
   });
 
-  it('не пускает постороннего', async () => {
+  it('не пускает постороннего к сдачам', async () => {
     await expect(
-      serviceFor({ clientId: CLIENT_ID, offers: [accepted] }).assertOrderParticipant(
+      serviceFor({ clientId: CLIENT_ID, offers: [accepted] }).assertFileAccess(
         ORDER_ID,
-        STRANGER_ID,
+        stranger,
+        FileOwnerType.COMPANY,
       ),
     ).rejects.toThrow(ForbiddenException);
   });
 
   it('на несуществующий заказ отдаёт 404', async () => {
     await expect(
-      serviceFor(null).assertOrderParticipant(ORDER_ID, CLIENT_ID),
+      serviceFor(null).assertFileAccess(ORDER_ID, client, FileOwnerType.CLIENT),
     ).rejects.toThrow(NotFoundException);
   });
 });

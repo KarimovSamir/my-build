@@ -180,13 +180,89 @@ describe('toOrderDetail — компания с активным предлож�
     expect(view.status).toBe(OrderStatus.AWAITING_CONFIRMATION);
   });
 
-  it('ни файлов, ни сдач не видит: исполнителем её ещё не выбрали', () => {
-    expect(view.files).toEqual([]);
+  it('видит задание клиента, но не сдачи: исполнителем её ещё не выбрали', () => {
+    // Заказ ещё принимает предложения, а задание — то, по чему считают цену
+    // (решение пользователя от 5 сентября 2026).
+    expect(view.files.map((file) => file.ownerType)).toEqual([FileOwnerType.CLIENT]);
     expect(view.submissions).toEqual([]);
   });
 
   it('видит только своё предложение', () => {
     expect(view.offers.map((item) => item.companyId)).toEqual([EXECUTOR_ID]);
+  });
+
+  it('может обновить своё предложение, пока клиент не выбрал', () => {
+    expect(view.canSubmitOffer).toBe(true);
+  });
+});
+
+describe('toOrderDetail — файлы и право отправить предложение', () => {
+  /** Заказ, который ещё ищет исполнителя, вместе со сдачей прошлой компании. */
+  const searching = order({
+    status: OrderStatus.WAITING,
+    price: null,
+    deadline: null,
+    offers: [],
+    files: [
+      {
+        id: 'file-1',
+        orderId: ORDER_ID,
+        ownerType: FileOwnerType.CLIENT,
+        submissionRound: 0,
+        originalName: 'План.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 1024,
+        createdAt: '2026-09-01T09:05:00.000Z',
+      },
+      {
+        id: 'file-2',
+        orderId: ORDER_ID,
+        ownerType: FileOwnerType.COMPANY,
+        submissionRound: 1,
+        originalName: 'Смета.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 2048,
+        createdAt: '2026-09-03T11:30:00.000Z',
+      },
+    ],
+  });
+
+  it('посторонней компании отдаёт задание клиента и скрывает сдачи', () => {
+    const view = toOrderDetail(searching, { id: OUTSIDER_ID });
+
+    expect(view.files.map((file) => file.id)).toEqual(['file-1']);
+    expect(view.submissions).toEqual([]);
+    expect(view.canSubmitOffer).toBe(true);
+  });
+
+  it('на заказе в работе задание посторонней компании уже не видно', () => {
+    const view = toOrderDetail(order({ files: searching.files }), { id: OUTSIDER_ID });
+
+    expect(view.files).toEqual([]);
+    // Статус замаскирован под WAITING, но право отправить предложение
+    // считается по настоящему: иначе кнопка обещала бы 409.
+    expect(view.status).toBe(OrderStatus.WAITING);
+    expect(view.canSubmitOffer).toBe(false);
+  });
+
+  it('компания с отозванным предложением снова может его отправить', () => {
+    const view = toOrderDetail(
+      order({
+        status: OrderStatus.WAITING,
+        offers: [offer(RIVAL_ID, OfferStatus.WITHDRAWN)],
+      }),
+      { id: RIVAL_ID },
+    );
+
+    expect(view.canSubmitOffer).toBe(true);
+  });
+
+  it('компания, которая уже исполняет заказ, предложение не отправляет', () => {
+    expect(toOrderDetail(order(), { id: EXECUTOR_ID }).canSubmitOffer).toBe(false);
+  });
+
+  it('у клиента-владельца права отправить предложение нет никогда', () => {
+    expect(toOrderDetail(searching, { id: CLIENT_ID }).canSubmitOffer).toBe(false);
   });
 });
 

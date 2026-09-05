@@ -11,7 +11,7 @@
  */
 
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { EXECUTING_OFFER_STATUSES, OfferStatus, OrderStatus } from '@mybuild/shared';
+import { EXECUTOR_OFFER_STATUSES, OfferStatus, OrderStatus } from '@mybuild/shared';
 
 import { isUuid } from '../../common/uuid.js';
 import { Prisma } from '../../generated/prisma/client.js';
@@ -229,6 +229,12 @@ export class OrderTransitionService {
 
     // Статус предложения здесь не фильтруется: подходит ли он событию,
     // решает state-машина — это правило перехода, а не выборка (ТЗ §4).
+    //
+    // Исполнитель ищется по `EXECUTOR_OFFER_STATUSES`, то есть вместе
+    // с `COMPLETED`: у завершённого заказа исполнитель никуда не делся, и без
+    // этого статуса повторное «Подтвердить выполнение» отвечало бы «у заказа
+    // нет компании-исполнителя» — неправдой вместо честного «действие
+    // недоступно» от state-машины.
     const offer =
       'offerId' in command
         ? await tx.offer.findFirst({
@@ -236,7 +242,7 @@ export class OrderTransitionService {
             select,
           })
         : await tx.offer.findFirst({
-            where: { orderId, status: { in: [...EXECUTING_OFFER_STATUSES] } },
+            where: { orderId, status: { in: [...EXECUTOR_OFFER_STATUSES] } },
             select,
           });
 

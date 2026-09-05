@@ -47,6 +47,8 @@ interface StubOptions {
   filesInRound?: number;
   /** Что вернула загрузка: пустой массив — все файлы оказались дубликатами. */
   attached?: number;
+  /** Площадь, уже уточнённая исполнителем. */
+  verifiedSquareMeters?: number | null;
 }
 
 function createStubs(options: StubOptions = {}) {
@@ -57,6 +59,7 @@ function createStubs(options: StubOptions = {}) {
     title: 'Ремонт квартиры',
     clientId: CLIENT_ID,
     status: options.lockedStatus ?? OrderStatus.IN_PROGRESS,
+    verifiedSquareMeters: options.verifiedSquareMeters ?? null,
   };
 
   /** Порядок обращений: на живой базе взаимную блокировку так не поймать. */
@@ -294,6 +297,32 @@ describe('OrderWorkflowService: файлы сдачи', () => {
     });
   });
 
+  /**
+   * Между открытием сдачи и записью строк проходит вся загрузка в бакет,
+   * и за это время компания могла сдать работу из другой вкладки. Проверка
+   * идёт внутри той же транзакции, что и вставка, — отдельным запросом она
+   * отвечала бы про уже устаревшее состояние.
+   */
+  it('не даёт дописать файлы в сдачу, закрытую во время загрузки', async () => {
+    const { service, prisma, files, trace } = createStubs({
+      submissions: [{ id: 'submission-1', round: 1, submittedAt: null }],
+    });
+
+    files.attachFiles.mockImplementation(async (params) => {
+      // Сдача закрылась, пока файлы ехали в хранилище.
+      prisma.tx.orderSubmission.findFirst.mockResolvedValueOnce(null);
+
+      await (params as { guard: (tx: unknown) => Promise<void> }).guard(prisma.tx);
+      return [{ id: 'file-0' }];
+    });
+
+    await expect(service.addFiles(addFilesParams())).rejects.toThrow(ConflictException);
+
+    // Заказ блокируется и здесь, и тем же порядком: сначала он, потом сдача.
+    expect(trace.filter((step) => step === 'lockOrder')).toHaveLength(2);
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+  });
+
   it('молчит, если все файлы оказались дубликатами', async () => {
     // Дедупликация в пределах сдачи (ТЗ §4.1): в заказе ничего не изменилось,
     // и сообщать клиенту об изменении было бы неправдой.
@@ -393,6 +422,26 @@ describe('OrderWorkflowService: уточнение площади', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     },
   );
+
+  it('на то же значение не пишет ничего и не уведомляет', async () => {
+    // Сохранение прежнего числа — не уточнение: уведомление «исполнитель
+    // уточнил площадь» стало бы событием, которого не было (ТЗ §8).
+    const { service, prisma } = createStubs({ verifiedSquareMeters: 98.5 });
+
+    await service.verifyArea(ORDER_ID, OrderStatus.IN_PROGRESS, COMPANY_ID, 98.5);
+
+    expect(prisma.tx.order.update).not.toHaveBeenCalled();
+    expect(prisma.tx.notification.create).not.toHaveBeenCalled();
+  });
+
+  it('изменение уже уточнённой площади уведомление создаёт', async () => {
+    const { service, prisma } = createStubs({ verifiedSquareMeters: 98.5 });
+
+    await service.verifyArea(ORDER_ID, OrderStatus.IN_PROGRESS, COMPANY_ID, 101);
+
+    expect(prisma.tx.order.update).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.notification.create).toHaveBeenCalledTimes(1);
+  });
 
   it('перепроверяет статус под блокировкой', async () => {
     const { service, prisma } = createStubs({ lockedStatus: OrderStatus.COMPLETED });

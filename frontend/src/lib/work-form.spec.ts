@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { ORDER_LIMITS } from "@/lib/types";
+import { FileOwnerType, ORDER_LIMITS, type OrderFileDto } from "@/lib/types";
 
 import {
+  countRoundFiles,
+  describeUpload,
   emptyWorkFilesForm,
   toVerifiedAreaBody,
   toWorkFilesFormData,
@@ -11,6 +13,19 @@ import {
 
 function pdf(name: string): File {
   return new File([new Uint8Array([1, 2, 3])], name, { type: "application/pdf" });
+}
+
+function file(ownerType: FileOwnerType, submissionRound: number): OrderFileDto {
+  return {
+    id: `file-${ownerType}-${submissionRound}-${Math.random()}`,
+    orderId: "order-1",
+    ownerType,
+    submissionRound,
+    originalName: "акт.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 1024,
+    createdAt: "2026-09-01T00:00:00.000Z",
+  };
 }
 
 describe("validateWorkFilesForm", () => {
@@ -60,6 +75,49 @@ describe("toWorkFilesFormData", () => {
 
     expect(body.get("comment")).toBe("Первый этаж готов");
     expect(body.getAll("files")).toHaveLength(2);
+  });
+});
+
+describe("countRoundFiles", () => {
+  it("считает только файлы компании и только своего раунда", () => {
+    const order = {
+      files: [
+        file(FileOwnerType.CLIENT, 0),
+        file(FileOwnerType.COMPANY, 1),
+        file(FileOwnerType.COMPANY, 1),
+        file(FileOwnerType.COMPANY, 2),
+      ],
+    };
+
+    expect(countRoundFiles(order, 1)).toBe(2);
+    expect(countRoundFiles(order, 2)).toBe(1);
+    expect(countRoundFiles(order, 3)).toBe(0);
+  });
+});
+
+describe("describeUpload", () => {
+  it("добавленные файлы обещают уведомление клиенту", () => {
+    const outcome = describeUpload(2, 3);
+
+    expect(outcome.changed).toBe(true);
+    expect(outcome.title).toBe("Файлы загружены");
+    expect(outcome.description).toContain("Сдача №3");
+    expect(outcome.description).toContain("2");
+  });
+
+  it("один файл называется в единственном числе", () => {
+    expect(describeUpload(1, 1).title).toBe("Файл загружен");
+  });
+
+  it("повторная загрузка тех же файлов уведомления не обещает", () => {
+    // Дедупликация по SHA-256 в пределах сдачи (ТЗ §4.1): в заказе ничего
+    // не изменилось, и backend уведомление клиенту не создаёт.
+    const outcome = describeUpload(0, 2);
+
+    expect(outcome.changed).toBe(false);
+    expect(outcome.title).toBe("Новых файлов нет");
+    expect(outcome.description).toContain("уже приложены");
+    expect(outcome.description).not.toContain("уведомление");
   });
 });
 

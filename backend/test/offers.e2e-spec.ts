@@ -12,6 +12,7 @@ import {
   OrderCategory,
   OrderStatus,
   Role,
+  orderStatusLabels,
 } from '@mybuild/shared';
 
 import { PrismaService } from '../src/prisma/prisma.service.js';
@@ -242,6 +243,14 @@ describe('Предложения (e2e)', () => {
 
       expect(response.status).toBe(409);
       expect(response.body.error).toBe('InvalidStateTransition');
+
+      // Настоящий статус заказа компании не виден (ТЗ §4.1), и текст ошибки —
+      // такой же ответ API, как и всё остальное: проговорись он, приватность
+      // обходилась бы одним запросом.
+      const message = String(response.body.message);
+      expect(message).not.toContain(OrderStatus.IN_PROGRESS);
+      expect(message).not.toContain(orderStatusLabels[OrderStatus.IN_PROGRESS]);
+
       // Предложение пишется до перехода, и откат транзакции — единственное,
       // что не даёт ему остаться в базе.
       expect(await prisma.offer.count({ where: { orderId: order.id } })).toBe(0);

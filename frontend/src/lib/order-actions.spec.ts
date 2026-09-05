@@ -65,6 +65,7 @@ function order(patch: Partial<OrderDetail> = {}): OrderDetail {
     offers: [],
     files: [],
     submissions: [],
+    canSubmitOffer: false,
     ...patch,
   };
 }
@@ -250,6 +251,7 @@ describe("resolveCompanyActions", () => {
     expect(actions).toEqual({
       ownOffer: null,
       isExecutor: false,
+      canSubmitOffer: false,
       canAddFiles: false,
       canSubmitWork: false,
       canVerifyArea: false,
@@ -346,5 +348,42 @@ describe("resolveCompanyActions", () => {
 
     expect(actions.ownOffer).toBeNull();
     expect(actions.isExecutor).toBe(false);
+    expect(actions.canSubmitOffer).toBe(false);
+  });
+
+  /**
+   * Право на предложение приходит с сервера: видимый статус заказа для этого
+   * не годится — заказ, который уже кто-то выполняет, выглядит для компании
+   * как «ищет исполнителя» (ТЗ §4.1).
+   */
+  describe("право отправить предложение", () => {
+    it("компании без предложения передаёт ответ сервера как есть", () => {
+      expect(
+        companyActionsFor(order({ canSubmitOffer: true }), COMPANY_A).canSubmitOffer,
+      ).toBe(true);
+
+      expect(
+        companyActionsFor(order({ canSubmitOffer: false }), COMPANY_A).canSubmitOffer,
+      ).toBe(false);
+    });
+
+    it("сохраняется у компании с отозванным предложением", () => {
+      const actions = companyActionsFor(
+        order({
+          canSubmitOffer: true,
+          offers: [offer(COMPANY_A, OfferStatus.WITHDRAWN)],
+        }),
+        COMPANY_A,
+      );
+
+      expect(actions.ownOffer?.status).toBe(OfferStatus.WITHDRAWN);
+      expect(actions.canSubmitOffer).toBe(true);
+    });
+
+    it("владельцу заказа не даётся никогда", () => {
+      expect(
+        companyActionsFor(order({ canSubmitOffer: true }), CLIENT_ID).canSubmitOffer,
+      ).toBe(false);
+    });
   });
 });

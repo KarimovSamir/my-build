@@ -55,7 +55,11 @@ export function WorkCard({
         {hasActions ? (
           <div className="flex flex-wrap gap-2">
             {actions.canAddFiles ? (
-              <AddWorkFilesDialog orderId={order.id} round={nextRound} />
+              <AddWorkFilesDialog
+                orderId={order.id}
+                round={nextRound}
+                filesInRound={submissions.open?.files.length ?? 0}
+              />
             ) : null}
 
             {actions.canSubmitWork ? (

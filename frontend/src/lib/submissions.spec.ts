@@ -63,6 +63,7 @@ function order(patch: Partial<OrderDetail> = {}): OrderDetail {
     offers: [],
     files: [],
     submissions: [],
+    canSubmitOffer: false,
     ...patch,
   };
 }

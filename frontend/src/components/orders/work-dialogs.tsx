@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-import { ORDER_LIMITS } from "@/lib/types";
+import { ORDER_LIMITS, type OrderDetail } from "@/lib/types";
 
 import { Field, FieldMessage, FormError } from "@/components/form-parts";
 import { FileDropzone } from "@/components/orders/file-dropzone";
@@ -26,6 +26,8 @@ import { apiErrorMessage, apiErrorMessages } from "@/lib/api-errors";
 import { browserApi } from "@/lib/api.client";
 import { validateSquareMeters } from "@/lib/order-form";
 import {
+  countRoundFiles,
+  describeUpload,
   emptyWorkFilesForm,
   toVerifiedAreaBody,
   toWorkFilesFormData,
@@ -47,10 +49,16 @@ import {
 export function AddWorkFilesDialog({
   orderId,
   round,
+  filesInRound,
 }: {
   orderId: string;
   /** Номер сдачи, в которую уйдут файлы: он виден компании до отправки. */
   round: number;
+  /**
+   * Сколько файлов в этой сдаче уже есть. Нужен, чтобы посчитать по ответу
+   * API, что действительно добавилось: дубликаты отсеиваются молча.
+   */
+  filesInRound: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -85,11 +93,17 @@ export function AddWorkFilesDialog({
     setPending(true);
 
     try {
-      await browserApi.post(`/orders/${orderId}/files`, toWorkFilesFormData(values));
+      const detail = await browserApi.post<OrderDetail>(
+        `/orders/${orderId}/files`,
+        toWorkFilesFormData(values),
+      );
 
-      toast.success("Файлы загружены", {
-        description: `Сдача №${round} · клиент получит уведомление`,
-      });
+      // Считаем по ответу, а не по числу выбранных файлов: те, что уже есть
+      // в этой сдаче, backend отбрасывает и уведомление клиенту не создаёт.
+      const outcome = describeUpload(countRoundFiles(detail, round) - filesInRound, round);
+
+      const notify = outcome.changed ? toast.success : toast.info;
+      notify(outcome.title, { description: outcome.description });
 
       setOpen(false);
       // Страница рендерится на сервере: без этого сдача, файлы и кнопка
@@ -120,8 +134,9 @@ export function AddWorkFilesDialog({
         <DialogHeader>
           <DialogTitle>Файлы к сдаче №{round}</DialogTitle>
           <DialogDescription>
-            Клиент увидит их вместе с комментарием. Пока работа не сдана, файлы
-            можно докладывать в эту же сдачу.
+            Клиент увидит файлы и комментарий сразу и получит уведомление. Пока
+            работа не сдана, в эту же сдачу можно доложить ещё — сданной она
+            станет только после кнопки «Сдать работу».
           </DialogDescription>
         </DialogHeader>
 

@@ -2,7 +2,7 @@ import 'dotenv/config';
 
 import { ConfigModule } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { FileOwnerType, OfferStatus, Role } from '@mybuild/shared';
+import { FileOwnerType, OfferStatus, OrderStatus, Role } from '@mybuild/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { validateEnv } from '../src/config/env.validation.js';
@@ -177,7 +177,10 @@ describe('FilesService (e2e)', () => {
       where: { orderId, originalName: 'План квартиры.pdf', submissionRound: 0 },
     });
 
-    const { url, originalName } = await files.getDownloadUrl(file.id, clientId);
+    const { url, originalName } = await files.getDownloadUrl(file.id, {
+      id: clientId,
+      role: Role.CLIENT,
+    });
     expect(originalName).toBe('План квартиры.pdf');
 
     const response = await fetch(url);
@@ -197,21 +200,66 @@ describe('FilesService (e2e)', () => {
     expect(response.ok).toBe(false);
   });
 
-  it('компания-исполнитель ссылку получает, посторонняя — нет', async () => {
-    const file = await prisma.orderFile.findFirstOrThrow({ where: { orderId } });
+  it('исполнитель получает всё, посторонняя компания — только задание клиента', async () => {
+    const executor = { id: executorId, role: Role.COMPANY };
+    const outsider = { id: outsiderId, role: Role.COMPANY };
 
-    await expect(files.getDownloadUrl(file.id, executorId)).resolves.toMatchObject({
+    const task = await prisma.orderFile.findFirstOrThrow({
+      where: { orderId, ownerType: FileOwnerType.CLIENT },
+    });
+    const submission = await prisma.orderFile.findFirstOrThrow({
+      where: { orderId, ownerType: FileOwnerType.COMPANY },
+    });
+
+    await expect(files.getDownloadUrl(task.id, executor)).resolves.toMatchObject({
       url: expect.stringContaining('token='),
     });
 
-    await expect(files.getDownloadUrl(file.id, outsiderId)).rejects.toMatchObject({
+    // Заказ ещё ищет исполнителя: задание открыто любой компании — по нему
+    // она и считает цену (решение пользователя от 5 сентября 2026).
+    await expect(files.getDownloadUrl(task.id, outsider)).resolves.toMatchObject({
+      url: expect.stringContaining('token='),
+    });
+
+    // А сдачи исполнителя не открываются так никогда (ТЗ §4.1).
+    await expect(files.getDownloadUrl(submission.id, outsider)).rejects.toMatchObject({
       status: 403,
     });
+
+    // Как только заказ ушёл в работу, задание для посторонней закрывается.
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { status: OrderStatus.IN_PROGRESS },
+    });
+
+    await expect(files.getDownloadUrl(task.id, outsider)).rejects.toMatchObject({
+      status: 403,
+    });
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { status: OrderStatus.WAITING },
+    });
+  });
+
+  it('задание одного клиента другому клиенту не отдаётся', async () => {
+    // Правило «задание открыто, пока заказ ищет исполнителя» — про компании.
+    // Без проверки роли по нему прошёл бы любой посторонний пользователь.
+    const task = await prisma.orderFile.findFirstOrThrow({
+      where: { orderId, ownerType: FileOwnerType.CLIENT },
+    });
+
+    await expect(
+      files.getDownloadUrl(task.id, { id: outsiderId, role: Role.CLIENT }),
+    ).rejects.toMatchObject({ status: 403 });
   });
 
   it('несуществующий файл — 404', async () => {
     await expect(
-      files.getDownloadUrl('00000000-0000-0000-0000-000000000000', clientId),
+      files.getDownloadUrl('00000000-0000-0000-0000-000000000000', {
+        id: clientId,
+        role: Role.CLIENT,
+      }),
     ).rejects.toMatchObject({ status: 404 });
   });
 

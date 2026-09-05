@@ -40,6 +40,9 @@ const UPLOAD_FORBIDDEN =
 const NOTHING_TO_SUBMIT =
   'Нечего сдавать: сначала загрузите файлы работы с комментарием';
 
+const SUBMISSION_ALREADY_SENT =
+  'Эта сдача уже отправлена клиенту: файлы добавляются в следующую сдачу';
+
 const AREA_FORBIDDEN =
   'Площадь уточняется только по заказу в работе, на проверке или на доработке';
 
@@ -177,7 +180,10 @@ export class OrderWorkflowService {
    * сдачу целиком, а не отдельную загрузку.
    *
    * Загрузка в хранилище идёт **после** транзакции: держать открытой
-   * транзакцию, пока по сети едут десятки мегабайт, нельзя.
+   * транзакцию, пока по сети едут десятки мегабайт, нельзя. Зато строки файлов
+   * пишутся под повторной проверкой (`assertSubmissionOpen`): за время загрузки
+   * компания могла из другой вкладки сдать работу, и файлы дописались бы
+   * в уже сданный раунд.
    */
   async addFiles(params: AddSubmissionFilesParams): Promise<OrderDetail> {
     const { orderId, companyId } = params;
@@ -200,6 +206,7 @@ export class OrderWorkflowService {
       ownerType: FileOwnerType.COMPANY,
       submissionRound: submission.round,
       files: prepared,
+      guard: (tx) => this.assertSubmissionOpen(tx, orderId, submission.id),
     });
 
     // Уведомление — только если в заказе действительно что-то появилось:
@@ -227,6 +234,10 @@ export class OrderWorkflowService {
    *
    * Ни статус, ни цена от этого не меняются, а `squareMeters` клиента
    * не перезаписывается — это отдельное информационное поле.
+   *
+   * Повторное сохранение того же числа не считается уточнением: записывать
+   * нечего, а уведомление «исполнитель уточнил площадь» на неизменившееся
+   * значение — ложное событие в ленте клиента (ТЗ §8).
    */
   async verifyArea(
     orderId: string,
@@ -244,6 +255,10 @@ export class OrderWorkflowService {
       // Между снимком guard'а и этой строкой клиент мог принять работу.
       if (!canVerifyArea(order.status)) {
         throw new ConflictException(AREA_FORBIDDEN);
+      }
+
+      if (order.verifiedSquareMeters === verifiedSquareMeters) {
+        return;
       }
 
       await tx.order.update({
@@ -303,6 +318,35 @@ export class OrderWorkflowService {
     });
 
     return { ...created, order };
+  }
+
+  /**
+   * Сдача всё ещё открыта, и заказ всё ещё принимает файлы.
+   *
+   * Вызывается изнутри транзакции вставки файлов, уже после загрузки
+   * в хранилище: за это время параллельная «Сдача работы» могла закрыть раунд
+   * и увести заказ на подтверждение клиенту. Порядок блокировок тот же, что
+   * и везде, — сначала заказ.
+   */
+  private async assertSubmissionOpen(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    submissionId: string,
+  ): Promise<void> {
+    const order = await this.transitions.lockOrder(tx, orderId);
+
+    if (!canUploadWork(order.status)) {
+      throw new ConflictException(UPLOAD_FORBIDDEN);
+    }
+
+    const submission = await tx.orderSubmission.findFirst({
+      where: { id: submissionId, submittedAt: null },
+      select: { id: true },
+    });
+
+    if (!submission) {
+      throw new ConflictException(SUBMISSION_ALREADY_SENT);
+    }
   }
 
   /**

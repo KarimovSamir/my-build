@@ -9,7 +9,7 @@
  * Модуль чистый — ни React, ни fetch.
  */
 
-import { ORDER_LIMITS } from "@/lib/types";
+import { FileOwnerType, ORDER_LIMITS, type OrderDetail } from "@/lib/types";
 
 import { normalizeNumber } from "./form-input";
 
@@ -62,6 +62,49 @@ export function toWorkFilesFormData(values: WorkFilesFormValues): FormData {
   }
 
   return body;
+}
+
+/** Сколько файлов компании лежит в сдаче с этим номером. */
+export function countRoundFiles(
+  order: Pick<OrderDetail, "files">,
+  round: number,
+): number {
+  return order.files.filter(
+    (file) => file.ownerType === FileOwnerType.COMPANY && file.submissionRound === round,
+  ).length;
+}
+
+/** Заголовок и пояснение тоста после загрузки файлов. */
+export interface UploadOutcome {
+  title: string;
+  description: string;
+  /** Что-то действительно добавилось: тост успеха, а не сообщение «ничего». */
+  changed: boolean;
+}
+
+/**
+ * Что сказать после загрузки файлов сдачи.
+ *
+ * Дедупликация по SHA-256 действует в пределах сдачи (ТЗ §4.1), поэтому
+ * повторная отправка тех же файлов ничего не добавляет и уведомления клиенту
+ * не создаёт. Говорить в этом случае «Файлы загружены · клиент получит
+ * уведомление» — обещать то, чего не произошло; сколько файлов добавилось,
+ * считается по ответу API, а не по числу выбранных в форме.
+ */
+export function describeUpload(added: number, round: number): UploadOutcome {
+  if (added <= 0) {
+    return {
+      title: "Новых файлов нет",
+      description: `Эти файлы уже приложены к сдаче №${round}. Комментарий обновлён.`,
+      changed: false,
+    };
+  }
+
+  return {
+    title: added === 1 ? "Файл загружен" : "Файлы загружены",
+    description: `Сдача №${round} · добавлено: ${added} · клиент получит уведомление`,
+    changed: true,
+  };
 }
 
 /**

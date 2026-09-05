@@ -9,7 +9,7 @@ import {
   type OrderDetail,
 } from "@/lib/types";
 
-import { CompanyOfferCard } from "@/components/orders/company-offer-card";
+import { CompanyOfferCard, SubmitOfferCard } from "@/components/orders/company-offer-card";
 import { CompletionCard } from "@/components/orders/completion-card";
 import { DeleteOrderDialog } from "@/components/orders/delete-order-dialog";
 import { DownloadFileButton } from "@/components/orders/download-file-button";
@@ -66,7 +66,10 @@ export function OrderDetailView({
             <span className="text-foreground font-medium">{orderLabel}</span>
             <span aria-hidden>·</span>
             <span>Создан {formatDate(order.createdAt)}</span>
-            <OrderStatusBadge status={order.status} />
+            {/* Компании без активного предложения статус заказа приходит
+                замаскированным под «Поиск исполнителя» (ТЗ §4.1) — показывать
+                его рядом со статусом её собственного предложения нельзя. */}
+            {access.seesRealStatus ? <OrderStatusBadge status={order.status} /> : null}
           </span>
         }
         action={
@@ -91,15 +94,18 @@ export function OrderDetailView({
 
           {access.isOwner ? <OrderOffersCard orderId={order.id} actions={actions} /> : null}
 
-          {/* Компания видит здесь только своё предложение. Заказ, в котором
-              она не участвует, приходит вовсе без предложений — тогда и места
-              под них нет. */}
+          {/* Компания видит здесь только своё предложение, а если его нет —
+              форму отправки, но лишь пока заказ действительно принимает
+              предложения (`canSubmitOffer` считает backend, ТЗ §4.1). */}
           {company.ownOffer ? (
             <CompanyOfferCard
               order={order}
               offer={company.ownOffer}
               isExecutor={company.isExecutor}
+              canSubmitOffer={company.canSubmitOffer}
             />
+          ) : company.canSubmitOffer ? (
+            <SubmitOfferCard order={order} />
           ) : null}
 
           <WorkCard order={order} actions={company} submissions={submissions} />

@@ -16,11 +16,13 @@ import {
   offerStatusLabels,
   offerStatusTones,
   orderCategoryLabels,
+  orderEventLabels,
   orderStatusLabels,
   orderStatusTones,
   parseOrderNumber,
   roleLabels,
 } from './labels.js';
+import { OrderEventType } from './state.js';
 
 /**
  * Разбор номера заказа — вход пользователя, который идёт прямо в колонку `Int`:
@@ -82,6 +84,7 @@ describe('названия для интерфейса', () => {
     ['статусов заказа', OrderStatus, orderStatusLabels],
     ['статусов предложения', OfferStatus, offerStatusLabels],
     ['типов уведомления', NotificationType, notificationTypeLabels],
+    ['событий заказа', OrderEventType, orderEventLabels],
   ])('у всех %s есть непустое русское название', (_name, values, labels) => {
     for (const value of Object.values(values)) {
       const label = (labels as Record<string, string>)[value];

@@ -99,6 +99,12 @@ export interface OrderCompanyActions {
   ownOffer: OfferDto | null;
   /** Предложение принято: заказ выполняет эта компания. */
   isExecutor: boolean;
+  /**
+   * Можно отправить предложение — новое или взамен отозванного и отклонённого.
+   * Считает backend по настоящему статусу заказа: компании он виден как
+   * «ищет исполнителя», даже если его давно кто-то выполняет (ТЗ §4.1).
+   */
+  canSubmitOffer: boolean;
   /** Можно добавить файлы в свою сдачу. */
   canAddFiles: boolean;
   /** Можно сдать работу клиенту. */
@@ -110,6 +116,7 @@ export interface OrderCompanyActions {
 const NOTHING_FOR_COMPANY: OrderCompanyActions = {
   ownOffer: null,
   isExecutor: false,
+  canSubmitOffer: false,
   canAddFiles: false,
   canSubmitWork: false,
   canVerifyArea: false,
@@ -135,8 +142,12 @@ export function resolveCompanyActions(
 
   const ownOffer = order.offers.find((offer) => offer.companyId === viewerId) ?? null;
 
+  // Право на предложение здесь не пересчитывается: видимый статус заказа для
+  // этого не годится (ТЗ §4.1, приватность), и решение приходит с сервера.
+  const canSubmitOffer = order.canSubmitOffer;
+
   if (!ownOffer || !isExecutorOffer(ownOffer.status)) {
-    return { ...NOTHING_FOR_COMPANY, ownOffer };
+    return { ...NOTHING_FOR_COMPANY, ownOffer, canSubmitOffer };
   }
 
   const open = submissions.open;
@@ -144,6 +155,7 @@ export function resolveCompanyActions(
   return {
     ownOffer,
     isExecutor: true,
+    canSubmitOffer,
     canAddFiles: canUploadWork(order.status),
     canSubmitWork:
       canTransition(order.status, OrderEventType.WORK_SUBMITTED, ownOffer.status) &&

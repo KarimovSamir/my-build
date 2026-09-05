@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { OfferStatus, OrderStatus } from './enums.js';
+import { canResubmitOffer, isPendingOffer } from './offers.js';
 import {
   OFFER_PRECONDITIONS,
   ORDER_TRANSITIONS,
@@ -98,6 +99,33 @@ describe('canTransition — предусловия по статусу пред�
         OrderStatus.AWAITING_CONFIRMATION,
         OrderEventType.OFFER_REJECTED,
         OfferStatus.REJECTED,
+      ),
+    ).toBe(false);
+  });
+
+  /**
+   * Предусловие отправки и лента доступных заказов обязаны сходиться:
+   * из статуса, который не попадает в ленту, компания не может и предложиться.
+   */
+  it.each(allOfferStatuses)(
+    'отправка предложения из статуса %s разрешена ровно тогда, когда заказ виден в ленте',
+    (offerStatus) => {
+      expect(
+        canTransition(
+          OrderStatus.AWAITING_CONFIRMATION,
+          OrderEventType.OFFER_SUBMITTED,
+          offerStatus,
+        ),
+      ).toBe(isPendingOffer(offerStatus) || canResubmitOffer(offerStatus));
+    },
+  );
+
+  it('проигравшее выбор предложение заново не отправляется', () => {
+    expect(
+      canTransition(
+        OrderStatus.AWAITING_CONFIRMATION,
+        OrderEventType.OFFER_SUBMITTED,
+        OfferStatus.NOT_ACCEPTED,
       ),
     ).toBe(false);
   });

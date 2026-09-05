@@ -70,6 +70,7 @@ function order(patch: Partial<OrderDetail> = {}): OrderDetail {
     offers: [],
     files: [],
     submissions: [],
+    canSubmitOffer: false,
     ...patch,
   };
 }
@@ -146,6 +147,51 @@ describe("resolveOrderDetailAccess", () => {
     expect(access.isParty).toBe(false);
   });
 
+  /**
+   * Настоящий статус backend отдаёт владельцу и компании с активным
+   * предложением; остальным заказ приходит как «Поиск исполнителя», чем бы он
+   * ни был (ТЗ §4.1). Показывать этот подставной статус нельзя — рядом стоит
+   * статус собственного предложения компании.
+   */
+  describe("настоящий статус заказа", () => {
+    it("виден владельцу", () => {
+      expect(resolveOrderDetailAccess(order(), CLIENT_ID).seesRealStatus).toBe(true);
+    });
+
+    it.each([
+      OfferStatus.SENT,
+      OfferStatus.ACCEPTED,
+      OfferStatus.WORK_SUBMITTED,
+      OfferStatus.BACK_FOR_OVERRIDE,
+      OfferStatus.COMPLETED,
+    ])("виден компании с предложением в статусе %s", (status) => {
+      const access = resolveOrderDetailAccess(
+        order({ client: null, offers: [offer(OTHER_COMPANY_ID, status)] }),
+        OTHER_COMPANY_ID,
+      );
+
+      expect(access.seesRealStatus).toBe(true);
+    });
+
+    it.each([OfferStatus.NOT_ACCEPTED, OfferStatus.REJECTED, OfferStatus.WITHDRAWN])(
+      "скрыт от компании с предложением в статусе %s",
+      (status) => {
+        const access = resolveOrderDetailAccess(
+          order({ client: null, offers: [offer(OTHER_COMPANY_ID, status)] }),
+          OTHER_COMPANY_ID,
+        );
+
+        expect(access.seesRealStatus).toBe(false);
+      },
+    );
+
+    it("скрыт от компании без предложения", () => {
+      const access = resolveOrderDetailAccess(order({ client: null }), OTHER_COMPANY_ID);
+
+      expect(access.seesRealStatus).toBe(false);
+    });
+  });
+
   it("в файлах задания оставляет только файлы клиента", () => {
     const access = resolveOrderDetailAccess(
       order({
@@ -164,21 +210,17 @@ describe("resolveOrderDetailAccess", () => {
 });
 
 describe("emptyClientFilesMessage", () => {
-  it("посторонней компании не утверждает, что файлов нет", () => {
-    // Файлы могут быть — просто не для неё.
-    expect(emptyClientFilesMessage({ isOwner: false, isParty: false })).toBe(
-      "Файлы задания видны компании, чьё предложение принято.",
-    );
-  });
-
   it("владельцу говорит, что файлы не приложил он сам", () => {
-    expect(emptyClientFilesMessage({ isOwner: true, isParty: true })).toBe(
+    expect(emptyClientFilesMessage({ isOwner: true })).toBe(
       "Вы не приложили файлы к этому заказу.",
     );
   });
 
-  it("исполнителю говорит, что файлы не приложил клиент", () => {
-    expect(emptyClientFilesMessage({ isOwner: false, isParty: true })).toBe(
+  it("компании говорит, что файлы не приложил клиент", () => {
+    // Отличить «клиент ничего не приложил» от «заказ уже занят» компания
+    // не может: настоящий статус от неё скрыт (ТЗ §4.1), и подсказка про
+    // скрытые файлы выдавала бы его.
+    expect(emptyClientFilesMessage({ isOwner: false })).toBe(
       "Клиент не приложил файлы к этому заказу.",
     );
   });

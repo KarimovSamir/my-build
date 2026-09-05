@@ -13,6 +13,7 @@ import {
   OrderStatus,
   Role,
 } from './enums.js';
+import { OrderEventType } from './state.js';
 
 export const roleLabels: Record<Role, string> = {
   CLIENT: 'Клиент',
@@ -74,10 +75,28 @@ export const offerStatusTones: Record<OfferStatus, StatusTone> = {
   BACK_FOR_OVERRIDE: 'red',
 };
 
+/**
+ * Названия действий над заказом (ТЗ §4).
+ *
+ * Нужны там, где о событии говорят пользователю: сообщение об ошибке 409
+ * пишется в интерфейсе как есть, и `OFFER_SUBMITTED` в нём — такой же
+ * машинный код посреди русского текста, как непереведённый статус.
+ */
+export const orderEventLabels: Record<OrderEventType, string> = {
+  OFFER_SUBMITTED: 'Отправка предложения',
+  OFFER_WITHDRAWN: 'Отзыв предложения',
+  OFFER_REJECTED: 'Отклонение предложения',
+  OFFER_ACCEPTED: 'Принятие предложения',
+  WORK_SUBMITTED: 'Сдача работы',
+  WORK_CONFIRMED: 'Подтверждение выполнения',
+  WORK_DISPUTED: 'Отправка на доработку',
+};
+
 export const notificationTypeLabels: Record<NotificationType, string> = {
   OFFER_RECEIVED: 'Новое предложение',
   OFFER_ACCEPTED: 'Предложение принято',
   OFFER_REJECTED: 'Предложение отклонено',
+  OFFER_NOT_ACCEPTED: 'Предложение не выбрано',
   OFFER_WITHDRAWN: 'Предложение отозвано',
   WORK_SUBMITTED: 'Работа сдана',
   WORK_CONFIRMED: 'Работа принята',

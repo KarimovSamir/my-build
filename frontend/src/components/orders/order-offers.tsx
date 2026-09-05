@@ -10,6 +10,7 @@ import {
 import { OfferStatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatMoney } from "@/lib/format";
+import { offerDate } from "@/lib/offer-view";
 import type { OrderClientActions } from "@/lib/order-actions";
 
 /**
@@ -114,6 +115,10 @@ function OfferHead({
   /** Статус нужен только у принятого: у ждущих выбора он у всех одинаковый. */
   withStatus?: boolean;
 }) {
+  // Изменённое предложение подписывается датой изменения: цена и срок
+  // в строке уже новые, а `createdAt` относился бы к прежним условиям.
+  const date = offerDate(offer);
+
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2">
@@ -123,7 +128,7 @@ function OfferHead({
         <span className="min-w-0">
           <span className="block font-medium">{offer.companyName}</span>
           <span className="text-muted-foreground text-xs">
-            Предложение от {formatDate(offer.createdAt)}
+            {date.label} {formatDate(date.iso)}
           </span>
         </span>
       </div>

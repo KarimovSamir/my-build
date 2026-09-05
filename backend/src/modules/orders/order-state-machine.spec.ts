@@ -1,4 +1,12 @@
-import { NotificationType, OfferStatus, OrderStatus } from '@mybuild/shared';
+import {
+  NotificationType,
+  OfferStatus,
+  OrderStatus,
+  notificationTypeLabels,
+  offerStatusLabels,
+  orderEventLabels,
+  orderStatusLabels,
+} from '@mybuild/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -26,6 +34,11 @@ function contextIn(status: OrderStatus): OrderStateContext {
     clientId: CLIENT_ID,
     status,
   };
+}
+
+/** Текст ошибки из тела ответа: именно он доходит до пользователя. */
+function messageOf(response: string | object): string {
+  return String((response as { message?: unknown }).message ?? '');
 }
 
 /** Предложение, по которому пришло событие, в подходящем для него статусе. */
@@ -154,8 +167,33 @@ describe('OrderStateMachine — матрица переходов', () => {
         statusCode: 409,
         error: 'InvalidStateTransition',
       });
+      expect(messageOf(response)).toContain(
+        orderEventLabels[OrderEventType.WORK_SUBMITTED],
+      );
     }
   });
+
+  /**
+   * Текст 409 доходит до пользователя как есть, поэтому он проверяется наравне
+   * с кодом: назови сообщение статус заказа — и компания узнала бы из ошибки
+   * то, что от неё скрывают все остальные ответы (ТЗ §4.1).
+   */
+  it.each(Object.values(OrderStatus))(
+    'сообщение о запрещённом переходе не выдаёт статус заказа (%s)',
+    (status) => {
+      for (const event of Object.values(OrderEventType)) {
+        if (machine.can(status, event)) continue;
+
+        const message = messageOf(
+          new InvalidStateTransitionError(status, event).getResponse(),
+        );
+
+        expect(message).not.toContain(status);
+        expect(message).not.toContain(orderStatusLabels[status]);
+        expect(message).not.toContain(event);
+      }
+    },
+  );
 });
 
 describe('OrderStateMachine — побочные эффекты', () => {
@@ -220,11 +258,14 @@ describe('OrderStateMachine — побочные эффекты', () => {
       companyId: RIVAL_COMPANY_ID,
       status: OfferStatus.NOT_ACCEPTED,
     });
+    // Тип свой, а не `OFFER_REJECTED`: клиент это предложение не отклонял,
+    // он выбрал другое, и заголовок уведомления берётся из типа.
     expect(effects).toContainEqual(
       expect.objectContaining({
         kind: 'CREATE_NOTIFICATION',
         userId: RIVAL_COMPANY_ID,
-        type: NotificationType.OFFER_REJECTED,
+        type: NotificationType.OFFER_NOT_ACCEPTED,
+        title: notificationTypeLabels[NotificationType.OFFER_NOT_ACCEPTED],
       }),
     );
   });
@@ -428,10 +469,20 @@ describe('OrderStateMachine — статус предложения', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(InvalidOfferStatusError);
       expect((error as InvalidOfferStatusError).getStatus()).toBe(409);
-      expect((error as InvalidOfferStatusError).getResponse()).toMatchObject({
+
+      const response = (error as InvalidOfferStatusError).getResponse();
+      expect(response).toMatchObject({
         statusCode: 409,
         error: 'InvalidOfferStatus',
       });
+
+      // Статус предложения пользователю показывать можно — своё предложение
+      // видят обе стороны, — но по-русски и без машинных кодов (ТЗ §1, §7).
+      const message = messageOf(response);
+      expect(message).toContain(offerStatusLabels[OfferStatus.NOT_ACCEPTED]);
+      expect(message).toContain(orderEventLabels[OrderEventType.OFFER_REJECTED]);
+      expect(message).not.toContain(OfferStatus.NOT_ACCEPTED);
+      expect(message).not.toContain(OrderEventType.OFFER_REJECTED);
     }
   });
 
@@ -467,7 +518,7 @@ describe('OrderStateMachine — статус предложения', () => {
       });
     });
 
-    it.each([OfferStatus.SENT, OfferStatus.WITHDRAWN, OfferStatus.REJECTED, OfferStatus.NOT_ACCEPTED])(
+    it.each([OfferStatus.SENT, OfferStatus.WITHDRAWN, OfferStatus.REJECTED])(
       'разрешает повторную отправку из статуса %s',
       (offerStatus) => {
         expect(
@@ -480,12 +531,18 @@ describe('OrderStateMachine — статус предложения', () => {
       },
     );
 
+    /**
+     * `NOT_ACCEPTED` здесь не для симметрии: заказ, в котором предложение
+     * проиграло выбор, уже в работе и в поиск исполнителя не возвращается —
+     * предлагаться по нему некуда, и лента доступных заказов его не покажет.
+     */
     it.each([
       OfferStatus.ACCEPTED,
       OfferStatus.WORK_SUBMITTED,
       OfferStatus.BACK_FOR_OVERRIDE,
       OfferStatus.COMPLETED,
-    ])('не даёт отправить предложение из исполнительского статуса %s', (offerStatus) => {
+      OfferStatus.NOT_ACCEPTED,
+    ])('не даёт отправить предложение из статуса %s', (offerStatus) => {
       expect(() =>
         machine.transition(contextIn(OrderStatus.AWAITING_CONFIRMATION), {
           ...events.OFFER_SUBMITTED,

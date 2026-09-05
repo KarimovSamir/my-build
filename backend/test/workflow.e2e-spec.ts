@@ -232,7 +232,8 @@ describe('Сделка и приёмка (e2e)', () => {
       ).toEqual(
         [
           `${executor.id}:${NotificationType.OFFER_ACCEPTED}`,
-          `${rival.id}:${NotificationType.OFFER_REJECTED}`,
+          // Проигравшей — «не выбрано»: её предложение никто не отклонял.
+          `${rival.id}:${NotificationType.OFFER_NOT_ACCEPTED}`,
         ].toSorted(),
       );
     });
@@ -309,6 +310,32 @@ describe('Сделка и приёмка (e2e)', () => {
           where: { orderId, ownerType: FileOwnerType.COMPANY },
         }),
       ).toBe(2);
+    });
+
+    /**
+     * Повторная отправка тех же файлов ничего не добавляет (дедупликация
+     * по SHA-256 в пределах сдачи, ТЗ §4.1), и уведомления клиенту тоже быть
+     * не должно: в заказе не изменилось ничего, кроме комментария.
+     */
+    it('на дубликаты не заводит ни строк, ни второго уведомления', async () => {
+      const { orderId } = await seedOrderInProgress('Дубликаты');
+
+      await postFiles(executorToken, orderId, 'Первая загрузка');
+      const again = await postFiles(executorToken, orderId, 'Те же файлы');
+
+      expect(again.status).toBe(200);
+      expect(
+        await prisma.orderFile.count({
+          where: { orderId, ownerType: FileOwnerType.COMPANY },
+        }),
+      ).toBe(1);
+      expect(
+        await prisma.notification.count({
+          where: { orderId, type: NotificationType.FILES_UPDATED },
+        }),
+      ).toBe(1);
+      // Комментарий описывает сдачу целиком и заменяется в любом случае.
+      expect(again.body.submissions[0]).toMatchObject({ comment: 'Те же файлы' });
     });
 
     it('требует комментарий', async () => {
@@ -427,6 +454,23 @@ describe('Сделка и приёмка (e2e)', () => {
       expect(notification?.userId).toBe(client.id);
     });
 
+    it('на то же значение второго уведомления не создаёт', async () => {
+      // Сохранение прежнего числа — не уточнение: событие, которого не было,
+      // в ленте клиента появиться не должно (ТЗ §8).
+      const { orderId } = await seedOrderInProgress('Площадь без изменений');
+
+      await patchArea(executorToken, orderId, 98.5);
+      const again = await patchArea(executorToken, orderId, 98.5);
+
+      expect(again.status).toBe(200);
+      expect(again.body.verifiedSquareMeters).toBe(98.5);
+      expect(
+        await prisma.notification.count({
+          where: { orderId, type: NotificationType.AREA_VERIFIED },
+        }),
+      ).toBe(1);
+    });
+
     it('отклоняет площадь меньше нуля', async () => {
       const { orderId } = await seedOrderInProgress('Отрицательная площадь');
 
@@ -539,6 +583,31 @@ describe('Сделка и приёмка (e2e)', () => {
       const { orderId } = await seedOrderInProgress('Раннее подтверждение');
 
       expect((await post(clientToken, `/orders/${orderId}/confirm`)).status).toBe(409);
+    });
+
+    /**
+     * У завершённого заказа исполнитель остаётся, поэтому повторное действие
+     * обязано упереться в таблицу переходов. Ответ «у заказа нет
+     * компании-исполнителя» здесь был бы просто неправдой.
+     */
+    it('по завершённому заказу действия отвечают запрещённым переходом', async () => {
+      const { orderId } = await seedOrderInProgress('Действия после завершения');
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.COMPLETED },
+      });
+      await prisma.offer.updateMany({
+        where: { orderId, companyId: executor.id },
+        data: { status: OfferStatus.COMPLETED },
+      });
+
+      const confirmed = await post(clientToken, `/orders/${orderId}/confirm`);
+      expect(confirmed.status).toBe(409);
+      expect(confirmed.body.error).toBe('InvalidStateTransition');
+
+      const submitted = await post(executorToken, `/orders/${orderId}/submit`);
+      expect(submitted.status).toBe(409);
+      expect(submitted.body.error).toBe('InvalidStateTransition');
     });
   });
 

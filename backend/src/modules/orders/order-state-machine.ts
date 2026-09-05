@@ -23,6 +23,8 @@ import {
   OrderStatus,
   canTransition,
   notificationTypeLabels,
+  offerStatusLabels,
+  orderEventLabels,
   type AllowedOrderEvent,
 } from '@mybuild/shared';
 
@@ -138,7 +140,15 @@ export interface OrderTransitionResult {
   effects: OrderSideEffect[];
 }
 
-/** 409 Conflict на любой переход, которого нет в таблице ТЗ §4. */
+/**
+ * 409 Conflict на любой переход, которого нет в таблице ТЗ §4.
+ *
+ * Статуса заказа в тексте нет намеренно: сообщение уходит пользователю как
+ * есть, а настоящий статус видят только стороны сделки (ТЗ §4.1). Назови его
+ * ошибка — и компания, отправившая предложение на занятый заказ, узнала бы
+ * из 409 ровно то, что весь остальной код от неё скрывает. Сам статус
+ * остаётся полем исключения: для логов и тестов он нужен.
+ */
 export class InvalidStateTransitionError extends ConflictException {
   constructor(
     readonly fromStatus: OrderStatus,
@@ -147,7 +157,9 @@ export class InvalidStateTransitionError extends ConflictException {
     super({
       statusCode: 409,
       error: 'InvalidStateTransition',
-      message: `Недопустимое действие «${event}» для заказа в статусе «${fromStatus}»`,
+      message:
+        `Действие «${orderEventLabels[event]}» сейчас недоступно для этого заказа. ` +
+        'Обновите страницу — состояние могло измениться.',
     });
   }
 }
@@ -156,6 +168,10 @@ export class InvalidStateTransitionError extends ConflictException {
  * 409 Conflict на событие, которому не подходит текущий статус самого
  * предложения. Отдельно от `InvalidStateTransitionError`: заказ в подходящем
  * статусе, а вот предложение — нет.
+ *
+ * Статус предложения в тексте есть, и это не противоречит приватности §4.1:
+ * своё предложение видит и компания, и клиент заказа, а чужих сюда попасть
+ * не может — право на предложение проверяется до перехода.
  */
 export class InvalidOfferStatusError extends ConflictException {
   constructor(
@@ -165,7 +181,9 @@ export class InvalidOfferStatusError extends ConflictException {
     super({
       statusCode: 409,
       error: 'InvalidOfferStatus',
-      message: `Недопустимое действие «${event}» для предложения в статусе «${offerStatus}»`,
+      message:
+        `Действие «${orderEventLabels[event]}» недоступно: ` +
+        `предложение в статусе «${offerStatusLabels[offerStatus]}».`,
     });
   }
 }
@@ -300,6 +318,10 @@ const offerAccepted: TransitionHandler = (context, event) => {
   // Проигравшие перечисляются поимённо, а не одним «отклонить остальные»:
   // смена статуса без уведомления оставила бы компанию без ответа, а Фазу 5 —
   // без адресатов события `offer:status_changed` (ТЗ §8).
+  //
+  // Тип уведомления свой, а не `OFFER_REJECTED`: заголовок берётся из типа,
+  // и «Предложение отклонено» на чужую победу — неправда. Предложение уходит
+  // в `NOT_ACCEPTED` («Не выбрано»), и уведомление обязано говорить то же.
   for (const rival of event.otherOffers) {
     effects.push(
       {
@@ -310,7 +332,7 @@ const offerAccepted: TransitionHandler = (context, event) => {
       },
       notify(
         rival.companyId,
-        NotificationType.OFFER_REJECTED,
+        NotificationType.OFFER_NOT_ACCEPTED,
         `${orderRef(context)}: клиент выбрал другое предложение`,
       ),
     );

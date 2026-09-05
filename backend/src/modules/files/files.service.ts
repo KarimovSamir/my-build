@@ -8,12 +8,14 @@
 
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
-  EXECUTOR_OFFER_STATUSES,
   FileOwnerType,
+  Role,
+  companySeesTaskFiles,
+  isExecutorOffer,
   type OrderFileDto,
 } from '@mybuild/shared';
 
-import type { OrderFile } from '../../generated/prisma/client.js';
+import type { OrderFile, Prisma } from '../../generated/prisma/client.js';
 import { Semaphore } from '../../common/semaphore.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import {
@@ -26,15 +28,14 @@ import { prepareFile, readFileBuffer } from './uploaded-file.js';
 import { StorageService } from './storage.service.js';
 
 /**
- * Статусы предложения, при которых компания видит файлы заказа: она его
- * исполнитель. Компания с `SENT`-предложением файлов не видит — она ещё
- * не выбрана (ТЗ §4.1, приватность).
- *
- * Список общий с модулем заказов: два независимых перечня одних и тех же
- * статусов рано или поздно разошлись бы. Он шире, чем `EXECUTING_OFFER_STATUSES`
- * (заказ в работе): доступ к файлам сохраняется и после завершения.
+ * Кто смотрит на файл. Роль нужна ровно для одного правила — «задание клиента
+ * открыто компаниям, пока заказ принимает предложения»; всё остальное решает
+ * связь с заказом (см. `assertFileAccess`).
  */
-const PARTICIPATING_OFFER_STATUSES = [...EXECUTOR_OFFER_STATUSES];
+export interface FileViewer {
+  id: string;
+  role: Role | null;
+}
 
 /**
  * Сколько файлов процесс отправляет в хранилище одновременно.
@@ -55,7 +56,23 @@ export interface AttachFilesParams {
   submissionRound: number;
   /** Уже проверенные файлы — см. `prepareUploads`. */
   files: PreparedFile[];
+  /**
+   * Последняя проверка перед вставкой строк, внутри той же транзакции.
+   *
+   * Нужна, потому что между решением «файлы идут в эту сдачу» и вставкой
+   * проходит вся загрузка в хранилище — за это время параллельный запрос может
+   * закрыть сдачу, и файлы дописались бы в уже сданный раунд. Исключение
+   * из проверки откатывает вставку и убирает загруженные объекты.
+   */
+  guard?: (tx: Prisma.TransactionClient) => Promise<void>;
 }
+
+/**
+ * Запасы транзакции вставки: она короткая, но идёт после загрузки в бакет,
+ * когда соединение уже могло подтормаживать. Те же числа, что у переходов
+ * заказа, — импортировать их из модуля `orders` нельзя, это дало бы цикл.
+ */
+const ATTACH_TX_OPTIONS = { timeout: 15_000, maxWait: 10_000 } as const;
 
 @Injectable()
 export class FilesService {
@@ -117,22 +134,29 @@ export class FilesService {
         );
       }
 
-      rows = await this.prisma.orderFile.createManyAndReturn({
-        data: fresh.map((file, index) => ({
-          orderId,
-          storageKey: keys[index]!,
-          ownerType,
-          submissionRound,
-          fileHash: file.fileHash,
-          originalName: file.originalName,
-          mimeType: file.mimeType,
-          sizeBytes: file.sizeBytes,
-        })),
-        // Между проверкой дублей и вставкой мог успеть пройти другой запрос
-        // с тем же файлом. Ограничение в базе это ловит; падать из-за гонки
-        // на загрузке файлов незачем.
-        skipDuplicates: true,
-      });
+      rows = await this.prisma.$transaction(async (tx) => {
+        // Проверка вызывающего кода — под той же транзакцией, что и вставка:
+        // отдельным запросом она отвечала бы про состояние, которое к моменту
+        // вставки уже устарело.
+        await params.guard?.(tx);
+
+        return tx.orderFile.createManyAndReturn({
+          data: fresh.map((file, index) => ({
+            orderId,
+            storageKey: keys[index]!,
+            ownerType,
+            submissionRound,
+            fileHash: file.fileHash,
+            originalName: file.originalName,
+            mimeType: file.mimeType,
+            sizeBytes: file.sizeBytes,
+          })),
+          // Между проверкой дублей и вставкой мог успеть пройти другой запрос
+          // с тем же файлом. Ограничение в базе это ловит; падать из-за гонки
+          // на загрузке файлов незачем.
+          skipDuplicates: true,
+        });
+      }, ATTACH_TX_OPTIONS);
     } catch (error) {
       // Загруженное без строки в базе — мусор, который уже никто не найдёт.
       await this.storage.remove(keys);
@@ -150,21 +174,21 @@ export class FilesService {
     return rows.map(toOrderFileDto);
   }
 
-  /** Ссылка на скачивание. Доступна только участникам заказа (ТЗ §6). */
+  /** Ссылка на скачивание. Права на файл проверяет `assertFileAccess` (ТЗ §6). */
   async getDownloadUrl(
     fileId: string,
-    userId: string,
+    viewer: FileViewer,
   ): Promise<{ url: string; originalName: string }> {
     const file = await this.prisma.orderFile.findUnique({
       where: { id: fileId },
-      select: { orderId: true, storageKey: true, originalName: true },
+      select: { orderId: true, storageKey: true, originalName: true, ownerType: true },
     });
 
     if (!file) {
       throw new NotFoundException('Файл не найден');
     }
 
-    await this.assertOrderParticipant(file.orderId, userId);
+    await this.assertFileAccess(file.orderId, viewer, file.ownerType);
 
     return {
       url: await this.storage.createSignedUrl(
@@ -186,18 +210,31 @@ export class FilesService {
   }
 
   /**
-   * Участник заказа — его клиент либо компания, чьё предложение принято.
-   * Проверка по идентификатору, а не по роли: роль в токене может устареть,
-   * а связь с заказом — нет.
+   * Право на файл заказа.
+   *
+   * Клиент заказа и компания-исполнитель видят всё. Кроме них, задание клиента
+   * открыто любой компании, пока заказ принимает предложения: по чертежам она
+   * и считает цену (`companySeesTaskFiles`). Сдачи компании так не открываются
+   * никогда — они остаются сторонам сделки (ТЗ §4.1).
+   *
+   * Связь с заказом проверяется по идентификатору, а не по роли: роль в токене
+   * живёт час и может устареть, связь — нет. Роль всё же нужна в одном месте:
+   * «любая компания» — это именно компания, иначе задание одного клиента
+   * скачал бы другой.
    */
-  async assertOrderParticipant(orderId: string, userId: string): Promise<void> {
+  async assertFileAccess(
+    orderId: string,
+    viewer: FileViewer,
+    ownerType: FileOwnerType,
+  ): Promise<void> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       select: {
         clientId: true,
+        status: true,
         offers: {
-          where: { companyId: userId, status: { in: PARTICIPATING_OFFER_STATUSES } },
-          select: { id: true },
+          where: { companyId: viewer.id },
+          select: { status: true },
           take: 1,
         },
       },
@@ -207,7 +244,19 @@ export class FilesService {
       throw new NotFoundException('Заказ не найден');
     }
 
-    if (order.clientId !== userId && order.offers.length === 0) {
+    if (order.clientId === viewer.id) {
+      return;
+    }
+
+    const ownOffer = order.offers[0] ?? null;
+
+    const allowed =
+      viewer.role === Role.COMPANY &&
+      (ownerType === FileOwnerType.CLIENT
+        ? companySeesTaskFiles(order.status, ownOffer?.status ?? null)
+        : ownOffer !== null && isExecutorOffer(ownOffer.status));
+
+    if (!allowed) {
       throw new ForbiddenException('Нет доступа к файлам этого заказа');
     }
   }

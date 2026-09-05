@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-import { formatOrderNumber, OFFER_LIMITS, type OfferDto } from "@/lib/types";
+import { formatOrderNumber, isPendingOffer, OFFER_LIMITS, type OfferDto } from "@/lib/types";
 
 import { DatePicker } from "@/components/date-picker";
 import { Field, FieldMessage, FormError } from "@/components/form-parts";
@@ -42,6 +42,11 @@ import {
  * (семантика upsert). Разница только в словах на кнопке и в том, что форма
  * открывается заполненной, — пользователю обещать «создам второе» нельзя.
  *
+ * «Изменить» — только про предложение, которое ещё ждёт выбора клиента.
+ * Отозванное или отклонённое компания отправляет заново: строка в базе та же,
+ * но для пользователя это новое предложение, а не правка старого. Прежние
+ * цена и срок при этом подставляются — их обычно и повторяют.
+ *
  * Заказ перечитывается после успеха: отправленное предложение уводит заказ
  * из ленты, а в списке предложений меняет цену и срок.
  */
@@ -51,7 +56,7 @@ export function OfferDialog({
   variant = "default",
 }: {
   order: { id: string; orderNumber: number; title: string };
-  /** Уже отправленное предложение — тогда диалог открывается заполненным. */
+  /** Прежнее предложение по этому заказу — тогда диалог открывается заполненным. */
   offer?: OfferDto | null;
   variant?: "default" | "outline";
 }) {
@@ -62,7 +67,7 @@ export function OfferDialog({
   const [formError, setFormError] = useState<string[] | null>(null);
   const [pending, setPending] = useState(false);
 
-  const isUpdate = offer !== null;
+  const isUpdate = offer !== null && isPendingOffer(offer.status);
   const orderLabel = formatOrderNumber(order.orderNumber);
 
   /** Правка поля убирает его ошибку: сообщение о старом значении только мешает. */

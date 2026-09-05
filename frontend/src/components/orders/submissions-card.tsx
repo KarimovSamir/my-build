@@ -31,20 +31,25 @@ export function SubmissionsCard({
 }) {
   const { latest, history } = submissions;
 
+  // Число рядом с заголовком — сколько сдач всего, а не номер последней:
+  // ровно то же значение, что и у «Истории сдач» ниже. Номера сдач и их
+  // количество расходятся, как только раунд остаётся без файлов.
+  const total = history.length + (latest ? 1 : 0);
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>
           Сдачи работ
-          {latest ? (
-            <span className="text-muted-foreground font-normal"> · {latest.round}</span>
+          {total > 0 ? (
+            <span className="text-muted-foreground font-normal"> · {total}</span>
           ) : null}
         </CardTitle>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4">
         {latest ? (
-          <Submission submission={latest} />
+          <Submission submission={latest} isOwner={isOwner} />
         ) : (
           <p className="text-muted-foreground text-sm">
             {isOwner
@@ -65,7 +70,11 @@ export function SubmissionsCard({
 
             <div className="mt-4 flex flex-col gap-4">
               {history.map((submission) => (
-                <Submission key={submission.round} submission={submission} />
+                <Submission
+                  key={submission.round}
+                  submission={submission}
+                  isOwner={isOwner}
+                />
               ))}
             </div>
           </details>
@@ -75,8 +84,21 @@ export function SubmissionsCard({
   );
 }
 
-/** Одна сдача: номер, состояние, комментарий компании и её файлы. */
-function Submission({ submission }: { submission: SubmissionView }) {
+/**
+ * Одна сдача: номер, состояние, комментарий компании и её файлы.
+ *
+ * Незакрытая сдача видна обеим сторонам — файлы попадают в заказ сразу, а
+ * «Сдать работу» лишь закрывает раунд. Пишется это каждой стороне своими
+ * словами: клиенту важно, что исполнитель ещё не закончил, компании — что
+ * клиент эти файлы уже видит.
+ */
+function Submission({
+  submission,
+  isOwner,
+}: {
+  submission: SubmissionView;
+  isOwner: boolean;
+}) {
   return (
     <section className="border-border rounded-lg border p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -84,7 +106,9 @@ function Submission({ submission }: { submission: SubmissionView }) {
         <p className="text-muted-foreground text-xs">
           {submission.submittedAt
             ? `Сдана ${formatDate(submission.submittedAt)}`
-            : "Готовится — клиенту ещё не отправлена"}
+            : isOwner
+              ? "Исполнитель ещё готовит эту сдачу"
+              : "Готовится — вы ещё не сдали её клиенту"}
         </p>
       </div>
 
