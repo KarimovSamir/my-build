@@ -77,6 +77,10 @@ enum NotificationType {
   WORK_DISPUTED
   FILES_UPDATED
   AREA_VERIFIED
+  /// Клиент удалил заказ — узнают компании, чьи предложения по нему были
+  /// в игре (решение пользователя от 5 сентября 2026; в списке ТЗ §3 этого
+  /// значения нет). У такого уведомления orderId всегда null.
+  ORDER_DELETED
 }
 
 /// Статусы платежа. Платежи вне MVP (ТЗ §11) — enum нужен только схеме,
@@ -250,7 +254,10 @@ model Notification {
 
   type    NotificationType
   orderId String?          @db.Uuid
-  order   Order?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  /// SetNull, а не Cascade: уведомление об удалении заказа само себя удаляло бы
+  /// вместе с ним, и компания так и не узнала бы, куда делось её предложение.
+  /// Номер и название заказа остаются в тексте уведомления.
+  order   Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   title  String
   body   String?

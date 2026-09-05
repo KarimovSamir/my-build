@@ -75,6 +75,12 @@ export type FileOwnerType = (typeof FileOwnerType)[keyof typeof FileOwnerType];
  * от 5 сентября 2026): компания, чьё предложение проиграло выбор, уходит
  * в `OfferStatus.NOT_ACCEPTED` — «Не выбрано», а не «Отклонено». Клиент её
  * предложение не отклонял, он выбрал другое.
+ *
+ * `ORDER_DELETED` — снова по нему же (решение пользователя от 5 сентября 2026):
+ * клиент вправе снести заказ, пока работы не начались, и предложение компании
+ * исчезает вместе с ним. Ни «отклонено», ни «не выбрано» этого не описывают —
+ * выбора не было вовсе. У такого уведомления `orderId` всегда `null`: заказа
+ * больше нет, и ссылка вела бы в 404.
  */
 export const NotificationType = {
   OFFER_RECEIVED: 'OFFER_RECEIVED',
@@ -87,6 +93,7 @@ export const NotificationType = {
   WORK_DISPUTED: 'WORK_DISPUTED',
   FILES_UPDATED: 'FILES_UPDATED',
   AREA_VERIFIED: 'AREA_VERIFIED',
+  ORDER_DELETED: 'ORDER_DELETED',
 } as const;
 export type NotificationType =
   (typeof NotificationType)[keyof typeof NotificationType];

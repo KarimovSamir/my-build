@@ -8,11 +8,14 @@
 
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
+  ACTIVE_OFFER_STATUSES,
   DELETABLE_ORDER_STATUSES,
   EXECUTOR_OFFER_STATUSES,
   FileOwnerType,
+  NotificationType,
   OrderStatus,
   canDeleteOrder,
+  notificationTypeLabels,
   type OrderDetail,
   type OrderListItem,
   type Paginated,
@@ -25,7 +28,9 @@ import type { UploadedFileInput } from '../files/file-validation.js';
 import { FilesService } from '../files/files.service.js';
 import type { CreateOrderDto } from './dto/create-order.dto.js';
 import type { ListOrdersQueryDto } from './dto/list-orders.dto.js';
+import { orderRef } from './order-notification.js';
 import { buildSearchConditions } from './order-search.js';
+import { OrderTransitionService, TRANSITION_TX_OPTIONS } from './order-transition.service.js';
 import {
   toOrderDetail,
   toOrderListItem,
@@ -39,6 +44,7 @@ import {
  */
 const EXECUTOR_STATUSES = [...EXECUTOR_OFFER_STATUSES];
 const DELETABLE_STATUSES = [...DELETABLE_ORDER_STATUSES];
+const ACTIVE_OFFER_STATUS_LIST = [...ACTIVE_OFFER_STATUSES];
 
 const ORDER_NOT_DELETABLE = 'Заказ уже в работе — его нельзя удалить. Дождитесь завершения';
 
@@ -69,6 +75,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly files: FilesService,
+    private readonly transitions: OrderTransitionService,
   ) {}
 
   /**
@@ -201,6 +208,11 @@ export class OrdersService {
    * в самом `DELETE`: между чтением заказа и удалением клиент мог принять
    * предложение (Фаза 4), и безусловное удаление снесло бы заказ вместе
    * с начатыми работами.
+   *
+   * Удаление и уведомления компаниям — одна транзакция под блокировкой заказа.
+   * Блокировка тем же порядком, что и в переходах (заказ первым): без неё
+   * компания успела бы отправить предложение между чтением списка адресатов
+   * и удалением, и её предложение исчезло бы молча.
    */
   async remove(orderId: string, status: OrderStatus): Promise<void> {
     if (!canDeleteOrder(status)) {
@@ -209,7 +221,37 @@ export class OrdersService {
 
     const storageKeys = await this.files.listStorageKeys(orderId);
 
-    const { count } = await this.prisma.order.deleteMany({
+    await this.prisma.$transaction(
+      (tx) => this.deleteWithNotices(tx, orderId),
+      TRANSITION_TX_OPTIONS,
+    );
+
+    await this.files.removeStorageObjects(storageKeys);
+  }
+
+  /**
+   * Снести заказ и известить компании, чьи предложения по нему были в игре
+   * (решение пользователя от 5 сентября 2026; ТЗ этого не оговаривает).
+   *
+   * Уведомления пишутся **после** удаления и с `orderId: null`: строка `Offer`
+   * уходит каскадом, заказа больше нет, и внешний ключ не на что указывать.
+   * Номер и название заказа остаются в тексте — по ним компания и понимает,
+   * о чём речь.
+   */
+  private async deleteWithNotices(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+  ): Promise<void> {
+    const order = await this.transitions.lockOrder(tx, orderId);
+
+    // Отозванные и отклонённые предложения сюда не попадают: для такой
+    // компании заказ уже чужой (ТЗ §4.1), и сообщать ей не о чем.
+    const affected = await tx.offer.findMany({
+      where: { orderId, status: { in: ACTIVE_OFFER_STATUS_LIST } },
+      select: { companyId: true },
+    });
+
+    const { count } = await tx.order.deleteMany({
       where: { id: orderId, status: { in: DELETABLE_STATUSES } },
     });
 
@@ -217,6 +259,18 @@ export class OrdersService {
       throw new ConflictException(ORDER_NOT_DELETABLE);
     }
 
-    await this.files.removeStorageObjects(storageKeys);
+    if (affected.length === 0) {
+      return;
+    }
+
+    await tx.notification.createMany({
+      data: affected.map(({ companyId }) => ({
+        userId: companyId,
+        type: NotificationType.ORDER_DELETED,
+        orderId: null,
+        title: notificationTypeLabels[NotificationType.ORDER_DELETED],
+        body: `${orderRef(order)}: клиент удалил заказ, ваше предложение больше не действует`,
+      })),
+    });
   }
 }

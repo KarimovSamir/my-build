@@ -670,3 +670,81 @@ describe('OrderStateMachine — полный цикл заказа', () => {
     ).toBe(OrderStatus.WAITING);
   });
 });
+
+/**
+ * Ревизия подфазы 5.1: у каждого значения `NotificationType` должно быть место,
+ * которое его создаёт. Тип без такого места — это заголовок в интерфейсе,
+ * который никому никогда не приходит, и заметить это по коду нельзя.
+ *
+ * Список ниже — не документация, а вторая половина проверки: если тип начнёт
+ * создаваться и машиной, и своим местом, тест падает, а не молчит.
+ */
+describe('NotificationType — каждый тип кем-то создаётся', () => {
+  /** Типы, которые создаются не переходом статуса. Значение — где именно. */
+  const OUTSIDE_MACHINE: Partial<Record<NotificationType, string>> = {
+    [NotificationType.FILES_UPDATED]: 'OrderWorkflowService.addFiles',
+    [NotificationType.AREA_VERIFIED]: 'OrderWorkflowService.verifyArea',
+    [NotificationType.ORDER_DELETED]: 'OrdersService.remove',
+  };
+
+  /**
+   * Все типы, которые машина создаёт, если обойти таблицу переходов ТЗ §4.
+   *
+   * У принятия предложения разбираются оба случая: с проигравшими и без.
+   * `OFFER_NOT_ACCEPTED` появляется только в первом, и без него тип выглядел
+   * бы забытым.
+   */
+  function emittedByMachine(): Set<NotificationType> {
+    const emitted = new Set<NotificationType>();
+
+    for (const key of Object.keys(ALLOWED)) {
+      const [status, type] = key.split('/') as [OrderStatus, OrderEventType];
+      const base = events[type] as OrderEvent;
+
+      const variants: OrderEvent[] =
+        base.type === OrderEventType.OFFER_ACCEPTED
+          ? [
+              base,
+              {
+                ...base,
+                otherOffers: [
+                  { offerId: RIVAL_OFFER_ID, companyId: RIVAL_COMPANY_ID },
+                ],
+              },
+            ]
+          : [base];
+
+      for (const event of variants) {
+        for (const effect of machine.transition(contextIn(status), event).effects) {
+          if (effect.kind === 'CREATE_NOTIFICATION') emitted.add(effect.type);
+        }
+      }
+    }
+
+    return emitted;
+  }
+
+  it('машина плюс места вне её покрывают весь enum', () => {
+    const emitted = emittedByMachine();
+
+    const orphans = Object.values(NotificationType).filter(
+      (type) => !emitted.has(type) && !(type in OUTSIDE_MACHINE),
+    );
+
+    expect(orphans).toEqual([]);
+  });
+
+  it('у типа вне машины нет второго источника внутри неё', () => {
+    const emitted = emittedByMachine();
+
+    expect([...emitted].filter((type) => type in OUTSIDE_MACHINE)).toEqual([]);
+  });
+
+  it('у каждого типа есть заголовок для интерфейса', () => {
+    const withoutLabel = Object.values(NotificationType).filter(
+      (type) => !notificationTypeLabels[type],
+    );
+
+    expect(withoutLabel).toEqual([]);
+  });
+});

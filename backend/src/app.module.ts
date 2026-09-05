@@ -5,6 +5,7 @@ import { validateEnv } from './config/env.validation.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { FilesModule } from './modules/files/files.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { OffersModule } from './modules/offers/offers.module.js';
 import { OrdersModule } from './modules/orders/orders.module.js';
 import { UsersModule } from './modules/users/users.module.js';
@@ -27,6 +28,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
     FilesModule,
     OrdersModule,
     OffersModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

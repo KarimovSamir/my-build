@@ -103,6 +103,7 @@ export const notificationTypeLabels: Record<NotificationType, string> = {
   WORK_DISPUTED: 'Работа отправлена на доработку',
   FILES_UPDATED: 'Обновлены файлы заказа',
   AREA_VERIFIED: 'Уточнена площадь',
+  ORDER_DELETED: 'Заказ удалён',
 };
 
 /** Номер заказа в том виде, в каком его видит пользователь: `ORD-7829`. */

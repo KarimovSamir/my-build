@@ -2,10 +2,13 @@ import { ConflictException, Logger, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  ACTIVE_OFFER_STATUSES,
   DEFAULT_PAGE_SIZE,
   DELETABLE_ORDER_STATUSES,
   FileOwnerType,
+  NotificationType,
   ObjectType,
+  OfferStatus,
   OrderCategory,
   OrderStatus,
 } from '@mybuild/shared';
@@ -16,6 +19,7 @@ import type { UploadedFileInput } from '../files/file-validation.js';
 import type { FilesService } from '../files/files.service.js';
 import type { CreateOrderDto } from './dto/create-order.dto.js';
 import { ListOrdersQueryDto } from './dto/list-orders.dto.js';
+import type { OrderTransitionService } from './order-transition.service.js';
 import { OrdersService } from './orders.service.js';
 
 /**
@@ -29,6 +33,7 @@ import { OrdersService } from './orders.service.js';
 
 const ORDER_ID = '11111111-1111-4111-8111-111111111111';
 const CLIENT_ID = '22222222-2222-4222-8222-222222222222';
+const COMPANY_ID = '44444444-4444-4444-8444-444444444444';
 
 const dto: CreateOrderDto = {
   title: 'Ремонт квартиры',
@@ -96,12 +101,17 @@ interface FindManyArgs extends WhereArgs {
   take: number;
 }
 
+/** Предложения заказа читаются по своему условию — статусы там от `Offer`. */
+interface OfferWhereArgs {
+  where: { orderId: string; status: { in: OfferStatus[] } };
+}
+
 /**
  * Параметры моков перечислены явно: без них Vitest считает, что вызов идёт
  * без аргументов, и `mock.calls[0][0]` перестаёт существовать для типов.
  */
 function createPrismaStub() {
-  return {
+  const stub = {
     order: {
       create: vi.fn(async (_args: { data: Record<string, unknown> }) => orderRow()),
       findUnique: vi.fn(
@@ -113,7 +123,20 @@ function createPrismaStub() {
       delete: vi.fn(async (_args: WhereArgs) => orderRow()),
       deleteMany: vi.fn(async (_args: WhereArgs) => ({ count: 1 })),
     },
+    offer: {
+      findMany: vi.fn(async (_args: OfferWhereArgs) => [{ companyId: COMPANY_ID }]),
+    },
+    notification: {
+      createMany: vi.fn(async (_args: { data: Record<string, unknown>[] }) => ({
+        count: 1,
+      })),
+    },
+    // Транзакция подставная: она только вызывает переданную функцию, поэтому
+    // порядок обращений внутри неё виден теми же `invocationCallOrder`.
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(stub)),
   };
+
+  return stub;
 }
 
 function createFilesStub() {
@@ -128,13 +151,29 @@ function createFilesStub() {
   };
 }
 
+/**
+ * Из `OrderTransitionService` сервису заказов нужна одна `lockOrder`: удаление
+ * берёт заказ под блокировку тем же порядком, что и переходы.
+ */
+function createTransitionsStub() {
+  return {
+    lockOrder: vi.fn(async (_tx: unknown, _orderId: string) => orderRow()),
+  };
+}
+
 type PrismaStub = ReturnType<typeof createPrismaStub>;
 type FilesStub = ReturnType<typeof createFilesStub>;
+type TransitionsStub = ReturnType<typeof createTransitionsStub>;
 
-function createService(prisma: PrismaStub, files: FilesStub): OrdersService {
+function createService(
+  prisma: PrismaStub,
+  files: FilesStub,
+  transitions: TransitionsStub = createTransitionsStub(),
+): OrdersService {
   return new OrdersService(
     prisma as unknown as PrismaService,
     files as unknown as FilesService,
+    transitions as unknown as OrderTransitionService,
   );
 }
 
@@ -376,5 +415,70 @@ describe('OrdersService.remove', () => {
 
     // Заказ остался жив — его файлы трогать нельзя.
     expect(files.removeStorageObjects).not.toHaveBeenCalled();
+  });
+
+  it('берёт заказ под блокировку раньше, чем читает предложения', async () => {
+    // Тот же порядок, что и в переходах: сначала заказ. Обратный даёт взаимную
+    // блокировку с одновременной отправкой предложения.
+    const transitions = createTransitionsStub();
+
+    await createService(prisma, files, transitions).remove(
+      ORDER_ID,
+      OrderStatus.WAITING,
+    );
+
+    expect(transitions.lockOrder.mock.invocationCallOrder[0]!).toBeLessThan(
+      prisma.offer.findMany.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('уведомляет компании, чьи предложения были в игре', async () => {
+    await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING);
+
+    expect(prisma.offer.findMany.mock.calls[0]![0].where).toEqual({
+      orderId: ORDER_ID,
+      status: { in: [...ACTIVE_OFFER_STATUSES] },
+    });
+
+    const [notification] = prisma.notification.createMany.mock.calls[0]![0].data;
+    expect(notification).toMatchObject({
+      userId: COMPANY_ID,
+      type: NotificationType.ORDER_DELETED,
+      // Заказа больше нет: внешнему ключу не на что указывать, а номер
+      // и название остаются в тексте.
+      orderId: null,
+    });
+    expect(String(notification!.body)).toContain('ORD-42');
+  });
+
+  it('не уведомляет компании, для которых заказ уже чужой', async () => {
+    expect([...ACTIVE_OFFER_STATUSES]).not.toContain(OfferStatus.WITHDRAWN);
+    expect([...ACTIVE_OFFER_STATUSES]).not.toContain(OfferStatus.REJECTED);
+
+    prisma.offer.findMany.mockResolvedValueOnce([]);
+
+    await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING);
+
+    expect(prisma.notification.createMany).not.toHaveBeenCalled();
+  });
+
+  it('пишет уведомления после удаления заказа, а не до', async () => {
+    // Наоборот нельзя: внешний ключ Notification.orderId ещё указывал бы
+    // на живой заказ, и SetNull обнулил бы его тем же удалением.
+    await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING);
+
+    expect(prisma.order.deleteMany.mock.invocationCallOrder[0]!).toBeLessThan(
+      prisma.notification.createMany.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('не уведомляет никого, если удаление не состоялось', async () => {
+    prisma.order.deleteMany.mockResolvedValueOnce({ count: 0 });
+
+    await expect(
+      createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING),
+    ).rejects.toThrow(ConflictException);
+
+    expect(prisma.notification.createMany).not.toHaveBeenCalled();
   });
 });

@@ -174,9 +174,28 @@ export interface CompanyOfferItem extends OfferDto {
 export interface NotificationDto {
   id: string;
   type: NotificationType;
+  /**
+   * Заказ, к которому ведёт уведомление. `null` — вести некуда: так приходит
+   * `ORDER_DELETED`, и так же придёт любое будущее уведомление не про заказ.
+   * Раздел «Уведомления» обязан показывать такую строку без ссылки.
+   */
   orderId: string | null;
   title: string;
   body: string | null;
   isRead: boolean;
   createdAt: IsoDateString;
+}
+
+/** Ответ `GET /notifications/unread-count` — счётчик для колокольчика (ТЗ §5). */
+export interface UnreadCount {
+  count: number;
+}
+
+/**
+ * Ответ `POST /notifications/read-all`: сколько уведомлений эта кнопка
+ * действительно пометила. Повторное нажатие даёт `0` — это не ошибка,
+ * а честный ответ, и интерфейсу есть что сказать пользователю.
+ */
+export interface MarkedRead {
+  marked: number;
 }
