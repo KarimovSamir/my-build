@@ -1,18 +1,17 @@
-import { Bell, MapPin } from "lucide-react";
-import Link from "next/link";
+import { MapPin } from "lucide-react";
 
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { CurrentUser } from "@/lib/session";
 
 /**
  * Шапка кабинета: крошки слева, колокольчик и город/страна справа (ТЗ §7).
  *
- * Счётчик непрочитанных появится в Фазе 5 вместе с WebSocket — пока точка
- * над колокольчиком не рисуется, чтобы не показывать выдуманные данные.
+ * Число непрочитанных колокольчик берёт из `UnreadProvider` — оно живёт
+ * в каркасе и меняется по событию `notification:created` (ТЗ §8).
  */
 export function AppHeader({ user }: { user: CurrentUser }) {
   const location = [user.city, user.country].filter(Boolean).join(", ");
@@ -27,11 +26,7 @@ export function AppHeader({ user }: { user: CurrentUser }) {
 
       <ThemeToggle />
 
-      <Button variant="ghost" size="icon" asChild aria-label="Уведомления">
-        <Link href="/notifications">
-          <Bell className="size-5" />
-        </Link>
-      </Button>
+      <NotificationBell />
 
       {location ? (
         <>

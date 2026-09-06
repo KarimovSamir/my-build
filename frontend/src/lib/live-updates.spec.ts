@@ -6,6 +6,7 @@ import {
   BURST_DELAY_MS,
   COMPANY_FEED_EVENTS,
   COMPANY_OFFERS_EVENTS,
+  NOTIFICATIONS_EVENTS,
   ORDER_DETAIL_EVENTS,
   ORDERS_LIST_EVENTS,
   createBurst,
@@ -18,6 +19,7 @@ describe("состав событий", () => {
     "заказы клиента": ORDERS_LIST_EVENTS,
     "мои предложения": COMPANY_OFFERS_EVENTS,
     "лента компании": COMPANY_FEED_EVENTS,
+    "уведомления и колокольчик": NOTIFICATIONS_EVENTS,
   };
 
   /**
@@ -50,6 +52,15 @@ describe("состав событий", () => {
    */
   it("карточка заказа не слушает уведомления", () => {
     expect(ORDER_DETAIL_EVENTS).not.toContain(socketEvents.notificationCreated);
+  });
+
+  /**
+   * Обратное правило для колокольчика: событие про заказ уведомления
+   * не означает (движение чужого предложения приходит в комнату заказа,
+   * а записи в БД не создаёт), и счётчик от него дёргался бы впустую.
+   */
+  it("счётчик непрочитанных слушает только уведомления", () => {
+    expect(NOTIFICATIONS_EVENTS).toEqual([socketEvents.notificationCreated]);
   });
 });
 
