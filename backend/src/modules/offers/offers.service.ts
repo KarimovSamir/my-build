@@ -27,6 +27,7 @@ import {
   TRANSITION_TX_OPTIONS,
 } from '../orders/order-transition.service.js';
 import { toOfferDto, toOrderListItem } from '../orders/order-view.js';
+import { RealtimeService } from '../realtime/realtime.service.js';
 import { buildAvailableOrdersWhere } from './available-orders.js';
 import type { CreateOfferDto } from './dto/create-offer.dto.js';
 import type { ListCompanyOffersQueryDto } from './dto/list-company-offers.dto.js';
@@ -51,6 +52,7 @@ export class OffersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly transitions: OrderTransitionService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /**
@@ -75,33 +77,45 @@ export class OffersService {
       comment: dto.comment ?? null,
     };
 
-    return this.prisma.$transaction(async (tx) => {
-      const order = await this.transitions.lockOrder(tx, dto.orderId);
+    const { offer, applied, offerExisted } = await this.prisma.$transaction(
+      async (tx) => {
+        const order = await this.transitions.lockOrder(tx, dto.orderId);
 
-      // Статус читается до записи: upsert перепишет его в `SENT`, и проверка
-      // предусловия в машине, узнай она статус после, всегда видела бы `SENT`
-      // и ничего бы не значила.
-      const existing = await tx.offer.findUnique({ where: key, select: { status: true } });
+        // Статус читается до записи: upsert перепишет его в `SENT`, и проверка
+        // предусловия в машине, узнай она статус после, всегда видела бы `SENT`
+        // и ничего бы не значила.
+        const existing = await tx.offer.findUnique({
+          where: key,
+          select: { status: true },
+        });
 
-      const offer = await tx.offer.upsert({
-        where: key,
-        create: { orderId: order.id, companyId, ...data },
-        update: data,
-        include: OFFER_INCLUDE,
-      });
+        const created = await tx.offer.upsert({
+          where: key,
+          create: { orderId: order.id, companyId, ...data },
+          update: data,
+          include: OFFER_INCLUDE,
+        });
 
-      await this.transitions.apply(
-        {
-          type: OrderEventType.OFFER_SUBMITTED,
-          orderId: order.id,
-          offerId: offer.id,
-          offerStatusBefore: existing?.status ?? null,
-        },
-        tx,
-      );
+        const transition = await this.transitions.apply(
+          {
+            type: OrderEventType.OFFER_SUBMITTED,
+            orderId: order.id,
+            offerId: created.id,
+            offerStatusBefore: existing?.status ?? null,
+          },
+          tx,
+        );
 
-      return toOfferDto(offer);
-    }, TRANSITION_TX_OPTIONS);
+        return { offer: created, applied: transition, offerExisted: existing !== null };
+      },
+      TRANSITION_TX_OPTIONS,
+    );
+
+    // Только после коммита: `offer:created` на транзакцию, которая откатилась,
+    // заставил бы клиента искать предложение, которого нет.
+    this.realtime.transitionApplied(applied, offerExisted);
+
+    return toOfferDto(offer);
   }
 
   /** Компания отзывает своё предложение (ТЗ §5). */
@@ -129,7 +143,13 @@ export class OffersService {
   ): Promise<OfferDto> {
     const offer = await this.findOffer(offerId, actor);
 
-    await this.transitions.apply({ type: event, orderId: offer.orderId, offerId });
+    const applied = await this.transitions.apply({
+      type: event,
+      orderId: offer.orderId,
+      offerId,
+    });
+
+    this.realtime.transitionApplied(applied);
 
     const updated = await this.prisma.offer.findUnique({
       where: { id: offerId },

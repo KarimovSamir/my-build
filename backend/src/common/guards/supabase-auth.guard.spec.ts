@@ -26,6 +26,7 @@ function contextFor(route: RouteName, request: Partial<RequestWithUser>) {
   return {
     request,
     context: {
+      getType: () => 'http',
       getHandler: () => TestRoutes.prototype[route],
       getClass: () => TestRoutes,
       switchToHttp: () => ({ getRequest: () => request }),
@@ -111,6 +112,21 @@ describe('SupabaseAuthGuard', () => {
 
   it('не проверяет подтверждение email на публичном маршруте', async () => {
     const { context } = contextFor('open', { headers: {} });
+
+    await expect(guardWith(failIfCalled).canActivate(context)).resolves.toBe(true);
+  });
+
+  it('не трогает сообщения WebSocket: они авторизованы в handshake', async () => {
+    // Guard глобальный и попадает на обработчики шлюза. Запроса там нет,
+    // и попытка прочитать заголовки роняла бы каждое сообщение сокета.
+    const context = {
+      getType: () => 'ws',
+      getHandler: () => TestRoutes.prototype.protected_,
+      getClass: () => TestRoutes,
+      switchToHttp: () => {
+        throw new Error('HTTP-контекста у сокета нет');
+      },
+    } as unknown as ExecutionContext;
 
     await expect(guardWith(failIfCalled).canActivate(context)).resolves.toBe(true);
   });

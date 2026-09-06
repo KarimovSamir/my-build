@@ -32,6 +32,15 @@ export class SupabaseAuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // Guard глобальный, поэтому попадает и на обработчики сообщений
+    // WebSocket, а там нет ни запроса, ни заголовков: `switchToHttp()`
+    // вернул бы сокет, и чтение `headers.authorization` роняло бы обработчик.
+    // Сокет авторизуется один раз в handshake (`OrderGateway`, ТЗ §8) —
+    // проверять токен на каждом сообщении незачем и нечем.
+    if (context.getType() === 'ws') {
+      return true;
+    }
+
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),

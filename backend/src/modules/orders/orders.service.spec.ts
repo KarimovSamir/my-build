@@ -19,6 +19,7 @@ import type { UploadedFileInput } from '../files/file-validation.js';
 import type { FilesService } from '../files/files.service.js';
 import type { CreateOrderDto } from './dto/create-order.dto.js';
 import { ListOrdersQueryDto } from './dto/list-orders.dto.js';
+import type { RealtimeService } from '../realtime/realtime.service.js';
 import type { OrderTransitionService } from './order-transition.service.js';
 import { OrdersService } from './orders.service.js';
 
@@ -127,9 +128,9 @@ function createPrismaStub() {
       findMany: vi.fn(async (_args: OfferWhereArgs) => [{ companyId: COMPANY_ID }]),
     },
     notification: {
-      createMany: vi.fn(async (_args: { data: Record<string, unknown>[] }) => ({
-        count: 1,
-      })),
+      createManyAndReturn: vi.fn(async (_args: { data: Record<string, unknown>[] }) =>
+        _args.data.map((row, index) => ({ id: `notification-${index}`, ...row })),
+      ),
     },
     // Транзакция подставная: она только вызывает переданную функцию, поэтому
     // порядок обращений внутри неё виден теми же `invocationCallOrder`.
@@ -165,15 +166,30 @@ type PrismaStub = ReturnType<typeof createPrismaStub>;
 type FilesStub = ReturnType<typeof createFilesStub>;
 type TransitionsStub = ReturnType<typeof createTransitionsStub>;
 
+/**
+ * Рассылка событий подменяется целиком: здесь проверяется, что сервис её
+ * вызывает и с чем, а адресация комнат — дело `realtime-events.spec.ts`.
+ */
+function createRealtimeStub() {
+  return {
+    orderCreated: vi.fn((_orderId: string) => undefined),
+    notificationsCreated: vi.fn((_rows: { userId: string }[]) => undefined),
+  };
+}
+
+type RealtimeStub = ReturnType<typeof createRealtimeStub>;
+
 function createService(
   prisma: PrismaStub,
   files: FilesStub,
   transitions: TransitionsStub = createTransitionsStub(),
+  realtime: RealtimeStub = createRealtimeStub(),
 ): OrdersService {
   return new OrdersService(
     prisma as unknown as PrismaService,
     files as unknown as FilesService,
     transitions as unknown as OrderTransitionService,
+    realtime as unknown as RealtimeService,
   );
 }
 
@@ -232,6 +248,38 @@ describe('OrdersService.create', () => {
     ).rejects.toThrow('хранилище недоступно');
 
     expect(prisma.order.delete).toHaveBeenCalledWith({ where: { id: ORDER_ID } });
+  });
+
+  it('шлёт `order:created` в ленту компаний после создания', async () => {
+    const realtime = createRealtimeStub();
+
+    await createService(prisma, files, createTransitionsStub(), realtime).create(
+      CLIENT_ID,
+      dto,
+      [upload],
+    );
+
+    expect(realtime.orderCreated).toHaveBeenCalledWith(ORDER_ID);
+    // После файлов, а не до: заказ с неприложенными файлами компаниям
+    // показывать нечего, а откат снёс бы его целиком.
+    expect(files.attachFiles.mock.invocationCallOrder[0]!).toBeLessThan(
+      realtime.orderCreated.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('не объявляет заказ, если создание сорвалось', async () => {
+    const realtime = createRealtimeStub();
+    files.attachFiles.mockRejectedValueOnce(new Error('хранилище недоступно'));
+
+    await expect(
+      createService(prisma, files, createTransitionsStub(), realtime).create(
+        CLIENT_ID,
+        dto,
+        [upload],
+      ),
+    ).rejects.toThrow('хранилище недоступно');
+
+    expect(realtime.orderCreated).not.toHaveBeenCalled();
   });
 
   it('не подменяет причину отказа ошибкой отката', async () => {
@@ -440,7 +488,7 @@ describe('OrdersService.remove', () => {
       status: { in: [...ACTIVE_OFFER_STATUSES] },
     });
 
-    const [notification] = prisma.notification.createMany.mock.calls[0]![0].data;
+    const [notification] = prisma.notification.createManyAndReturn.mock.calls[0]![0].data;
     expect(notification).toMatchObject({
       userId: COMPANY_ID,
       type: NotificationType.ORDER_DELETED,
@@ -459,7 +507,7 @@ describe('OrdersService.remove', () => {
 
     await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING);
 
-    expect(prisma.notification.createMany).not.toHaveBeenCalled();
+    expect(prisma.notification.createManyAndReturn).not.toHaveBeenCalled();
   });
 
   it('пишет уведомления после удаления заказа, а не до', async () => {
@@ -468,7 +516,7 @@ describe('OrdersService.remove', () => {
     await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING);
 
     expect(prisma.order.deleteMany.mock.invocationCallOrder[0]!).toBeLessThan(
-      prisma.notification.createMany.mock.invocationCallOrder[0]!,
+      prisma.notification.createManyAndReturn.mock.invocationCallOrder[0]!,
     );
   });
 
@@ -479,6 +527,35 @@ describe('OrdersService.remove', () => {
       createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING),
     ).rejects.toThrow(ConflictException);
 
-    expect(prisma.notification.createMany).not.toHaveBeenCalled();
+    expect(prisma.notification.createManyAndReturn).not.toHaveBeenCalled();
+  });
+
+  it('шлёт `notification:created` теми же строками, что записал', async () => {
+    const realtime = createRealtimeStub();
+
+    await createService(prisma, files, createTransitionsStub(), realtime).remove(
+      ORDER_ID,
+      OrderStatus.WAITING,
+    );
+
+    expect(realtime.notificationsCreated.mock.calls[0]![0]).toMatchObject([
+      { userId: COMPANY_ID },
+    ]);
+  });
+
+  it('не рассылает событий, если удаление не состоялось', async () => {
+    // Рассылка идёт после коммита именно поэтому: изнутри транзакции событие
+    // ушло бы и при откате, и компания получила бы уведомление о живом заказе.
+    const realtime = createRealtimeStub();
+    prisma.order.deleteMany.mockResolvedValueOnce({ count: 0 });
+
+    await expect(
+      createService(prisma, files, createTransitionsStub(), realtime).remove(
+        ORDER_ID,
+        OrderStatus.WAITING,
+      ),
+    ).rejects.toThrow(ConflictException);
+
+    expect(realtime.notificationsCreated).not.toHaveBeenCalled();
   });
 });

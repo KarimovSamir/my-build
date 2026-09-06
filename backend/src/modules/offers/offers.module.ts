@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
 import { OrdersModule } from '../orders/orders.module.js';
+import { RealtimeModule } from '../realtime/realtime.module.js';
 import { CompanyController } from './company.controller.js';
 import { OffersController } from './offers.controller.js';
 import { OffersService } from './offers.service.js';
@@ -16,7 +17,7 @@ import { OffersService } from './offers.service.js';
  * то есть счётчик частоты общий для всех маршрутов предложений.
  */
 @Module({
-  imports: [OrdersModule],
+  imports: [OrdersModule, RealtimeModule],
   controllers: [OffersController, CompanyController],
   providers: [OffersService, ThrottleGuard],
 })

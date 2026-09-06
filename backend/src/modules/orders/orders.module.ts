@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { OwnershipGuard } from '../../common/guards/ownership.guard.js';
 import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
 import { FilesModule } from '../files/files.module.js';
+import { RealtimeModule } from '../realtime/realtime.module.js';
 import { OrderStateMachine } from './order-state-machine.js';
 import { OrderTransitionService } from './order-transition.service.js';
 import { OrderWorkflowController } from './order-workflow.controller.js';
@@ -20,7 +21,7 @@ import { OrdersService } from './orders.service.js';
  * общий для всех маршрутов контроллера, как и должно быть.
  */
 @Module({
-  imports: [FilesModule],
+  imports: [FilesModule, RealtimeModule],
   controllers: [OrdersController, OrderWorkflowController],
   providers: [
     OrderStateMachine,

@@ -6,6 +6,7 @@ import { FileOwnerType, NotificationType, OrderStatus } from '@mybuild/shared';
 import type { PrismaService } from '../../prisma/prisma.service.js';
 import type { UploadedFileInput } from '../files/file-validation.js';
 import type { FilesService } from '../files/files.service.js';
+import type { RealtimeService } from '../realtime/realtime.service.js';
 import { OrderEventType } from './order-state-machine.js';
 import type { OrderTransitionService } from './order-transition.service.js';
 import { OrderWorkflowService } from './order-workflow.service.js';
@@ -133,14 +134,27 @@ function createStubs(options: StubOptions = {}) {
     })),
   };
 
+  // Рассылка подменяется целиком: кому какое событие адресовано, проверяет
+  // `realtime-events.spec.ts`, здесь важно только то, что её вызвали.
+  const realtime = {
+    transitionApplied: vi.fn((_applied: unknown) => undefined),
+    orderFilesUpdated: vi.fn(
+      (_order: { id: string; clientId: string }, _rows: unknown[]) => undefined,
+    ),
+    orderAreaVerified: vi.fn(
+      (_order: { id: string; clientId: string }, _rows: unknown[]) => undefined,
+    ),
+  };
+
   const service = new OrderWorkflowService(
     prisma as unknown as PrismaService,
     transitions as unknown as OrderTransitionService,
     files as unknown as FilesService,
     orders as unknown as OrdersService,
+    realtime as unknown as RealtimeService,
   );
 
-  return { service, prisma, transitions, files, orders, trace };
+  return { service, prisma, transitions, files, orders, realtime, trace };
 }
 
 /** Аргументы `addFiles` с разумными значениями по умолчанию. */

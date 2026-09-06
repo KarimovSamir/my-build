@@ -26,6 +26,7 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import type { UploadedFileInput } from '../files/file-validation.js';
 import { FilesService } from '../files/files.service.js';
+import { RealtimeService } from '../realtime/realtime.service.js';
 import { orderRef, type OrderRef } from './order-notification.js';
 import { OrderEventType } from './order-state-machine.js';
 import {
@@ -71,6 +72,7 @@ export class OrderWorkflowService {
     private readonly transitions: OrderTransitionService,
     private readonly files: FilesService,
     private readonly orders: OrdersService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /**
@@ -82,11 +84,13 @@ export class OrderWorkflowService {
     offerId: string,
     clientId: string,
   ): Promise<OrderDetail> {
-    await this.transitions.apply({
+    const applied = await this.transitions.apply({
       type: OrderEventType.OFFER_ACCEPTED,
       orderId,
       offerId,
     });
+
+    this.realtime.transitionApplied(applied);
 
     return this.orders.getDetail(orderId, { id: clientId });
   }
@@ -97,11 +101,13 @@ export class OrderWorkflowService {
     clientId: string,
     comment?: string,
   ): Promise<OrderDetail> {
-    await this.transitions.apply({
+    const applied = await this.transitions.apply({
       type: OrderEventType.WORK_CONFIRMED,
       orderId,
       completionComment: comment,
     });
+
+    this.realtime.transitionApplied(applied);
 
     return this.orders.getDetail(orderId, { id: clientId });
   }
@@ -112,11 +118,13 @@ export class OrderWorkflowService {
     clientId: string,
     correctionComment: string,
   ): Promise<OrderDetail> {
-    await this.transitions.apply({
+    const applied = await this.transitions.apply({
       type: OrderEventType.WORK_DISPUTED,
       orderId,
       correctionComment,
     });
+
+    this.realtime.transitionApplied(applied);
 
     return this.orders.getDetail(orderId, { id: clientId });
   }
@@ -133,14 +141,14 @@ export class OrderWorkflowService {
    * перестала бы совпадать с файлами. Это правило ТЗ прямо не задаёт.
    */
   async submitWork(orderId: string, companyId: string): Promise<OrderDetail> {
-    await this.prisma.$transaction(async (tx) => {
+    const applied = await this.prisma.$transaction(async (tx) => {
       await this.transitions.lockOrder(tx, orderId);
 
       const open = await this.findOpenSubmission(tx, orderId);
 
       // Переход первым: если заказ вообще не в том статусе, ответить надо
       // именно этим, а не «нечего сдавать».
-      await this.transitions.apply(
+      const transition = await this.transitions.apply(
         { type: OrderEventType.WORK_SUBMITTED, orderId },
         tx,
       );
@@ -165,7 +173,11 @@ export class OrderWorkflowService {
         where: { id: open.id },
         data: { submittedAt: new Date() },
       });
+
+      return transition;
     }, TRANSITION_TX_OPTIONS);
+
+    this.realtime.transitionApplied(applied);
 
     return this.orders.getDetail(orderId, { id: companyId });
   }
@@ -209,11 +221,11 @@ export class OrderWorkflowService {
       guard: (tx) => this.assertSubmissionOpen(tx, orderId, submission.id),
     });
 
-    // Уведомление — только если в заказе действительно что-то появилось:
-    // повторная загрузка тех же файлов отсеивается дедупликацией (ТЗ §4.1),
-    // и сообщать клиенту об изменении, которого не было, незачем.
+    // Уведомление и событие — только если в заказе действительно что-то
+    // появилось: повторная загрузка тех же файлов отсеивается дедупликацией
+    // (ТЗ §4.1), и сообщать клиенту об изменении, которого не было, незачем.
     if (added.length > 0) {
-      await this.prisma.notification.create({
+      const notification = await this.prisma.notification.create({
         data: {
           // Адресат читается под блокировкой вместе с заказом, а не берётся
           // из снимка guard'а: у заказа один владелец, и это его строка.
@@ -224,6 +236,11 @@ export class OrderWorkflowService {
           body: `${orderRef(submission.order)}: исполнитель добавил файлы (сдача №${submission.round})`,
         },
       });
+
+      this.realtime.orderFilesUpdated(
+        { id: orderId, clientId: submission.order.clientId },
+        [notification],
+      );
     }
 
     return this.orders.getDetail(orderId, { id: companyId });
@@ -249,7 +266,7 @@ export class OrderWorkflowService {
       throw new ConflictException(AREA_FORBIDDEN);
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    const verified = await this.prisma.$transaction(async (tx) => {
       const order = await this.transitions.lockOrder(tx, orderId);
 
       // Между снимком guard'а и этой строкой клиент мог принять работу.
@@ -258,7 +275,7 @@ export class OrderWorkflowService {
       }
 
       if (order.verifiedSquareMeters === verifiedSquareMeters) {
-        return;
+        return null;
       }
 
       await tx.order.update({
@@ -266,7 +283,7 @@ export class OrderWorkflowService {
         data: { verifiedSquareMeters },
       });
 
-      await tx.notification.create({
+      const notification = await tx.notification.create({
         data: {
           userId: order.clientId,
           type: NotificationType.AREA_VERIFIED,
@@ -275,7 +292,16 @@ export class OrderWorkflowService {
           body: `${orderRef(order)}: исполнитель уточнил площадь — ${verifiedSquareMeters} м²`,
         },
       });
+
+      return { clientId: order.clientId, notification };
     }, TRANSITION_TX_OPTIONS);
+
+    // Того же числа не было события — не будет и рассылки (ТЗ §8).
+    if (verified) {
+      this.realtime.orderAreaVerified({ id: orderId, clientId: verified.clientId }, [
+        verified.notification,
+      ]);
+    }
 
     return this.orders.getDetail(orderId, { id: companyId });
   }

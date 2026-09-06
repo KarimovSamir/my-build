@@ -26,6 +26,8 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import type { UploadedFileInput } from '../files/file-validation.js';
 import { FilesService } from '../files/files.service.js';
+import type { NotificationTarget } from '../realtime/realtime-events.js';
+import { RealtimeService } from '../realtime/realtime.service.js';
 import type { CreateOrderDto } from './dto/create-order.dto.js';
 import type { ListOrdersQueryDto } from './dto/list-orders.dto.js';
 import { orderRef } from './order-notification.js';
@@ -76,6 +78,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly files: FilesService,
     private readonly transitions: OrderTransitionService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /**
@@ -134,6 +137,10 @@ export class OrdersService {
         throw error;
       }
     }
+
+    // Заказ появляется сразу в `WAITING`, то есть уже виден в ленте компаний
+    // (ТЗ §8). Записи в БД это событие не создаёт — оно broadcast.
+    this.realtime.orderCreated(order.id);
 
     return this.getDetail(order.id, { id: clientId });
   }
@@ -221,10 +228,14 @@ export class OrdersService {
 
     const storageKeys = await this.files.listStorageKeys(orderId);
 
-    await this.prisma.$transaction(
+    const notifications = await this.prisma.$transaction(
       (tx) => this.deleteWithNotices(tx, orderId),
       TRANSITION_TX_OPTIONS,
     );
+
+    // После коммита: событие, отправленное изнутри транзакции, ушло бы
+    // и в случае отката. Событий про сам заказ здесь нет — его больше нет.
+    this.realtime.notificationsCreated(notifications);
 
     await this.files.removeStorageObjects(storageKeys);
   }
@@ -241,7 +252,7 @@ export class OrdersService {
   private async deleteWithNotices(
     tx: Prisma.TransactionClient,
     orderId: string,
-  ): Promise<void> {
+  ): Promise<NotificationTarget[]> {
     const order = await this.transitions.lockOrder(tx, orderId);
 
     // Отозванные и отклонённые предложения сюда не попадают: для такой
@@ -260,10 +271,12 @@ export class OrdersService {
     }
 
     if (affected.length === 0) {
-      return;
+      return [];
     }
 
-    await tx.notification.createMany({
+    // `createManyAndReturn`, а не `createMany`: этими же строками уходит
+    // `notification:created` в комнату каждой компании (ТЗ §8).
+    return tx.notification.createManyAndReturn({
       data: affected.map(({ companyId }) => ({
         userId: companyId,
         type: NotificationType.ORDER_DELETED,

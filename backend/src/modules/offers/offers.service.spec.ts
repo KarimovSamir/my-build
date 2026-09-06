@@ -10,6 +10,7 @@ import type {
   OrderTransitionCommand,
   OrderTransitionService,
 } from '../orders/order-transition.service.js';
+import type { RealtimeService } from '../realtime/realtime.service.js';
 import { OffersService } from './offers.service.js';
 
 /**
@@ -89,12 +90,19 @@ function createStubs(options: { existing?: OfferStatus | null } = {}) {
     }),
   };
 
+  // Рассылка подменяется целиком: адресация комнат проверяется своим набором
+  // (`realtime-events.spec.ts`), здесь важно только то, что её вызвали.
+  const realtime = {
+    transitionApplied: vi.fn((_applied: unknown, _offerExisted?: boolean) => undefined),
+  };
+
   const service = new OffersService(
     prisma as unknown as PrismaService,
     transitions as unknown as OrderTransitionService,
+    realtime as unknown as RealtimeService,
   );
 
-  return { service, prisma, transitions, trace };
+  return { service, prisma, transitions, realtime, trace };
 }
 
 describe('OffersService.submit', () => {
@@ -156,6 +164,42 @@ describe('OffersService.submit', () => {
     expect(transitions.apply.mock.calls[0]![0]).toMatchObject({
       offerStatusBefore: null,
     });
+  });
+
+  it('различает `offer:created` и `offer:updated` по строке до запроса', async () => {
+    // Отправка предложения — upsert (ТЗ §4.1), и после записи в базе всегда
+    // `SENT`: было предложение или нет, знает только вызывающий код.
+    const first = createStubs({ existing: null });
+    const again = createStubs({ existing: OfferStatus.WITHDRAWN });
+
+    const dto = {
+      orderId: ORDER_ID,
+      proposedPrice: '150000.50',
+      proposedDeadline: DEADLINE,
+    };
+
+    await first.service.submit(COMPANY_ID, dto);
+    await again.service.submit(COMPANY_ID, dto);
+
+    expect(first.realtime.transitionApplied.mock.calls[0]![1]).toBe(false);
+    expect(again.realtime.transitionApplied.mock.calls[0]![1]).toBe(true);
+  });
+
+  it('не рассылает событий, если переход не состоялся', async () => {
+    // Рассылка идёт после коммита именно поэтому: отправь мы событие изнутри
+    // транзакции — клиент пошёл бы искать предложение, которого нет.
+    const { service, transitions, realtime } = createStubs();
+    transitions.apply.mockRejectedValueOnce(new Error('переход невозможен'));
+
+    await expect(
+      service.submit(COMPANY_ID, {
+        orderId: ORDER_ID,
+        proposedPrice: '150000.50',
+        proposedDeadline: DEADLINE,
+      }),
+    ).rejects.toThrow('переход невозможен');
+
+    expect(realtime.transitionApplied).not.toHaveBeenCalled();
   });
 
   it('отдаёт предложение в виде контракта API: суммы и даты строками', async () => {
@@ -242,6 +286,7 @@ describe('OffersService.listOwnOffers', () => {
     const service = new OffersService(
       prisma as unknown as PrismaService,
       {} as OrderTransitionService,
+      {} as RealtimeService,
     );
 
     await service.listOwnOffers(COMPANY_ID, { page: 1, pageSize: 20 });
