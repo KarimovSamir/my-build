@@ -4,8 +4,10 @@ import { CardListSkeleton } from "@/components/list-parts";
 import { ListSearch } from "@/components/list-search";
 import { AvailableOrdersList } from "@/components/offers/available-orders-list";
 import { PageHeader } from "@/components/page-shell";
+import { LiveRefresh } from "@/components/realtime/live-refresh";
 import { Card, CardContent } from "@/components/ui/card";
 import { availableFilterKey, parseAvailableFilter } from "@/lib/available-filter";
+import { COMPANY_FEED_EVENTS } from "@/lib/live-updates";
 
 export const metadata = { title: "Доступные заказы" };
 
@@ -23,6 +25,10 @@ export default async function AvailableOrdersPage({
 
   return (
     <>
+      {/* Подписка на комнату `company-feed`: новый заказ появляется в ленте
+          без перезагрузки (ТЗ §8). */}
+      <LiveRefresh events={COMPANY_FEED_EVENTS} feed />
+
       <PageHeader
         title="Доступные заказы"
         description="Заказы, которые ищут исполнителя. Предложите цену и срок — клиент выберет из предложений"

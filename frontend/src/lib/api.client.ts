@@ -13,10 +13,19 @@ import { getSupabaseBrowserClient } from "./supabase/client";
  * процесс Next.js.
  */
 async function browserFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  // `getSession` отдаёт уже обновлённый токен: SDK следит за сроком сам.
+  return apiFetch<T>(path, { ...options, token: await getAccessToken() });
+}
+
+/**
+ * Access-токен текущей сессии. Отдельной функцией, потому что нужен не только
+ * запросам: тем же токеном авторизуется сокет (`lib/socket.ts`, ТЗ §8).
+ *
+ * `getSession` отдаёт уже обновлённый токен: SDK следит за сроком сам.
+ */
+export async function getAccessToken(): Promise<string | null> {
   const { data } = await getSupabaseBrowserClient().auth.getSession();
 
-  return apiFetch<T>(path, { ...options, token: data.session?.access_token ?? null });
+  return data.session?.access_token ?? null;
 }
 
 export const browserApi = {

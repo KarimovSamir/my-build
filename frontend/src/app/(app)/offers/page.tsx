@@ -5,8 +5,10 @@ import { offerStatusLabels } from "@/lib/types";
 import { CardListSkeleton } from "@/components/list-parts";
 import { CompanyOffersList } from "@/components/offers/company-offers-list";
 import { PageHeader } from "@/components/page-shell";
+import { LiveRefresh } from "@/components/realtime/live-refresh";
 import { StatusTabs } from "@/components/status-tabs";
 import { Card, CardContent } from "@/components/ui/card";
+import { COMPANY_OFFERS_EVENTS } from "@/lib/live-updates";
 import {
   companyOffersFilterKey,
   companyOffersHref,
@@ -22,6 +24,10 @@ export default async function OffersPage({ searchParams }: PageProps<"/offers">)
 
   return (
     <>
+      {/* Решение клиента по предложению приходит компании в личную комнату
+          (ТЗ §8) — список статусов обновляется сам. */}
+      <LiveRefresh events={COMPANY_OFFERS_EVENTS} />
+
       <PageHeader
         title="Мои предложения"
         description="Отправленные предложения и то, что с ними стало"

@@ -1,5 +1,6 @@
 import { AppHeader } from "@/components/layout/app-header";
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { RealtimeProvider } from "@/components/realtime/realtime-provider";
 import { getCurrentUser } from "@/lib/session.server";
 
 /**
@@ -9,6 +10,10 @@ import { getCurrentUser } from "@/lib/session.server";
  * не могут объявлять одинаковые пути, а разделы `/orders/[id]`, `/documents`,
  * `/notifications` и `/settings` общие для клиента и компании. Различия ролей
  * живут в составе меню (`lib/navigation.ts`).
+ *
+ * Подключение к WebSocket-шлюзу открывается здесь и живёт, пока открыт
+ * кабинет (ТЗ §8): переходы между страницами меняют подписку на комнаты,
+ * а не само соединение.
  */
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   // Без сессии `getCurrentUser` уводит на вход. Это удобство, а не защита:
@@ -16,15 +21,17 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const user = await getCurrentUser();
 
   return (
-    <div className="flex min-h-screen">
-      <AppSidebar user={user} />
+    <RealtimeProvider>
+      <div className="flex min-h-screen">
+        <AppSidebar user={user} />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <AppHeader user={user} />
-        <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">{children}</div>
-        </main>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <AppHeader user={user} />
+          <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">
+            <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">{children}</div>
+          </main>
+        </div>
       </div>
-    </div>
+    </RealtimeProvider>
   );
 }

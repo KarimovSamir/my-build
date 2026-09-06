@@ -1,12 +1,12 @@
 "use client";
 
 import { Check, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
-import type { OfferDto } from "@/lib/types";
+import type { OfferDto, OrderDetail } from "@/lib/types";
 
+import { useOrderSync } from "@/components/orders/order-live";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -47,8 +47,9 @@ export function AcceptOfferDialog({
 }) {
   return (
     <OfferDecision
+      // Принятие возвращает заказ целиком — карточка перерисовывается им сразу.
       request={() =>
-        browserApi.post(`/orders/${orderId}/accept-offer/${offer.id}`)
+        browserApi.post<OrderDetail>(`/orders/${orderId}/accept-offer/${offer.id}`)
       }
       trigger={
         <Button>
@@ -80,7 +81,12 @@ export function AcceptOfferDialog({
 export function RejectOfferDialog({ offer }: { offer: OfferDto }) {
   return (
     <OfferDecision
-      request={() => browserApi.post(`/offers/${offer.id}/reject`)}
+      // Ответ — само предложение, а не заказ: статус заказа мог смениться
+      // вместе с ним, поэтому карточку перечитываем.
+      request={async () => {
+        await browserApi.post(`/offers/${offer.id}/reject`);
+        return null;
+      }}
       trigger={
         <Button variant="outline">
           <X className="size-4" aria-hidden />
@@ -98,7 +104,7 @@ export function RejectOfferDialog({ offer }: { offer: OfferDto }) {
   );
 }
 
-/** Общая обвязка обоих решений: подтверждение, запрос, тост, перечитывание. */
+/** Общая обвязка обоих решений: подтверждение, запрос, тост, обновление. */
 function OfferDecision({
   request,
   trigger,
@@ -110,7 +116,8 @@ function OfferDecision({
   successText,
   errorTitle,
 }: {
-  request: () => Promise<unknown>;
+  /** Свежий заказ из ответа, если маршрут его возвращает; иначе `null`. */
+  request: () => Promise<OrderDetail | null>;
   trigger: ReactNode;
   title: string;
   description: ReactNode;
@@ -120,7 +127,7 @@ function OfferDecision({
   successText: string;
   errorTitle: string;
 }) {
-  const router = useRouter();
+  const sync = useOrderSync();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
 
@@ -128,19 +135,24 @@ function OfferDecision({
     setPending(true);
 
     try {
-      await request();
+      const order = await request();
+
       toast.success(successTitle, { description: successText });
+
+      // Заказ из ответа — уже настоящий, а не предсказанный: показываем его
+      // сразу. Если маршрут его не вернул, идём за ним сами.
+      if (order) sync.apply(order);
+      else sync.reload();
     } catch (error) {
       toast.error(errorTitle, {
         description: apiErrorMessage(error, "Проверьте соединение и попробуйте ещё раз"),
       });
+      // После отказа — тоже: кнопки должны сойтись с тем, что на сервере
+      // уже произошло (например, предложение успели отозвать).
+      sync.reload();
     } finally {
       setPending(false);
       setOpen(false);
-      // Страница рендерится на сервере. Перечитываем в обоих случаях: после
-      // успеха — чтобы обновились статус и список предложений, после отказа —
-      // чтобы кнопки сошлись с тем, что на сервере уже произошло.
-      router.refresh();
     }
   }
 

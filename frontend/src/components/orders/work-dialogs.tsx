@@ -1,7 +1,6 @@
 "use client";
 
 import { Ruler, SendHorizonal, Upload } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -9,6 +8,7 @@ import { ORDER_LIMITS, type OrderDetail } from "@/lib/types";
 
 import { Field, FieldMessage, FormError } from "@/components/form-parts";
 import { FileDropzone } from "@/components/orders/file-dropzone";
+import { useOrderSync } from "@/components/orders/order-live";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,8 +41,11 @@ import {
  *
  * Три диалога, потому что три разных решения: что приложить, готово ли сдавать
  * и сколько на объекте площади на самом деле. Общего у них только обвязка
- * (запрос, тост, перечитывание страницы), и её здесь ровно столько, сколько
+ * (запрос, тост, обновление карточки), и её здесь ровно столько, сколько
  * дешевле повторить, чем обобщать.
+ *
+ * Все три маршрута возвращают свежий `OrderDetail`, поэтому карточка меняется
+ * ответом сервера сразу — предсказывать номер сдачи и состав файлов не нужно.
  */
 
 /** Файлы сдачи вместе с обязательным комментарием (ТЗ §4.1). */
@@ -60,7 +63,7 @@ export function AddWorkFilesDialog({
    */
   filesInRound: number;
 }) {
-  const router = useRouter();
+  const sync = useOrderSync();
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<WorkFilesFormValues>(emptyWorkFilesForm);
   const [errors, setErrors] = useState<WorkFilesFormErrors>({});
@@ -106,9 +109,7 @@ export function AddWorkFilesDialog({
       notify(outcome.title, { description: outcome.description });
 
       setOpen(false);
-      // Страница рендерится на сервере: без этого сдача, файлы и кнопка
-      // «Сдать работу» вернулись бы из кэша роутера прежними.
-      router.refresh();
+      sync.apply(detail);
     } catch (error) {
       setFormError(
         apiErrorMessages(
@@ -215,7 +216,7 @@ export function SubmitWorkDialog({
   orderLabel: string;
   round: number;
 }) {
-  const router = useRouter();
+  const sync = useOrderSync();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
 
@@ -223,23 +224,23 @@ export function SubmitWorkDialog({
     setPending(true);
 
     try {
-      await browserApi.post(`/orders/${orderId}/submit`);
+      const detail = await browserApi.post<OrderDetail>(`/orders/${orderId}/submit`);
 
       toast.success("Работа сдана", {
         description: `${orderLabel} · сдача №${round} ушла клиенту на подтверждение`,
       });
 
-      setOpen(false);
+      sync.apply(detail);
     } catch (error) {
       toast.error("Не удалось сдать работу", {
         description: apiErrorMessage(error, "Проверьте соединение и попробуйте ещё раз"),
       });
-      setOpen(false);
+      // После отказа заказ перечитывается: кнопка должна исчезнуть, если
+      // сдавать уже нечего.
+      sync.reload();
     } finally {
       setPending(false);
-      // Перечитываем в обоих случаях: после успеха — чтобы сменился статус,
-      // после отказа — чтобы кнопка исчезла, если сдавать уже нечего.
-      router.refresh();
+      setOpen(false);
     }
   }
 
@@ -288,7 +289,7 @@ export function VerifyAreaDialog({
   /** Уже уточнённая площадь — тогда форма открывается заполненной. */
   verifiedSquareMeters: number | null;
 }) {
-  const router = useRouter();
+  const sync = useOrderSync();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | undefined>(undefined);
@@ -318,7 +319,7 @@ export function VerifyAreaDialog({
     setPending(true);
 
     try {
-      await browserApi.patch(
+      const detail = await browserApi.patch<OrderDetail>(
         `/orders/${orderId}/verified-area`,
         toVerifiedAreaBody(value),
       );
@@ -328,7 +329,7 @@ export function VerifyAreaDialog({
       });
 
       setOpen(false);
-      router.refresh();
+      sync.apply(detail);
     } catch (requestError) {
       setFormError(
         apiErrorMessages(

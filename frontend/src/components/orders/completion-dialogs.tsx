@@ -1,13 +1,13 @@
 "use client";
 
 import { CircleCheckBig, RotateCcw } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
-import { ORDER_LIMITS } from "@/lib/types";
+import { ORDER_LIMITS, type OrderDetail } from "@/lib/types";
 
 import { FieldMessage, FormError } from "@/components/form-parts";
+import { useOrderSync } from "@/components/orders/order-live";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -103,7 +103,7 @@ export function DisputeWorkDialog({
   );
 }
 
-/** Общая обвязка: одно поле, проверка, запрос, тост, перечитывание страницы. */
+/** Общая обвязка: одно поле, проверка, запрос, тост, обновление карточки. */
 function CompletionDecision({
   trigger,
   title,
@@ -137,7 +137,7 @@ function CompletionDecision({
   successText: string;
   fallbackError: string;
 }) {
-  const router = useRouter();
+  const sync = useOrderSync();
   const [open, setOpen] = useState(false);
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | undefined>(undefined);
@@ -167,13 +167,13 @@ function CompletionDecision({
     setPending(true);
 
     try {
-      await browserApi.post(path, toBody(comment.trim()));
+      const order = await browserApi.post<OrderDetail>(path, toBody(comment.trim()));
 
       toast.success(successTitle, { description: successText });
       setOpen(false);
-      // Страница рендерится на сервере: без этого статус, комментарий
-      // и состав кнопок вернулись бы из кэша роутера прежними.
-      router.refresh();
+      // Ответ — уже свежий заказ: статус, комментарий и состав кнопок
+      // меняются сразу, без ожидания серверного ре-рендера.
+      sync.apply(order);
     } catch (requestError) {
       setFormError(apiErrorMessages(requestError, fallbackError));
     } finally {

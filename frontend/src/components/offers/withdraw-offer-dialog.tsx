@@ -1,10 +1,10 @@
 "use client";
 
 import { Undo2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { useOrderSync } from "@/components/orders/order-live";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -38,7 +38,7 @@ export function WithdrawOfferDialog({
   /** Как заказ называется в вопросе: «Отозвать предложение по ORD-24?» */
   orderLabel: string;
 }) {
-  const router = useRouter();
+  const sync = useOrderSync();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
 
@@ -60,10 +60,10 @@ export function WithdrawOfferDialog({
       setOpen(false);
     } finally {
       setPending(false);
-      // Список рендерится на сервере. Перечитываем в обоих случаях: после
-      // успеха — чтобы статус сменился, после отказа — чтобы кнопка исчезла,
-      // если отзывать уже нечего.
-      router.refresh();
+      // Ответ — само предложение, а не заказ. Перечитываем в обоих случаях:
+      // после успеха — чтобы сменился статус, после отказа — чтобы кнопка
+      // исчезла, если отзывать уже нечего.
+      sync.reload();
     }
   }
 

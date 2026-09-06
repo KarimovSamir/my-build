@@ -1,7 +1,6 @@
 "use client";
 
 import { Send, SquarePen } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -9,6 +8,7 @@ import { formatOrderNumber, isPendingOffer, OFFER_LIMITS, type OfferDto } from "
 
 import { DatePicker } from "@/components/date-picker";
 import { Field, FieldMessage, FormError } from "@/components/form-parts";
+import { useOrderSync } from "@/components/orders/order-live";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -48,7 +48,9 @@ import {
  * цена и срок при этом подставляются — их обычно и повторяют.
  *
  * Заказ перечитывается после успеха: отправленное предложение уводит заказ
- * из ленты, а в списке предложений меняет цену и срок.
+ * из ленты, а в списке предложений меняет цену и срок. Ответ — само
+ * предложение, а не заказ, поэтому здесь всегда `reload`, а не `apply`:
+ * на карточке заказа обновится и статус, в ленте — перечитается страница.
  */
 export function OfferDialog({
   order,
@@ -60,7 +62,7 @@ export function OfferDialog({
   offer?: OfferDto | null;
   variant?: "default" | "outline";
 }) {
-  const router = useRouter();
+  const sync = useOrderSync();
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<OfferFormValues>(() => offerFormValues(offer));
   const [errors, setErrors] = useState<OfferFormErrors>({});
@@ -113,9 +115,7 @@ export function OfferDialog({
       });
 
       setOpen(false);
-      // Списки рендерятся на сервере: без этого лента вернулась бы из кэша
-      // роутера вместе с заказом, по которому предложение уже отправлено.
-      router.refresh();
+      sync.reload();
     } catch (error) {
       setFormError(
         apiErrorMessages(

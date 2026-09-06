@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import type { OrderDetail } from "@/lib/types";
 
-import { OrderDetailView } from "@/components/orders/order-detail";
+import { OrderLive } from "@/components/orders/order-live";
 import { ApiRequestError } from "@/lib/api";
 import { serverApi } from "@/lib/api.server";
 import { getSessionClaims } from "@/lib/session.server";
@@ -15,13 +15,16 @@ export const metadata = { title: "Заказ" };
  *
  * Чужой и несуществующий заказ приходят одинаково — 404: backend намеренно
  * не подтверждает существование чужого заказа. Значит, и страница у них одна.
+ *
+ * Дальше заказ живёт в `OrderLive`: свои действия применяются ответом сервера
+ * сразу, чужие приезжают событиями сокета (ТЗ §8).
  */
 export default async function OrderDetailPage({ params }: PageProps<"/orders/[id]">) {
   const { id } = await params;
 
   const [order, claims] = await Promise.all([loadOrder(id), getSessionClaims()]);
 
-  return <OrderDetailView order={order} viewerId={claims?.userId ?? null} />;
+  return <OrderLive order={order} viewerId={claims?.userId ?? null} />;
 }
 
 async function loadOrder(id: string): Promise<OrderDetail> {

@@ -7,8 +7,10 @@ import { OrdersList } from "@/components/orders/orders-list";
 import { OrdersListSkeleton } from "@/components/orders/orders-list-skeleton";
 import { OrdersStatusTabs } from "@/components/orders/orders-status-tabs";
 import { PageHeader } from "@/components/page-shell";
+import { LiveRefresh } from "@/components/realtime/live-refresh";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ORDERS_LIST_EVENTS } from "@/lib/live-updates";
 import { ordersFilterKey, parseOrdersFilter } from "@/lib/orders-filter";
 
 export const metadata = { title: "Все заказы" };
@@ -25,6 +27,10 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
 
   return (
     <>
+      {/* Заказ ушёл в работу, сдан или завершён — таблица меняется сама
+          (ТЗ §8): статус приходит клиенту в его личную комнату. */}
+      <LiveRefresh events={ORDERS_LIST_EVENTS} />
+
       <PageHeader
         title="Все заказы"
         description="Управляйте вашими текущими и завершёнными проектами"
