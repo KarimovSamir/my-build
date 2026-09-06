@@ -31,11 +31,25 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
      */
     const warn = (error: Error) => console.warn(`WebSocket: ${error.message}`);
 
+    /**
+     * Сервер закрывает сокет сам, когда истекает срок токена (ТЗ §6). После
+     * такого разрыва socket.io не переподключается, хотя причина уже прошла:
+     * Supabase к этому моменту обновил сессию, и функция `auth` в `lib/socket`
+     * возьмёт свежий токен на новой попытке. Если же сессии больше нет,
+     * откажет рукопожатие — а после `connect_error` повторов не будет,
+     * то есть цикл сам себя останавливает.
+     */
+    const reconnect = (reason: string) => {
+      if (reason === "io server disconnect") socket.connect();
+    };
+
     socket.on("connect_error", warn);
+    socket.on("disconnect", reconnect);
     socket.connect();
 
     return () => {
       socket.off("connect_error", warn);
+      socket.off("disconnect", reconnect);
       socket.disconnect();
     };
   }, [socket]);

@@ -16,6 +16,9 @@ import { socketMessages, type SocketEvent, type SubscribeAck } from "@/lib/socke
  * - Подписка на комнату восстанавливается после переподключения. Комнаты живут
  *   на сервере, и обрыв связи они не переживают: переподключившийся сокет —
  *   новый участник, о котором сервер ничего не помнит.
+ * - Данные после переподключения перечитываются. socket.io события за время
+ *   обрыва не копит, и всё, что произошло, пока связи не было, до вкладки
+ *   не доедет вовсе.
  * - Обработчики оборачиваются в `useEffectEvent`: слушатели сокета не должны
  *   пересаживаться из-за того, что страница перерисовалась и передала новую
  *   функцию, но вызываться должна всегда последняя.
@@ -32,6 +35,11 @@ export function useSocket() {
  * `accepts` отсеивает чужое: в личную комнату пользователя приходят события
  * по всем его заказам, и открытая карточка одного заказа не должна
  * перечитываться из-за движения соседнего.
+ *
+ * Отдельно от событий данные перечитываются после **переподключения**: сон
+ * ноутбука, смена сети или перезапуск backend рвут сокет, а socket.io ничего
+ * за это время не буферизует — без перечитывания вкладка выглядела бы живой,
+ * показывая состояние на момент обрыва.
  */
 export function useRealtimeRefresh(
   events: readonly SocketEvent[],
@@ -59,9 +67,28 @@ export function useRealtimeRefresh(
       if (accept(payload)) burst.schedule();
     };
 
+    // Пропущено ли что-то. Флаг ставит только разрыв: на первое подключение
+    // перечитывать нечего — страница только что отрисована сервером, и лишний
+    // запрос ушёл бы на каждую загрузку кабинета.
+    let missed = false;
+
+    const onDisconnect = () => {
+      missed = true;
+    };
+
+    const onConnect = () => {
+      if (!missed) return;
+
+      missed = false;
+      burst.schedule();
+    };
+
     for (const name of names) {
       socket.on(name, handle);
     }
+
+    socket.on("disconnect", onDisconnect);
+    socket.on("connect", onConnect);
 
     return () => {
       burst.cancel();
@@ -69,6 +96,9 @@ export function useRealtimeRefresh(
       for (const name of names) {
         socket.off(name, handle);
       }
+
+      socket.off("disconnect", onDisconnect);
+      socket.off("connect", onConnect);
     };
   }, [socket, key]);
 }

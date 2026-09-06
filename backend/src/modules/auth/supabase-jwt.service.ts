@@ -15,6 +15,19 @@ export class InvalidTokenError extends Error {
 }
 
 /**
+ * Проверенный токен: пользователь и момент, после которого токен недействителен.
+ *
+ * Срок нужен не всем: у REST токен проверяется на каждом запросе, и следить
+ * за `exp` там незачем. У сокета иначе — рукопожатие одно, а соединение живёт
+ * часами, поэтому шлюз обязан закрыть его сам, когда токен истёк (ТЗ §6).
+ */
+export interface VerifiedToken {
+  user: AuthUser;
+  /** `exp` в миллисекундах. `null` — в токене нет срока (у Supabase не бывает). */
+  expiresAt: number | null;
+}
+
+/**
  * Проверка access-токена Supabase (ТЗ §6).
  *
  * Backend не спрашивает Supabase на каждый запрос: подпись проверяется локально
@@ -51,6 +64,11 @@ export class SupabaseJwtService implements OnModuleInit {
    * Любая проблема с подписью, издателем, аудиторией или сроком — исключение.
    */
   async verify(token: string): Promise<AuthUser> {
+    return (await this.verifyToken(token)).user;
+  }
+
+  /** То же самое, но со сроком действия: нужен шлюзу WebSocket. */
+  async verifyToken(token: string): Promise<VerifiedToken> {
     let payload: JWTPayload;
 
     try {
@@ -69,10 +87,13 @@ export class SupabaseJwtService implements OnModuleInit {
     }
 
     return {
-      id: payload.sub,
-      email: typeof payload.email === 'string' ? payload.email : null,
-      emailVerified: readEmailVerified(payload),
-      role: this.readRole(payload),
+      user: {
+        id: payload.sub,
+        email: typeof payload.email === 'string' ? payload.email : null,
+        emailVerified: readEmailVerified(payload),
+        role: this.readRole(payload),
+      },
+      expiresAt: typeof payload.exp === 'number' ? payload.exp * 1000 : null,
     };
   }
 

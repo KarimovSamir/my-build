@@ -7,7 +7,10 @@
  *
  * Авторизация — тем же `SupabaseJwtService`, что и REST (ТЗ §8): токен
  * приходит в handshake (`auth.token`), проверяется по JWKS, и неавторизованный
- * сокет до `connection` не доходит вовсе.
+ * сокет до `connection` не доходит вовсе. Срок токена соединение тоже не
+ * переживает: по `exp` шлюз закрывает сокет сам, иначе одно рукопожатие давало
+ * бы доступ к событиям на часы вперёд, тогда как REST с тем же токеном уже
+ * отвечал бы 401 (ТЗ §6).
  */
 
 import { Logger } from '@nestjs/common';
@@ -15,6 +18,7 @@ import {
   ConnectedSocket,
   MessageBody,
   OnGatewayConnection,
+  OnGatewayDisconnect,
   OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
@@ -50,6 +54,16 @@ const FEED_FORBIDDEN = 'Лента заказов доступна только 
 /** Пользователь, привязанный к сокету после проверки токена. */
 interface SocketData {
   user?: AuthUser;
+  /**
+   * Момент, после которого токен недействителен (ТЗ §6).
+   *
+   * Рукопожатие проверяет токен один раз, а соединение живёт часами: без срока
+   * вкладка получала бы события ещё долго после того, как REST начал отвечать
+   * 401 тем же токеном.
+   */
+  expiresAt?: number | null;
+  /** Таймер, закрывающий сокет в этот момент. Снимается при отключении. */
+  expiryTimer?: ReturnType<typeof setTimeout>;
 }
 
 type AppSocket = Socket<
@@ -80,7 +94,9 @@ function corsOrigin(
 }
 
 @WebSocketGateway({ namespace: WS_NAMESPACE, cors: { origin: corsOrigin } })
-export class OrderGateway implements OnGatewayInit, OnGatewayConnection {
+export class OrderGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   private readonly logger = new Logger(OrderGateway.name);
 
   @WebSocketServer()
@@ -115,7 +131,13 @@ export class OrderGateway implements OnGatewayInit, OnGatewayConnection {
       return;
     }
 
+    this.scheduleExpiry(socket);
     void socket.join(socketRooms.user(user.id));
+  }
+
+  /** Сокет закрылся — снять таймер: держать его до `exp` уже не за чем. */
+  handleDisconnect(@ConnectedSocket() socket: AppSocket): void {
+    clearExpiry(socket);
   }
 
   /**
@@ -131,7 +153,7 @@ export class OrderGateway implements OnGatewayInit, OnGatewayConnection {
     @ConnectedSocket() socket: AppSocket,
     @MessageBody() body: unknown,
   ): Promise<SubscribeAck> {
-    const user = socket.data.user;
+    const user = this.activeUser(socket);
     const orderId = readOrderId(body);
 
     if (!user || !orderId || !(await this.isOrderParticipant(user.id, orderId))) {
@@ -159,7 +181,7 @@ export class OrderGateway implements OnGatewayInit, OnGatewayConnection {
   /** Лента доступных заказов — только компаниям (ТЗ §8). */
   @SubscribeMessage(socketMessages.subscribeFeed)
   async subscribeFeed(@ConnectedSocket() socket: AppSocket): Promise<SubscribeAck> {
-    if (socket.data.user?.role !== Role.COMPANY) {
+    if (this.activeUser(socket)?.role !== Role.COMPANY) {
       return { ok: false, error: FEED_FORBIDDEN };
     }
 
@@ -207,6 +229,52 @@ export class OrderGateway implements OnGatewayInit, OnGatewayConnection {
     }
   }
 
+  /**
+   * Пользователь сокета, если токен ещё действителен.
+   *
+   * Срок проверяется и здесь, а не только таймером: таймер — основной механизм
+   * (события шлёт сервер, ждать сообщения от клиента нельзя), а эта проверка
+   * закрывает разрыв, если сообщение и срабатывание таймера разошлись.
+   */
+  private activeUser(socket: AppSocket): AuthUser | null {
+    const { user, expiresAt } = socket.data;
+
+    if (!user) return null;
+
+    if (typeof expiresAt === 'number' && expiresAt <= Date.now()) {
+      socket.disconnect(true);
+      return null;
+    }
+
+    return user;
+  }
+
+  /**
+   * Закрыть сокет, когда истечёт токен (ТЗ §6).
+   *
+   * Клиент после этого переподключается уже с обновлённым токеном: функция
+   * `auth` в `frontend/src/lib/socket.ts` спрашивает его заново на каждую
+   * попытку. Если сессии больше нет, откажет рукопожатие — и повторов не будет.
+   */
+  private scheduleExpiry(socket: AppSocket): void {
+    const expiresAt = socket.data.expiresAt;
+
+    clearExpiry(socket);
+
+    if (typeof expiresAt !== 'number') return;
+
+    // Рукопожатие уже отвергло просроченный токен, так что остаток
+    // положительный; `max` — защита от рассинхронизации часов, а не от `exp`
+    // в прошлом.
+    socket.data.expiryTimer = setTimeout(
+      () => {
+        socket.data.expiryTimer = undefined;
+        socket.disconnect(true);
+      },
+      Math.max(expiresAt - Date.now(), 0),
+    );
+  }
+
   /** Токен из handshake → пользователь на сокете. Иначе — ошибка подключения. */
   private async authenticate(socket: AppSocket): Promise<void> {
     const token = readHandshakeToken(socket);
@@ -216,9 +284,10 @@ export class OrderGateway implements OnGatewayInit, OnGatewayConnection {
     }
 
     let user: AuthUser;
+    let expiresAt: number | null;
 
     try {
-      user = await this.jwt.verify(token);
+      ({ user, expiresAt } = await this.jwt.verifyToken(token));
     } catch (error) {
       // Наружу уходит только текст: socket.io отдаёт клиенту `message`
       // ошибки как есть, а причина остаётся в `cause` — для логов.
@@ -234,6 +303,7 @@ export class OrderGateway implements OnGatewayInit, OnGatewayConnection {
     }
 
     socket.data.user = user;
+    socket.data.expiresAt = expiresAt;
   }
 
   /**
@@ -260,6 +330,14 @@ export class OrderGateway implements OnGatewayInit, OnGatewayConnection {
 
     return order !== null;
   }
+}
+
+/** Снять таймер истечения токена, если он был поставлен. */
+function clearExpiry(socket: AppSocket): void {
+  if (socket.data.expiryTimer === undefined) return;
+
+  clearTimeout(socket.data.expiryTimer);
+  socket.data.expiryTimer = undefined;
 }
 
 /**

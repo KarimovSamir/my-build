@@ -18,6 +18,7 @@ import {
   socketEvents,
   socketMessages,
   type NotificationEventPayload,
+  type OfferEventPayload,
   type OrderEventPayload,
   type SubscribeAck,
 } from '@mybuild/shared';
@@ -78,6 +79,23 @@ function noEvent(socket: Socket, event: string): Promise<boolean> {
       clearTimeout(timer);
       resolve(false);
     });
+  });
+}
+
+/**
+ * Все события с таким именем за короткое окно. Нужны там, где проверяется
+ * не «пришло ли», а «что именно пришло и ничего сверх того».
+ */
+function collectEvents<T>(socket: Socket, event: string): Promise<T[]> {
+  const seen: T[] = [];
+
+  socket.on(event, (payload: T) => seen.push(payload));
+
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      socket.off(event);
+      resolve(seen);
+    }, 1_500);
   });
 }
 
@@ -330,6 +348,10 @@ describe('WebSocket-шлюз (e2e)', () => {
         winnerSocket,
         socketEvents.orderStatusChanged,
       );
+      const winnerOfferEvents = collectEvents<OfferEventPayload>(
+        winnerSocket,
+        socketEvents.offerStatusChanged,
+      );
 
       const accepted = await request(app.getHttpServer())
         .post(`/orders/${order.id}/accept-offer/${winnerOffer.body.id}`)
@@ -347,6 +369,90 @@ describe('WebSocket-шлюз (e2e)', () => {
 
       // Комната при этом рабочая: исполнитель то же событие получил.
       expect(await winnerSees).toEqual({ orderId: order.id });
+
+      // А вот про чужие предложения победитель не узнаёт ничего, хотя и остаётся
+      // в комнате заказа: события про предложение адресуются поимённо, иначе
+      // по ним читались бы и число конкурентов, и их идентификаторы (ТЗ §4.1).
+      expect((await winnerOfferEvents).map((event) => event.offerId)).toEqual([
+        winnerOffer.body.id,
+      ]);
     });
+  });
+});
+
+/**
+ * Срок действия токена на сокете (ТЗ §6).
+ *
+ * Проверка токена делается один раз, в рукопожатии, а соединение живёт часами —
+ * значит, закрыть его по `exp` обязан сам шлюз. Ждать настоящий час здесь
+ * нельзя, поэтому приложение поднимается с подставной проверкой токена: она
+ * выдаёт тот же результат, что настоящая, но с коротким сроком.
+ */
+describe('WebSocket-шлюз: истечение токена (e2e)', () => {
+  /** Сколько «живёт» токен в этом наборе. */
+  const TOKEN_TTL_MS = 1_500;
+
+  const user = {
+    id: '55555555-5555-4555-8555-555555555555',
+    email: 'ttl@mybuild.test',
+    emailVerified: true,
+    role: Role.CLIENT,
+  };
+
+  let app: INestApplication;
+  let wsUrl: string;
+
+  beforeAll(async () => {
+    const { AppModule } = await import('../src/app.module.js');
+    const { configureApp } = await import('../src/bootstrap.js');
+    const { SupabaseJwtService } = await import(
+      '../src/modules/auth/supabase-jwt.service.js'
+    );
+
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(SupabaseJwtService)
+      .useValue({
+        verify: () => Promise.resolve(user),
+        verifyToken: () =>
+          Promise.resolve({ user, expiresAt: Date.now() + TOKEN_TTL_MS }),
+      })
+      .compile();
+
+    app = moduleRef.createNestApplication();
+    configureApp(app);
+    await app.listen(0);
+
+    const address = (app.getHttpServer() as Server).address() as AddressInfo;
+    wsUrl = `http://127.0.0.1:${address.port}${WS_NAMESPACE}`;
+  });
+
+  afterAll(async () => {
+    await app?.close();
+  });
+
+  it('закрывает соединение по истечении токена, и подключиться заново можно', async () => {
+    const socket = io(wsUrl, {
+      transports: ['websocket'],
+      auth: { token: 'подставной' },
+      // Переподключение ручное: после закрытия сервером socket.io сам его
+      // не делает — и на этом построено поведение `RealtimeProvider`.
+      reconnection: false,
+      forceNew: true,
+    });
+
+    expect(await waitForConnect(socket)).toBeNull();
+
+    const reason = await new Promise<string>((resolve) => {
+      socket.once('disconnect', resolve);
+    });
+
+    // Именно эту причину клиент отличает от обычного обрыва: он берёт свежий
+    // токен и подключается заново (`frontend/src/components/realtime`).
+    expect(reason).toBe('io server disconnect');
+
+    socket.connect();
+    expect(await waitForConnect(socket)).toBeNull();
+
+    socket.disconnect();
   });
 });

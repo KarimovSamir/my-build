@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Namespace } from 'socket.io';
 
 import { ACTIVE_OFFER_STATUSES, Role, socketRooms } from '@mybuild/shared';
@@ -30,14 +30,24 @@ const client: AuthUser = {
   role: Role.CLIENT,
 };
 
+/** Час жизни токена — столько же, сколько отводит Supabase. */
+const TOKEN_TTL_MS = 60 * 60 * 1000;
+
+/** Данные, которые шлюз держит на сокете. */
+interface SocketStubData {
+  user?: AuthUser;
+  expiresAt?: number | null;
+  expiryTimer?: ReturnType<typeof setTimeout>;
+}
+
 /** Сокет в том объёме, в каком его трогает шлюз. */
-function createSocket(user?: AuthUser, token?: string) {
+function createSocket(user?: AuthUser, token?: string, expiresAt?: number | null) {
   return {
     handshake: {
       auth: token === undefined ? {} : { token },
       headers: {} as Record<string, string | undefined>,
     },
-    data: { user } as { user?: AuthUser },
+    data: { user, expiresAt } as SocketStubData,
     join: vi.fn(async (_room: string) => undefined),
     leave: vi.fn(async (_room: string) => undefined),
     disconnect: vi.fn((_close?: boolean) => undefined),
@@ -53,9 +63,15 @@ function asSocket(socket: SocketStub): GatewaySocket {
   return socket as unknown as GatewaySocket;
 }
 
-function createStubs(options: { participant?: boolean; user?: AuthUser } = {}) {
+function createStubs(
+  options: { participant?: boolean; user?: AuthUser; expiresAt?: number | null } = {},
+) {
   const jwt = {
-    verify: vi.fn(async (_token: string) => options.user ?? client),
+    verifyToken: vi.fn(async (_token: string) => ({
+      user: options.user ?? client,
+      expiresAt:
+        options.expiresAt === undefined ? Date.now() + TOKEN_TTL_MS : options.expiresAt,
+    })),
   };
 
   const prisma = {
@@ -121,15 +137,18 @@ describe('OrderGateway: авторизация сокета', () => {
     const socket = createSocket(undefined, 'token');
 
     expect(await authenticate(gateway, socket)).toBeUndefined();
-    expect(jwt.verify).toHaveBeenCalledWith('token');
+    expect(jwt.verifyToken).toHaveBeenCalledWith('token');
     expect(socket.data.user).toEqual(client);
+    // Срок токена запоминается вместе с пользователем: по нему шлюз закроет
+    // соединение, когда токен истечёт (ТЗ §6).
+    expect(socket.data.expiresAt).toBeTypeOf('number');
   });
 
   it('отклоняет сокет без токена, не спрашивая Supabase', async () => {
     const { gateway, jwt } = createStubs();
 
     expect(await authenticate(gateway, createSocket())).toBe('Требуется авторизация');
-    expect(jwt.verify).not.toHaveBeenCalled();
+    expect(jwt.verifyToken).not.toHaveBeenCalled();
   });
 
   it('читает токен и из заголовка: не всякий клиент кладёт его в handshake', async () => {
@@ -138,12 +157,14 @@ describe('OrderGateway: авторизация сокета', () => {
     socket.handshake.headers.authorization = 'Bearer header-token';
 
     expect(await authenticate(gateway, socket)).toBeUndefined();
-    expect(jwt.verify).toHaveBeenCalledWith('header-token');
+    expect(jwt.verifyToken).toHaveBeenCalledWith('header-token');
   });
 
   it('передаёт наружу причину отказа проверки токена', async () => {
     const { gateway, jwt } = createStubs();
-    jwt.verify.mockRejectedValueOnce(new InvalidTokenError('Токен недействителен или истёк'));
+    jwt.verifyToken.mockRejectedValueOnce(
+      new InvalidTokenError('Токен недействителен или истёк'),
+    );
 
     expect(await authenticate(gateway, createSocket(undefined, 'stale'))).toBe(
       'Токен недействителен или истёк',
@@ -158,6 +179,77 @@ describe('OrderGateway: авторизация сокета', () => {
     expect(await authenticate(gateway, createSocket(undefined, 'token'))).toContain(
       'Подтвердите email',
     );
+  });
+});
+
+describe('OrderGateway: срок действия токена', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('закрывает сокет, когда токен истекает', async () => {
+    const { gateway } = createStubs();
+    const socket = createSocket(undefined, 'token');
+
+    await authenticate(gateway, socket);
+    gateway.handleConnection(asSocket(socket));
+
+    // До срока соединение живёт: рвать его раньше времени значило бы
+    // выключать real-time у работающего пользователя.
+    vi.advanceTimersByTime(TOKEN_TTL_MS - 1_000);
+    expect(socket.disconnect).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1_000);
+    expect(socket.disconnect).toHaveBeenCalled();
+  });
+
+  it('на отключении снимает таймер', async () => {
+    const { gateway } = createStubs();
+    const socket = createSocket(undefined, 'token');
+
+    await authenticate(gateway, socket);
+    gateway.handleConnection(asSocket(socket));
+    gateway.handleDisconnect(asSocket(socket));
+
+    vi.advanceTimersByTime(TOKEN_TTL_MS * 2);
+
+    // Сокета уже нет, и оставшийся таймер держал бы ссылку на него до `exp`.
+    expect(socket.disconnect).not.toHaveBeenCalled();
+    expect(socket.data.expiryTimer).toBeUndefined();
+  });
+
+  it('сообщение с истёкшим токеном не выполняет и рвёт соединение', async () => {
+    const { gateway, prisma } = createStubs();
+    const socket = createSocket(client, undefined, Date.now() - 1);
+
+    await expect(
+      gateway.subscribeOrder(asSocket(socket), { orderId: ORDER_ID }),
+    ).resolves.toMatchObject({ ok: false });
+
+    // REST с таким токеном отвечает 401 — сокет обязан вести себя так же.
+    expect(prisma.order.findFirst).not.toHaveBeenCalled();
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).toHaveBeenCalled();
+  });
+
+  it('ленту с истёкшим токеном не открывает даже компании', async () => {
+    const { gateway } = createStubs();
+    const socket = createSocket(
+      { ...client, id: COMPANY_ID, role: Role.COMPANY },
+      undefined,
+      Date.now() - 1,
+    );
+
+    await expect(gateway.subscribeFeed(asSocket(socket))).resolves.toMatchObject({
+      ok: false,
+    });
+
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).toHaveBeenCalled();
   });
 });
 

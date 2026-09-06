@@ -124,15 +124,17 @@ describe('transitionBroadcast', () => {
       offerEvent: socketEvents.offerUpdated,
     });
 
+    // Комнаты заказа здесь нет: в ней сидят и конкуренты, а чужое предложение
+    // компании не показывают (ТЗ §4.1).
     expect(messagesOf(created.messages, socketEvents.offerCreated)[0]).toEqual({
-      rooms: [orderRoom, clientRoom],
+      rooms: [clientRoom, socketRooms.user(WINNER_ID)],
       event: socketEvents.offerCreated,
       payload: { orderId: ORDER_ID, offerId: OFFER_ID },
     });
     expect(messagesOf(updated.messages, socketEvents.offerUpdated)).toHaveLength(1);
   });
 
-  it('о статусе предложения сообщает его компании, а не всем подряд', () => {
+  it('о статусе предложения сообщает его компании и клиенту, а не комнате заказа', () => {
     const { messages } = transitionBroadcast(
       applied({
         offerUpdates: [
@@ -148,16 +150,52 @@ describe('transitionBroadcast', () => {
 
     expect(messagesOf(messages, socketEvents.offerStatusChanged)).toEqual([
       {
-        rooms: [orderRoom, socketRooms.user(WINNER_ID)],
+        rooms: [clientRoom, socketRooms.user(WINNER_ID)],
         event: socketEvents.offerStatusChanged,
         payload: { orderId: ORDER_ID, offerId: OFFER_ID },
       },
       {
-        rooms: [orderRoom, socketRooms.user(LOSER_ID)],
+        rooms: [clientRoom, socketRooms.user(LOSER_ID)],
         event: socketEvents.offerStatusChanged,
         payload: { orderId: ORDER_ID, offerId: RIVAL_OFFER_ID },
       },
     ]);
+  });
+
+  it('в комнату заказа не уходит ни одно событие про предложение', () => {
+    // Победитель остаётся в комнате заказа (он сторона сделки), и попади
+    // туда `offer:status_changed` проигравших — он узнал бы и число
+    // конкурентов, и их идентификаторы (ТЗ §4.1).
+    const { messages } = transitionBroadcast(
+      applied({
+        offerUpdates: [
+          { offerId: OFFER_ID, companyId: WINNER_ID, status: OfferStatus.ACCEPTED },
+          {
+            offerId: RIVAL_OFFER_ID,
+            companyId: LOSER_ID,
+            status: OfferStatus.NOT_ACCEPTED,
+          },
+        ],
+      }),
+      { offerEvent: socketEvents.offerCreated },
+    );
+
+    const offerEvents = new Set<string>([
+      socketEvents.offerCreated,
+      socketEvents.offerUpdated,
+      socketEvents.offerStatusChanged,
+    ]);
+
+    for (const message of messages) {
+      if (offerEvents.has(message.event)) {
+        expect(message.rooms).not.toContain(orderRoom);
+      }
+    }
+
+    // А событие про сам заказ — по-прежнему в комнату: его видят все участники.
+    expect(messagesOf(messages, socketEvents.orderStatusChanged)[0]!.rooms).toContain(
+      orderRoom,
+    );
   });
 
   it('выселяет из комнаты заказа тех, чьё предложение выбыло', () => {

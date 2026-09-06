@@ -9,6 +9,12 @@
  * Полезная нагрузка событий про заказ — только идентификаторы: одна и та же
  * рассылка уходит всей комнате, а видимый состав заказа у клиента и у компании
  * разный (ТЗ §4.1). Подробности объяснены в `shared/src/realtime.ts`.
+ *
+ * Отсюда же правило адресации: в комнату заказа уходит только то, что видят
+ * все её участники, — движение самого заказа, файлы сдач и уточнённая площадь.
+ * Всё, что относится к конкретному предложению, адресуется поимённо: клиенту
+ * заказа и компании-автору. Иначе компания узнавала бы о конкурентах, которых
+ * ей не показывают ни `order-view`, ни лента.
  */
 
 import {
@@ -99,9 +105,14 @@ export function transitionBroadcast(
 
   const messages: RealtimeMessage[] = [];
 
+  // Про предложение знают двое: клиент заказа и та компания, чьё оно (ТЗ §4.1).
+  // В комнату заказа это не уходит: там сидят все компании с активным
+  // предложением, и `offer:created` рассказал бы каждой о появлении конкурента,
+  // а `offer:status_changed` при выборе исполнителя — победителю о том, сколько
+  // предложений проиграло и какие у них идентификаторы.
   if (options.offerEvent) {
     messages.push({
-      rooms: [orderRoom, clientRoom],
+      rooms: [clientRoom, socketRooms.user(applied.companyId)],
       event: options.offerEvent,
       payload: { orderId, offerId: applied.offerId },
     });
@@ -120,7 +131,7 @@ export function transitionBroadcast(
 
   for (const update of applied.offerUpdates) {
     messages.push({
-      rooms: [orderRoom, socketRooms.user(update.companyId)],
+      rooms: [clientRoom, socketRooms.user(update.companyId)],
       event: socketEvents.offerStatusChanged,
       payload: { orderId, offerId: update.offerId },
     });
