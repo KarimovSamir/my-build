@@ -98,6 +98,15 @@ export interface OfferDto {
   proposedDeadline: IsoDateString;
   comment: string | null;
   createdAt: IsoDateString;
+  /**
+   * Когда компания переписала условия предложения. `null` — с момента
+   * отправки их не меняли.
+   *
+   * Поле отдельное, потому что по `updatedAt` этого не узнать: он меняется
+   * и от смены статуса, и `@updatedAt` бьётся при самой отправке — сравнение
+   * с `createdAt` всегда давало бы «изменено».
+   */
+  editedAt: IsoDateString | null;
   updatedAt: IsoDateString;
 }
 

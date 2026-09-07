@@ -84,6 +84,7 @@ describe("offerFormValues", () => {
     proposedDeadline: "2099-12-31T00:00:00.000Z",
     comment: null,
     createdAt: "2026-09-01T10:00:00.000Z",
+    editedAt: null,
     updatedAt: "2026-09-01T10:00:00.000Z",
   };
 

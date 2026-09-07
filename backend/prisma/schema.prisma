@@ -237,7 +237,11 @@ model Offer {
   proposedDeadline DateTime
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  /// Когда компания переписала условия предложения (ТЗ §4.1, upsert).
+  /// Ставится только при повторной отправке — по `updatedAt` правку
+  /// не отличить: он меняется и от смены статуса.
+  editedAt  DateTime?
+  updatedAt DateTime  @updatedAt
 
   @@unique([orderId, companyId])
   @@index([companyId, status])

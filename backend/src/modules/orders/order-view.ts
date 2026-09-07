@@ -48,6 +48,7 @@ export interface OfferRow {
   proposedDeadline: Date;
   comment: string | null;
   createdAt: Date;
+  editedAt: Date | null;
   updatedAt: Date;
   company: { companyName: string | null };
 }
@@ -249,6 +250,7 @@ export function toOfferDto(offer: OfferRow): OfferDto {
     proposedDeadline: offer.proposedDeadline.toISOString(),
     comment: offer.comment,
     createdAt: offer.createdAt.toISOString(),
+    editedAt: toIso(offer.editedAt),
     updatedAt: offer.updatedAt.toISOString(),
   };
 }

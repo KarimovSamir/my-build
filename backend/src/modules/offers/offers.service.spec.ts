@@ -39,6 +39,7 @@ function offerRow(status: OfferStatus = OfferStatus.SENT) {
     proposedDeadline: new Date(`${DEADLINE}T00:00:00.000Z`),
     comment: 'Возьмёмся',
     createdAt: new Date('2026-09-01T10:00:00.000Z'),
+    editedAt: null,
     updatedAt: new Date('2026-09-02T10:00:00.000Z'),
     company: { companyName: 'ООО «Строймир»' },
   };
@@ -56,10 +57,15 @@ function createStubs(options: { existing?: OfferStatus | null } = {}) {
         trace.push('read-status');
         return options.existing ? { status: options.existing } : null;
       }),
-      upsert: vi.fn(async () => {
-        trace.push('upsert');
-        return offerRow();
-      }),
+      upsert: vi.fn(
+        async (_args: {
+          create: Record<string, unknown>;
+          update: Record<string, unknown>;
+        }) => {
+          trace.push('upsert');
+          return offerRow();
+        },
+      ),
     },
   };
 
@@ -102,7 +108,7 @@ function createStubs(options: { existing?: OfferStatus | null } = {}) {
     realtime as unknown as RealtimeService,
   );
 
-  return { service, prisma, transitions, realtime, trace };
+  return { service, prisma, tx, transitions, realtime, trace };
 }
 
 describe('OffersService.submit', () => {
@@ -118,6 +124,24 @@ describe('OffersService.submit', () => {
     // Заказ первым: переход берёт те же строки в этом порядке, и обратный
     // порядок здесь дал бы взаимную блокировку с принятием чужого предложения.
     expect(trace).toEqual(['lock-order', 'read-status', 'upsert', 'apply']);
+  });
+
+  it('помечает `editedAt` только в ветке обновления', async () => {
+    // Клиент по этому полю отличает свежее предложение от переписанного.
+    // Вывести правку из таймстампов нельзя: `createdAt` ставит Postgres,
+    // `updatedAt` — Prisma, и переход бьёт его ещё раз, записывая `SENT`.
+    const { service, tx } = createStubs();
+
+    await service.submit(COMPANY_ID, {
+      orderId: ORDER_ID,
+      proposedPrice: '150000.50',
+      proposedDeadline: DEADLINE,
+    });
+
+    const args = tx.offer.upsert.mock.calls[0]![0];
+
+    expect(args.create).not.toHaveProperty('editedAt');
+    expect(args.update.editedAt).toBeInstanceOf(Date);
   });
 
   it('переход идёт той же транзакцией, что и запись предложения', async () => {

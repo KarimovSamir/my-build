@@ -1,8 +1,17 @@
-import { Controller, Get, NotFoundException, Param, ParseUUIDPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  ParseUUIDPipe,
+  UseGuards,
+} from '@nestjs/common';
 
 import type { DownloadLink } from '@mybuild/shared';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
+import { Throttle } from '../../common/decorators/throttle.decorator.js';
+import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
 import type { AuthUser } from '../auth/auth-user.js';
 import { FilesService } from './files.service.js';
 
@@ -16,7 +25,14 @@ import { FilesService } from './files.service.js';
  * Права проверяет `FilesService.assertFileAccess`: их даёт связь с заказом,
  * а не роль в токене. Роль всё же передаётся — по ней различается «любая
  * компания» в правиле о файлах задания (ТЗ §4.1).
+ *
+ * `ThrottleGuard` стоит на контроллере целиком, хотя маршрут только читает:
+ * каждое скачивание — обращение к Supabase Storage за подписью, то есть
+ * расход внешней квоты, а не своей базы. Лимит на будущий `GET /documents`
+ * (Фаза 6) при этом уже стоит: он ляжет на этот же контроллер.
  */
+@UseGuards(ThrottleGuard)
+@Throttle({ limit: 60, ttl: 60_000 })
 @Controller('documents')
 export class DocumentsController {
   constructor(private readonly files: FilesService) {}

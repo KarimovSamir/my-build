@@ -24,11 +24,15 @@ export interface OfferDate {
  * в той же строке, и `createdAt` после этого описывает уже не те условия,
  * которые видит клиент. Поэтому изменённое предложение подписывается датой
  * изменения — так же, как в разделе «Мои предложения» у самой компании.
+ *
+ * Признак правки берётся из `editedAt`, а не из сравнения `createdAt`
+ * с `updatedAt`: `updatedAt` меняется и от смены статуса, и от самой
+ * отправки, так что «изменено» получалось бы у каждого предложения.
  */
-export function offerDate(offer: Pick<OfferDto, "createdAt" | "updatedAt">): OfferDate {
-  return offer.updatedAt === offer.createdAt
+export function offerDate(offer: Pick<OfferDto, "createdAt" | "editedAt">): OfferDate {
+  return offer.editedAt === null
     ? { label: "Предложение от", iso: offer.createdAt }
-    : { label: "Обновлено", iso: offer.updatedAt };
+    : { label: "Обновлено", iso: offer.editedAt };
 }
 
 export interface OfferHint {

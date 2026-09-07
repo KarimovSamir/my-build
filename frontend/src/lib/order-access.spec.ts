@@ -28,6 +28,7 @@ function offer(companyId: string, status: OfferStatus): OfferDto {
     proposedDeadline: "2026-10-01T00:00:00.000Z",
     comment: null,
     createdAt: "2026-09-01T00:00:00.000Z",
+    editedAt: null,
     updatedAt: "2026-09-01T00:00:00.000Z",
   };
 }

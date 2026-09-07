@@ -55,10 +55,13 @@ describe("offerHint", () => {
 
 describe("offerDate", () => {
   const CREATED = "2026-09-01T10:00:00.000Z";
-  const UPDATED = "2026-09-03T18:30:00.000Z";
+  const EDITED = "2026-09-03T18:30:00.000Z";
 
   it("нетронутое предложение подписывается датой отправки", () => {
-    expect(offerDate({ createdAt: CREATED, updatedAt: CREATED })).toEqual({
+    // `editedAt` пустой — условия с отправки не меняли. Сравнивать даты
+    // отправки и обновления для этого нельзя: `updatedAt` бьётся уже при
+    // создании предложения и потом на каждой смене статуса.
+    expect(offerDate({ createdAt: CREATED, editedAt: null })).toEqual({
       label: "Предложение от",
       iso: CREATED,
     });
@@ -67,9 +70,9 @@ describe("offerDate", () => {
   it("изменённое — датой изменения: цена и срок в строке уже новые", () => {
     // Отправка предложения по ТЗ §4.1 — upsert, и `createdAt` после неё
     // относится к прежним условиям, которых клиент уже не видит.
-    expect(offerDate({ createdAt: CREATED, updatedAt: UPDATED })).toEqual({
+    expect(offerDate({ createdAt: CREATED, editedAt: EDITED })).toEqual({
       label: "Обновлено",
-      iso: UPDATED,
+      iso: EDITED,
     });
   });
 });

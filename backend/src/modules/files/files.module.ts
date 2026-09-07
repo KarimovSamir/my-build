@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
 import { SupabaseModule } from '../../supabase/supabase.module.js';
 import { DocumentsController } from './documents.controller.js';
 import { FilesService } from './files.service.js';
@@ -12,11 +13,14 @@ import { StorageService } from './storage.service.js';
  * поэтому она живёт на маршрутах `orders` (Фазы 3–4). Наружу модуль отдаёт
  * только раздел «Документы» — пока в объёме скачивания, список появится
  * в Фазе 6.
+ *
+ * `ThrottleGuard` объявлен провайдером: он висит на `DocumentsController`
+ * через `@UseGuards`, а окна у него свои на каждый экземпляр.
  */
 @Module({
   imports: [SupabaseModule],
   controllers: [DocumentsController],
-  providers: [StorageService, FilesService],
+  providers: [StorageService, FilesService, ThrottleGuard],
   exports: [FilesService],
 })
 export class FilesModule {}

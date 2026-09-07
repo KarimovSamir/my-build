@@ -37,6 +37,7 @@ function offer(
     proposedDeadline: new Date('2027-01-01T00:00:00.000Z'),
     comment: 'Сделаем за месяц',
     createdAt: new Date('2026-09-01T10:00:00.000Z'),
+    editedAt: null,
     updatedAt: new Date('2026-09-02T10:00:00.000Z'),
     company: { companyName: `ООО «${companyId.slice(0, 4)}»` },
     ...overrides,

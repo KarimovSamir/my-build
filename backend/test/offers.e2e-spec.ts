@@ -164,6 +164,8 @@ describe('Предложения (e2e)', () => {
         status: OfferStatus.SENT,
         proposedPrice: '85000',
         comment: 'Возьмёмся',
+        // Условия ещё не правили — клиент увидит «Предложение от».
+        editedAt: null,
       });
 
       expect(await orderStatus(order.id)).toBe(OrderStatus.AWAITING_CONFIRMATION);
@@ -194,6 +196,12 @@ describe('Предложения (e2e)', () => {
         comment: 'Пересчитали смету',
         status: OfferStatus.SENT,
       });
+
+      // Правка помечается только здесь: у первой отправки поле пустое.
+      // Сравнением `createdAt` с `updatedAt` этого не узнать — их ставят
+      // разные часы, и переход бьёт `updatedAt` ещё раз.
+      expect(first.body.editedAt).toBeNull();
+      expect(second.body.editedAt).not.toBeNull();
 
       expect(await prisma.offer.count({ where: { orderId: order.id } })).toBe(1);
     });

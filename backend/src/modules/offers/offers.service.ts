@@ -77,6 +77,11 @@ export class OffersService {
       comment: dto.comment ?? null,
     };
 
+    // Правка помечается явным полем, а не сравнением `createdAt` с `updatedAt`:
+    // второе бьётся уже при создании — переход пишет предложению статус `SENT`
+    // отдельным запросом, — и «изменено» получалось бы у каждого предложения.
+    const edited = { ...data, editedAt: new Date() };
+
     const { offer, applied, offerExisted } = await this.prisma.$transaction(
       async (tx) => {
         const order = await this.transitions.lockOrder(tx, dto.orderId);
@@ -92,7 +97,7 @@ export class OffersService {
         const created = await tx.offer.upsert({
           where: key,
           create: { orderId: order.id, companyId, ...data },
-          update: data,
+          update: edited,
           include: OFFER_INCLUDE,
         });
 

@@ -855,5 +855,32 @@ describe('Заказы (e2e)', () => {
       expect(statuses.slice(0, 20).every((status) => status === 400)).toBe(true);
       expect(statuses[20]).toBe(429);
     });
+
+    it('после лимита GET /documents/:id/download отдаёт 429', async () => {
+      // Скачивание — единственный маршрут, который на каждый вызов ходит
+      // во внешнее хранилище за подписью, поэтому лимит на нём нужен так же,
+      // как на мутациях (ТЗ §6).
+      //
+      // Тот же пользователь, что и выше: окно считается по паре
+      // «пользователь + обработчик», и исчерпанный `POST /orders` этому
+      // маршруту не мешает. Идентификатор намеренно не UUID — guard'ы
+      // работают раньше пайпов, поэтому лимит считается, а хранилище
+      // не трогается.
+      const send = () =>
+        request(app.getHttpServer())
+          .get('/documents/не-uuid/download')
+          .set('Authorization', `Bearer ${throttledToken}`);
+
+      const statuses: number[] = [];
+
+      for (let attempt = 0; attempt < 61; attempt += 1) {
+        // oxlint-disable-next-line no-await-in-loop
+        const response = await send();
+        statuses.push(response.status);
+      }
+
+      expect(statuses.slice(0, 60).every((status) => status === 404)).toBe(true);
+      expect(statuses[60]).toBe(429);
+    });
   });
 });
