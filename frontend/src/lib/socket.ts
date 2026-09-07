@@ -12,7 +12,7 @@
 
 import { io, type Socket } from "socket.io-client";
 
-import { getAccessToken } from "@/lib/api.client";
+import { getAccessToken } from "@/lib/supabase/client";
 import { WS_NAMESPACE } from "@/lib/types";
 
 export {
@@ -25,7 +25,17 @@ export {
   type SubscribeAck,
 } from "@/lib/types";
 
-export const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "http://localhost:4000";
+/**
+ * Адрес шлюза. Отдельная переменная нужна на случай, когда сокеты стоят
+ * за другим доменом, но по умолчанию это адрес API: шлюз живёт в том же
+ * процессе NestJS (ТЗ §8). Запасной `localhost` остаётся только для развёртки
+ * без переменных вовсе — иначе незаданный `NEXT_PUBLIC_WS_URL` в проде давал бы
+ * молчаливые попытки достучаться до машины пользователя.
+ */
+export const WS_URL =
+  process.env.NEXT_PUBLIC_WS_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  "http://localhost:4000";
 
 /** Откуда брать access-токен Supabase. Асинхронно: SDK может его обновлять. */
 export type TokenProvider = () => Promise<string | null>;
@@ -71,6 +81,19 @@ export function browserSocket(): Socket | null {
   shared ??= createAppSocket(getAccessToken);
 
   return shared;
+}
+
+/**
+ * Идентификатор своего сокета — для заголовка `X-Socket-Id` (ТЗ §8).
+ *
+ * По нему backend не отправляет этой же вкладке событие о её собственном
+ * действии: ответ мутации уже принёс ей свежие данные. Пока подключения нет,
+ * идентификатора тоже нет — заголовок просто не уходит, и рассылка идёт всем.
+ *
+ * Сокет здесь не создаётся: если его ещё нет, запрос не имеет к нему отношения.
+ */
+export function currentSocketId(): string | null {
+  return shared?.connected ? (shared.id ?? null) : null;
 }
 
 export type { Socket };

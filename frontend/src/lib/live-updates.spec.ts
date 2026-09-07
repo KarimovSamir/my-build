@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { socketEvents, type SocketEvent } from "@/lib/types";
+import { NotificationType, socketEvents, type SocketEvent } from "@/lib/types";
 
 import {
   BURST_DELAY_MS,
@@ -9,6 +9,7 @@ import {
   NOTIFICATIONS_EVENTS,
   ORDER_DETAIL_EVENTS,
   ORDERS_LIST_EVENTS,
+  acceptsOrderDetailEvent,
   createBurst,
   eventOrderId,
 } from "./live-updates";
@@ -47,14 +48,6 @@ describe("состав событий", () => {
   });
 
   /**
-   * Уведомление — следствие того же действия, о котором карточке уже сказало
-   * событие про заказ. Слушать оба значило бы перечитывать её дважды.
-   */
-  it("карточка заказа не слушает уведомления", () => {
-    expect(ORDER_DETAIL_EVENTS).not.toContain(socketEvents.notificationCreated);
-  });
-
-  /**
    * Обратное правило для колокольчика: событие про заказ уведомления
    * не означает (движение чужого предложения приходит в комнату заказа,
    * а записи в БД не создаёт), и счётчик от него дёргался бы впустую.
@@ -78,6 +71,37 @@ describe("eventOrderId", () => {
     ["undefined", undefined],
   ])("%s заказа не даёт", (_, payload) => {
     expect(eventOrderId(payload)).toBeNull();
+  });
+});
+
+describe("acceptsOrderDetailEvent", () => {
+  const ORDER_ID = "order-1";
+
+  it("берёт события своего заказа", () => {
+    expect(acceptsOrderDetailEvent(ORDER_ID, { orderId: ORDER_ID })).toBe(true);
+  });
+
+  it("не берёт события соседнего заказа", () => {
+    // В личную комнату приходит движение по всем заказам пользователя.
+    expect(acceptsOrderDetailEvent(ORDER_ID, { orderId: "order-2" })).toBe(false);
+  });
+
+  it("берёт уведомление об удалении заказа, хотя заказа в нём нет", () => {
+    // Своего события у удаления нет (ТЗ §8), а `orderId` у этого уведомления
+    // `null` — иначе карточка удалённого заказа осталась бы с живыми кнопками.
+    expect(
+      acceptsOrderDetailEvent(ORDER_ID, {
+        notification: { type: NotificationType.ORDER_DELETED, orderId: null },
+      }),
+    ).toBe(true);
+  });
+
+  it("прочие уведомления мимо: о них уже сказало событие про заказ", () => {
+    expect(
+      acceptsOrderDetailEvent(ORDER_ID, {
+        notification: { type: NotificationType.OFFER_RECEIVED, orderId: "order-2" },
+      }),
+    ).toBe(false);
   });
 });
 

@@ -12,15 +12,16 @@
  *    предложений и уведомления), а перечитывать надо один раз.
  */
 
-import { socketEvents, type SocketEvent } from "@/lib/types";
+import { NotificationType, socketEvents, type SocketEvent } from "@/lib/types";
 
 /**
  * Карточка заказа. Всё, что меняет её содержимое: статус, предложения, файлы
  * сдач и уточнённая площадь.
  *
- * `notification:created` сюда не входит: уведомление — следствие того же
- * действия, о котором уже сказало событие про заказ, и слушать оба значило бы
- * перечитывать страницу дважды.
+ * `notification:created` в списке ради одного случая — удаления заказа.
+ * Своего события у него нет (ТЗ §8), и без уведомления открытая карточка
+ * удалённого заказа осталась бы живой страницей с кнопками, которые отвечают
+ * 404. Остальные уведомления отсеивает `acceptsOrderDetailEvent`.
  */
 export const ORDER_DETAIL_EVENTS: readonly SocketEvent[] = [
   socketEvents.orderStatusChanged,
@@ -29,6 +30,7 @@ export const ORDER_DETAIL_EVENTS: readonly SocketEvent[] = [
   socketEvents.offerStatusChanged,
   socketEvents.orderFilesUpdated,
   socketEvents.orderAreaVerified,
+  socketEvents.notificationCreated,
 ];
 
 /**
@@ -55,11 +57,13 @@ export const COMPANY_OFFERS_EVENTS: readonly SocketEvent[] = [
 
 /**
  * Лента доступных заказов. Новый заказ приходит broadcast'ом в `company-feed`,
- * удалённый — уведомлением.
+ * удалённый — уведомлением, но только той компании, чьё предложение было в игре.
  *
- * Заказ, ушедший из ленты потому, что его взяла другая компания, события
- * не даёт: чужое движение заказа компании не показывают (ТЗ §4.1), и лента
- * догонит его при следующем открытии.
+ * Два случая лента вживую не догоняет, и оба намеренно: заказ, который взяла
+ * другая компания, и заказ, удалённый клиентом до того, как эта компания
+ * успела предложиться. В обоих компания посторонняя, а событие о чужом
+ * движении заказа ей не адресуется вовсе (ТЗ §4.1) — строка исчезнет при
+ * следующем открытии ленты, а попытка предложиться по ней даст честный отказ.
  */
 export const COMPANY_FEED_EVENTS: readonly SocketEvent[] = [
   socketEvents.orderCreated,
@@ -93,6 +97,30 @@ export function eventOrderId(payload: unknown): string | null {
   const value: unknown = (payload as { orderId?: unknown } | null)?.orderId;
 
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/**
+ * Что из событий важно открытой карточке заказа.
+ *
+ * Обычные события отбираются по заказу: в личную комнату приходит движение
+ * по **всем** заказам пользователя.
+ *
+ * Уведомление об удалении заказа — исключение: `orderId` у него `null`
+ * (ТЗ §3, отступление в `CLAUDE.md` §7), то есть узнать, тот ли это заказ,
+ * нельзя в принципе. Поэтому карточка перечитывается на любое такое
+ * уведомление: удаляют заказы редко, а цена ошибки — один лишний запрос,
+ * тогда как без этого компания продолжала бы работать со страницей заказа,
+ * которого уже нет.
+ */
+export function acceptsOrderDetailEvent(orderId: string, payload: unknown): boolean {
+  return eventOrderId(payload) === orderId || isOrderDeleted(payload);
+}
+
+function isOrderDeleted(payload: unknown): boolean {
+  const notification = (payload as { notification?: { type?: unknown } } | null)
+    ?.notification;
+
+  return notification?.type === NotificationType.ORDER_DELETED;
 }
 
 /** Сколько ждать продолжения пачки, прежде чем перечитывать. */

@@ -7,7 +7,7 @@ import type { OrderDetail } from "@/lib/types";
 
 import { OrderDetailView } from "@/components/orders/order-detail";
 import { browserApi } from "@/lib/api.client";
-import { ORDER_DETAIL_EVENTS, eventOrderId } from "@/lib/live-updates";
+import { ORDER_DETAIL_EVENTS, acceptsOrderDetailEvent } from "@/lib/live-updates";
 import { resolveOrderDetailAccess } from "@/lib/order-access";
 import { useOrderRoom, useRealtimeRefresh } from "@/lib/use-realtime";
 
@@ -72,8 +72,12 @@ export function OrderLive({
     ORDER_DETAIL_EVENTS,
     reload,
     // В личную комнату клиента приходят события по всем его заказам —
-    // на этой странице нужен только свой.
-    useCallback((payload: unknown) => eventOrderId(payload) === orderId, [orderId]),
+    // на этой странице нужен только свой (и уведомление об удалении заказа,
+    // у которого `orderId` нет вовсе).
+    useCallback(
+      (payload: unknown) => acceptsOrderDetailEvent(orderId, payload),
+      [orderId],
+    ),
   );
 
   return (

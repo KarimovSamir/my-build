@@ -29,13 +29,23 @@ import { NotificationsService } from './notifications.service.js';
  *
  * `@Roles` здесь нет намеренно: ограничивать нечего, а глобальный
  * `SupabaseAuthGuard` уже требует токен — маршрут без `@Public()` закрыт.
+ *
+ * `ThrottleGuard` стоит на контроллере целиком, включая чтение: счётчик
+ * непрочитанных дёргается на каждое событие сокета и на каждый рендер каркаса,
+ * то есть это самый частый маршрут API, и оставлять его без потолка нельзя
+ * (ТЗ §6). Лимиты у каждого маршрута свои — общий на всех штрафовал бы
+ * обычную работу.
  */
 @Controller('notifications')
+@UseGuards(ThrottleGuard)
 export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
 
   /** Свои уведомления: непрочитанные сверху, постранично. */
   @Get()
+  // Список перечитывается на каждое `notification:created` и на каждый переход
+  // по страницам — лимит с запасом, но поток «в цикле» упрётся сразу.
+  @Throttle({ limit: 120, ttl: 60_000 })
   list(
     @CurrentUser() user: AuthUser,
     @Query() query: ListNotificationsQueryDto,
@@ -48,13 +58,15 @@ export class NotificationsController {
    * необходимости, а по порядку чтения: `:id` здесь только у POST.
    */
   @Get('unread-count')
+  // Самый частый маршрут: его зовёт и каркас на каждом рендере, и провайдер
+  // счётчика после каждого события. Отсюда лимит выше остальных.
+  @Throttle({ limit: 240, ttl: 60_000 })
   unreadCount(@CurrentUser() user: AuthUser): Promise<UnreadCount> {
     return this.notifications.unreadCount(user.id);
   }
 
   /** Пометить уведомление прочитанным. */
   @Post(':id/read')
-  @UseGuards(ThrottleGuard)
   // Колокольчик помечает по одному, а страница уведомлений — подряд:
   // лимит выше, чем у мутаций заказа, иначе он сработал бы на обычной работе.
   @Throttle({ limit: 120, ttl: 60_000 })
@@ -69,7 +81,6 @@ export class NotificationsController {
 
   /** Пометить все свои уведомления прочитанными. */
   @Post('read-all')
-  @UseGuards(ThrottleGuard)
   @Throttle({ limit: 30, ttl: 60_000 })
   @HttpCode(HttpStatus.OK)
   markAllRead(@CurrentUser() user: AuthUser): Promise<MarkedRead> {

@@ -75,15 +75,19 @@ export function NotificationRow({ notification }: { notification: NotificationDt
 
     try {
       await browserApi.post(`/notifications/${notification.id}/read`);
+
+      // Перечитывается только то, что действительно изменилось. После отказа
+      // это два лишних запроса вдогонку тосту: счётчик и список остались
+      // прежними, и показать они могут только прежнее.
+      unread.refresh();
+
+      if (reloadList) router.refresh();
     } catch (error) {
       toast.error("Не удалось отметить прочитанным", {
         description: apiErrorMessage(error, "Проверьте соединение и попробуйте ещё раз"),
       });
     } finally {
       setPending(false);
-      unread.refresh();
-
-      if (reloadList) router.refresh();
     }
   }
 

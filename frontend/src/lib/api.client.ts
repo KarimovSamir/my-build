@@ -1,5 +1,6 @@
 import { apiFetch, type RequestOptions } from "./api";
-import { getSupabaseBrowserClient } from "./supabase/client";
+import { currentSocketId } from "./socket";
+import { getAccessToken } from "./supabase/client";
 
 /**
  * Запросы к нашему API из браузера.
@@ -11,21 +12,23 @@ import { getSupabaseBrowserClient } from "./supabase/client";
  * Нужен там, где серверного рендера не хватает: форма создания заказа шлёт
  * multipart с файлами прямо из браузера, чтобы не гонять их лишний раз через
  * процесс Next.js.
+ *
+ * К запросу добавляется идентификатор своего сокета: по нему backend не шлёт
+ * этой же вкладке событие о её собственном действии (`common/actor-context.ts`
+ * на сервере). Ответ мутации и так приносит свежий заказ, а событие стоило бы
+ * ещё одного запроса.
  */
 async function browserFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  return apiFetch<T>(path, { ...options, token: await getAccessToken() });
-}
+  const socketId = currentSocketId();
 
-/**
- * Access-токен текущей сессии. Отдельной функцией, потому что нужен не только
- * запросам: тем же токеном авторизуется сокет (`lib/socket.ts`, ТЗ §8).
- *
- * `getSession` отдаёт уже обновлённый токен: SDK следит за сроком сам.
- */
-export async function getAccessToken(): Promise<string | null> {
-  const { data } = await getSupabaseBrowserClient().auth.getSession();
-
-  return data.session?.access_token ?? null;
+  return apiFetch<T>(path, {
+    ...options,
+    token: await getAccessToken(),
+    headers: {
+      ...options.headers,
+      ...(socketId ? { "X-Socket-Id": socketId } : {}),
+    },
+  });
 }
 
 export const browserApi = {

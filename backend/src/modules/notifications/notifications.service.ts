@@ -35,7 +35,9 @@ const NOT_FOUND = 'Уведомление не найдено';
  * Сортировка живёт на сервере, а не в интерфейсе: список постраничный,
  * и «непрочитанные сверху» (ТЗ §10, подфаза 5.4) внутри одной страницы
  * означало бы, что непрочитанное со второй страницы так и осталось внизу.
- * Порядок совпадает с индексом `(userId, isRead, createdAt)`.
+ * Порядок совпадает с индексом `(userId, isRead, createdAt DESC)` — направление
+ * у каждой колонки там своё именно поэтому: btree читается либо вперёд, либо
+ * назад целиком, и со всеми колонками ASC такую сортировку он не покрывает.
  */
 const ORDER_BY: Prisma.NotificationOrderByWithRelationInput[] = [
   { isRead: 'asc' },
@@ -86,10 +88,12 @@ export class NotificationsService {
   /**
    * Пометить одно уведомление прочитанным.
    *
-   * `updateMany` с `userId` в условии, а не `findFirst` + `update`: чужая
-   * строка не должна ни обновляться, ни подтверждать своё существование
-   * отдельным ответом. Повторный вызов на уже прочитанном — не ошибка:
-   * состояние то же, значит и ответ тот же.
+   * `updateManyAndReturn` с `userId` в условии, а не `findFirst` + `update`:
+   * чужая строка не должна ни обновляться, ни подтверждать своё существование
+   * отдельным ответом. Одним запросом, а не «обновить и перечитать»: второй
+   * запрос отвечал бы уже про другой момент времени — соседняя вкладка могла
+   * успеть пометить всё прочитанным. Повторный вызов на уже прочитанном —
+   * не ошибка: состояние то же, значит и ответ тот же.
    */
   async markRead(userId: string, notificationId: string): Promise<NotificationDto> {
     // Колонка типа `uuid`: мусор в идентификаторе упал бы в Postgres,
@@ -98,17 +102,9 @@ export class NotificationsService {
       throw new NotFoundException(NOT_FOUND);
     }
 
-    const { count } = await this.prisma.notification.updateMany({
+    const [row] = await this.prisma.notification.updateManyAndReturn({
       where: { id: notificationId, userId },
       data: { isRead: true },
-    });
-
-    if (count === 0) {
-      throw new NotFoundException(NOT_FOUND);
-    }
-
-    const row = await this.prisma.notification.findUnique({
-      where: { id: notificationId },
     });
 
     if (!row) {

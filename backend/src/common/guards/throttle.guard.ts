@@ -12,6 +12,7 @@ import {
   THROTTLE_KEY,
   type ThrottleOptions,
 } from '../decorators/throttle.decorator.js';
+import { RateWindows } from '../rate-window.js';
 import type { RequestWithUser } from '../../modules/auth/auth-user.js';
 
 /**
@@ -21,6 +22,9 @@ import type { RequestWithUser } from '../../modules/auth/auth-user.js';
  * (6.5.0) объявляет peer-зависимость только до NestJS 11, и на NestJS 12,
  * который выбран в Фазе 0, npm её не ставит. Механизм здесь тот же —
  * скользящее окно на пользователя и маршрут, — а зависимости нет.
+ *
+ * Само окно живёт в `common/rate-window.ts`: тем же счётом ограничены
+ * сообщения WebSocket-шлюза, а guard в контексте `ws` не работает.
  *
  * Ограничения этой реализации, важные к Фазе 7:
  * - счётчики живут в памяти процесса, поэтому при нескольких экземплярах
@@ -32,20 +36,9 @@ import type { RequestWithUser } from '../../modules/auth/auth-user.js';
 /** Если у маршрута нет своих значений: 20 запросов в минуту. */
 const DEFAULT_THROTTLE: ThrottleOptions = { limit: 20, ttl: 60_000 };
 
-/** Как часто выбрасывать из памяти окна, по которым давно нет запросов. */
-const SWEEP_INTERVAL_MS = 60_000;
-
-interface RequestWindow {
-  /** Метки времени запросов внутри окна, от старой к новой. */
-  stamps: number[];
-  /** Когда это окно перестанет иметь значение и его можно удалить. */
-  expiresAt: number;
-}
-
 @Injectable()
 export class ThrottleGuard implements CanActivate {
-  private readonly windows = new Map<string, RequestWindow>();
-  private nextSweepAt = 0;
+  private readonly windows = new RateWindows();
 
   constructor(private readonly reflector: Reflector) {}
 
@@ -59,18 +52,10 @@ export class ThrottleGuard implements CanActivate {
     const http = context.switchToHttp();
     const request = http.getRequest<RequestWithUser>();
 
-    const now = Date.now();
-    this.sweep(now);
+    const result = this.windows.hit(buildKey(context, request), options);
 
-    const key = buildKey(context, request);
-    const windowStart = now - options.ttl;
-    const stamps = (this.windows.get(key)?.stamps ?? []).filter(
-      (stamp) => stamp > windowStart,
-    );
-
-    if (stamps.length >= options.limit) {
-      // Окно освободится, когда из него выпадет самый старый запрос.
-      const retryAfter = Math.max(1, Math.ceil((stamps[0]! + options.ttl - now) / 1000));
+    if (!result.allowed) {
+      const retryAfter = Math.max(1, Math.ceil(result.retryAfterMs / 1000));
       http.getResponse<Response>().setHeader('Retry-After', String(retryAfter));
 
       throw new HttpException(
@@ -83,25 +68,7 @@ export class ThrottleGuard implements CanActivate {
       );
     }
 
-    stamps.push(now);
-    this.windows.set(key, { stamps, expiresAt: now + options.ttl });
-
     return true;
-  }
-
-  /**
-   * Убрать окна, срок которых истёк. Иначе карта растёт на каждого
-   * пользователя и не уменьшается никогда.
-   */
-  private sweep(now: number): void {
-    if (now < this.nextSweepAt) return;
-    this.nextSweepAt = now + SWEEP_INTERVAL_MS;
-
-    for (const [key, window] of this.windows) {
-      if (window.expiresAt <= now) {
-        this.windows.delete(key);
-      }
-    }
   }
 }
 

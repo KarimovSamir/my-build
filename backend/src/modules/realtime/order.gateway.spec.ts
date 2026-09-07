@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ConfigService } from '@nestjs/config';
 import type { Namespace } from 'socket.io';
 
 import { ACTIVE_OFFER_STATUSES, Role, socketRooms } from '@mybuild/shared';
@@ -40,9 +41,15 @@ interface SocketStubData {
   expiryTimer?: ReturnType<typeof setTimeout>;
 }
 
+/** У каждого сокета свой идентификатор: по нему считается частота сообщений. */
+let socketCounter = 0;
+
 /** Сокет в том объёме, в каком его трогает шлюз. */
 function createSocket(user?: AuthUser, token?: string, expiresAt?: number | null) {
+  socketCounter += 1;
+
   return {
+    id: `socket-${socketCounter}`,
     handshake: {
       auth: token === undefined ? {} : { token },
       headers: {} as Record<string, string | undefined>,
@@ -82,12 +89,19 @@ function createStubs(
     },
   };
 
+  // Список origin'ов шлюз берёт у `ConfigService` при создании: читать
+  // `process.env` напрямую значило бы обойти проверку окружения на старте.
+  const config = {
+    getOrThrow: vi.fn((_key: string) => 'http://localhost:3000'),
+  };
+
   const gateway = new OrderGateway(
     jwt as unknown as SupabaseJwtService,
     prisma as unknown as PrismaService,
+    config as unknown as ConfigService,
   );
 
-  return { gateway, jwt, prisma };
+  return { gateway, jwt, prisma, config };
 }
 
 /**
@@ -99,15 +113,19 @@ function withNamespace(gateway: OrderGateway) {
   const namespace = {
     to: vi.fn((_rooms: string[]) => ({ emit: emit })),
     in: vi.fn((_room: string) => ({ socketsLeave })),
+    // Исключение сокета-автора: `except` отдаёт такой же объект рассылки.
+    except: vi.fn((_room: string) => ({ to: exceptTo })),
     use: vi.fn((_middleware: unknown) => undefined),
   };
 
   const emit = vi.fn((_event: string, _payload: unknown) => undefined);
+  const exceptEmit = vi.fn((_event: string, _payload: unknown) => undefined);
+  const exceptTo = vi.fn((_rooms: string[]) => ({ emit: exceptEmit }));
   const socketsLeave = vi.fn((_room: string) => undefined);
 
   Reflect.set(gateway, 'namespace', namespace);
 
-  return { namespace, emit, socketsLeave };
+  return { namespace, emit, exceptTo, exceptEmit, socketsLeave };
 }
 
 /**
@@ -196,7 +214,7 @@ describe('OrderGateway: срок действия токена', () => {
     const socket = createSocket(undefined, 'token');
 
     await authenticate(gateway, socket);
-    gateway.handleConnection(asSocket(socket));
+    await gateway.handleConnection(asSocket(socket));
 
     // До срока соединение живёт: рвать его раньше времени значило бы
     // выключать real-time у работающего пользователя.
@@ -212,7 +230,7 @@ describe('OrderGateway: срок действия токена', () => {
     const socket = createSocket(undefined, 'token');
 
     await authenticate(gateway, socket);
-    gateway.handleConnection(asSocket(socket));
+    await gateway.handleConnection(asSocket(socket));
     gateway.handleDisconnect(asSocket(socket));
 
     vi.advanceTimersByTime(TOKEN_TTL_MS * 2);
@@ -254,13 +272,26 @@ describe('OrderGateway: срок действия токена', () => {
 });
 
 describe('OrderGateway: комнаты', () => {
-  it('на подключении заводит личную комнату', () => {
+  it('на подключении заводит личную комнату', async () => {
     const { gateway } = createStubs();
     const socket = createSocket(client);
 
-    gateway.handleConnection(asSocket(socket));
+    await gateway.handleConnection(asSocket(socket));
 
     expect(socket.join).toHaveBeenCalledWith(socketRooms.user(CLIENT_ID));
+  });
+
+  it('без личной комнаты соединение не оставляет', async () => {
+    const { gateway } = createStubs();
+    const socket = createSocket(client);
+    socket.join.mockRejectedValueOnce(new Error('адаптер недоступен'));
+
+    await gateway.handleConnection(asSocket(socket));
+
+    // Такой сокет выглядит рабочим, но не получит ни одного уведомления:
+    // лучше разорвать и дать клиенту переподключиться.
+    expect(socket.disconnect).toHaveBeenCalled();
+    expect(socket.data.expiryTimer).toBeUndefined();
   });
 
   it('в комнату заказа пускает участника', async () => {
@@ -340,6 +371,65 @@ describe('OrderGateway: комнаты', () => {
   });
 });
 
+describe('OrderGateway: ответ на сообщение', () => {
+  it('на сбой внутри обработчика отвечает отказом, а не молчанием', async () => {
+    const { gateway, prisma } = createStubs();
+    prisma.order.findFirst.mockRejectedValueOnce(new Error('база недоступна'));
+
+    // Без ответа клиент остался бы вне комнаты и не узнал об этом: сокет жив,
+    // события просто не приходят. Отказ помечен `retryable` — попытку повторят.
+    await expect(
+      gateway.subscribeOrder(asSocket(createSocket(client)), { orderId: ORDER_ID }),
+    ).resolves.toEqual({
+      ok: false,
+      error: 'Не удалось подписаться на обновления',
+      retryable: true,
+    });
+  });
+
+  it('отказ по правам повторять не предлагает', async () => {
+    const { gateway } = createStubs({ participant: false });
+
+    const ack = await gateway.subscribeOrder(asSocket(createSocket(client)), {
+      orderId: ORDER_ID,
+    });
+
+    // «Заказ не найден» повтором не исправишь: правило не изменится.
+    expect(ack.retryable).toBeUndefined();
+  });
+
+  it('ограничивает частоту сообщений одного сокета', async () => {
+    const { gateway } = createStubs();
+    const socket = asSocket(createSocket(client));
+
+    // Лимит — 30 сообщений на сокет и тип сообщения за 10 секунд.
+    for (let i = 0; i < 30; i += 1) {
+      // Параллельно нельзя: проверяется именно счёт по порядку.
+      // oxlint-disable-next-line no-await-in-loop
+      await expect(gateway.unsubscribeFeed(socket)).resolves.toEqual({ ok: true });
+    }
+
+    await expect(gateway.unsubscribeFeed(socket)).resolves.toMatchObject({
+      ok: false,
+      retryable: true,
+    });
+  });
+
+  it('лимит считается на сокет: соседняя вкладка не страдает', async () => {
+    const { gateway } = createStubs();
+    const first = asSocket(createSocket(client));
+    const second = asSocket(createSocket(client));
+
+    for (let i = 0; i < 30; i += 1) {
+      // oxlint-disable-next-line no-await-in-loop
+      await gateway.unsubscribeFeed(first);
+    }
+
+    await expect(gateway.unsubscribeFeed(first)).resolves.toMatchObject({ ok: false });
+    await expect(gateway.unsubscribeFeed(second)).resolves.toEqual({ ok: true });
+  });
+});
+
 describe('OrderGateway: рассылка', () => {
   let gateway: OrderGateway;
 
@@ -364,12 +454,64 @@ describe('OrderGateway: рассылка', () => {
     expect(emit).toHaveBeenCalledWith('order:status_changed', { orderId: ORDER_ID });
   });
 
+  it('не шлёт событие вкладке, которая его и вызвала', () => {
+    const { namespace, emit, exceptTo, exceptEmit } = withNamespace(gateway);
+
+    gateway.emit(
+      [
+        {
+          rooms: ['order:1'],
+          event: 'order:status_changed',
+          payload: { orderId: ORDER_ID },
+        },
+      ],
+      'socket-actor',
+    );
+
+    // Ответ маршрута уже принёс этой вкладке свежий заказ, и своё же событие
+    // стоило бы ей лишнего GET.
+    expect(namespace.except).toHaveBeenCalledWith('socket-actor');
+    expect(exceptTo).toHaveBeenCalledWith(['order:1']);
+    expect(exceptEmit).toHaveBeenCalledWith('order:status_changed', { orderId: ORDER_ID });
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('уведомление доезжает и до автора действия', () => {
+    const { namespace, emit } = withNamespace(gateway);
+
+    gateway.emit(
+      [
+        {
+          rooms: [socketRooms.user(CLIENT_ID)],
+          event: 'notification:created',
+          payload: { orderId: ORDER_ID },
+        },
+      ],
+      'socket-actor',
+    );
+
+    // Единственное событие с данными: колокольчик показывает его текст, и
+    // потерять его в своей же вкладке нельзя.
+    expect(namespace.except).not.toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith('notification:created', { orderId: ORDER_ID });
+  });
+
   it('выселяет сокеты пользователя из комнаты заказа', () => {
     const { namespace, socketsLeave } = withNamespace(gateway);
 
-    gateway.evict([{ userRoom: 'user:2', orderRoom: 'order:1' }]);
+    gateway.evict([{ members: 'user:2', room: 'order:1' }]);
 
     expect(namespace.in).toHaveBeenCalledWith('user:2');
+    expect(socketsLeave).toHaveBeenCalledWith('order:1');
+  });
+
+  it('распускает комнату целиком: так уходит удалённый заказ', () => {
+    const { namespace, socketsLeave } = withNamespace(gateway);
+
+    gateway.evict([{ members: 'order:1', room: 'order:1' }]);
+
+    // Заказа больше нет, и оставаться в его комнате незачем никому.
+    expect(namespace.in).toHaveBeenCalledWith('order:1');
     expect(socketsLeave).toHaveBeenCalledWith('order:1');
   });
 
@@ -381,6 +523,6 @@ describe('OrderGateway: рассылка', () => {
         { rooms: ['user:2'], event: 'order:status_changed', payload: { orderId: ORDER_ID } },
       ]),
     ).not.toThrow();
-    expect(() => gateway.evict([{ userRoom: 'user:2', orderRoom: 'order:1' }])).not.toThrow();
+    expect(() => gateway.evict([{ members: 'user:2', room: 'order:1' }])).not.toThrow();
   });
 });

@@ -65,6 +65,15 @@ export interface AttachFilesParams {
    * из проверки откатывает вставку и убирает загруженные объекты.
    */
   guard?: (tx: Prisma.TransactionClient) => Promise<void>;
+  /**
+   * Что дописать той же транзакцией, когда строки файлов уже созданы.
+   *
+   * Нужно уведомлению о новых файлах (ТЗ §8): отдельным запросом после
+   * транзакции сбой на нём оставлял бы файлы в заказе, о которых клиенту
+   * никто не сказал. Вызывается только если что-то действительно добавилось —
+   * повторная загрузка тех же файлов событием не считается.
+   */
+  onAttached?: (tx: Prisma.TransactionClient, added: OrderFile[]) => Promise<void>;
 }
 
 /**
@@ -140,7 +149,7 @@ export class FilesService {
         // вставки уже устарело.
         await params.guard?.(tx);
 
-        return tx.orderFile.createManyAndReturn({
+        const created = await tx.orderFile.createManyAndReturn({
           data: fresh.map((file, index) => ({
             orderId,
             storageKey: keys[index]!,
@@ -156,6 +165,13 @@ export class FilesService {
           // на загрузке файлов незачем.
           skipDuplicates: true,
         });
+
+        // Тем же коммитом, что и сами строки: см. `onAttached`.
+        if (created.length > 0) {
+          await params.onAttached?.(tx, created);
+        }
+
+        return created;
       }, ATTACH_TX_OPTIONS);
     } catch (error) {
       // Загруженное без строки в базе — мусор, который уже никто не найдёт.

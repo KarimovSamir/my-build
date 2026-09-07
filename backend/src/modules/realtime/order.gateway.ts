@@ -11,9 +11,19 @@
  * переживает: по `exp` шлюз закрывает сокет сам, иначе одно рукопожатие давало
  * бы доступ к событиям на часы вперёд, тогда как REST с тем же токеном уже
  * отвечал бы 401 (ТЗ §6).
+ *
+ * Частота сообщений ограничена тем же скользящим окном, что и REST
+ * (`common/rate-window.ts`, ТЗ §6): `ThrottleGuard` работает в HTTP-контексте
+ * и до сокета не достаёт, а `subscribe:order` ходит в базу на каждое
+ * сообщение.
+ *
+ * Любой обработчик обязан ответить ack — в том числе когда падает. Без ответа
+ * клиент остаётся вне комнаты и не узнаёт об этом: сокет жив, событий нет,
+ * страница выглядит рабочей.
  */
 
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   ConnectedSocket,
   MessageBody,
@@ -30,11 +40,13 @@ import {
   ACTIVE_OFFER_STATUSES,
   Role,
   WS_NAMESPACE,
+  socketEvents,
   socketMessages,
   socketRooms,
   type SubscribeAck,
 } from '@mybuild/shared';
 
+import { RateWindows, type RateWindowOptions } from '../../common/rate-window.js';
 import { isUuid } from '../../common/uuid.js';
 import { parseCorsOrigins } from '../../config/env.validation.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -50,6 +62,17 @@ const EMAIL_NOT_VERIFIED = 'Подтвердите email: ссылка отпр�
 
 const ORDER_FORBIDDEN = 'Заказ не найден';
 const FEED_FORBIDDEN = 'Лента заказов доступна только компаниям';
+const TOO_MANY_MESSAGES = 'Слишком много сообщений, попробуйте ещё раз';
+const SUBSCRIBE_FAILED = 'Не удалось подписаться на обновления';
+
+/**
+ * Сколько сообщений принимать от одного сокета (ТЗ §6).
+ *
+ * Сообщения шлёт не пользователь, а переходы между страницами: вход в комнату
+ * и выход из неё. Даже быстрый перебор разделов не даёт и десятка за десять
+ * секунд, так что запас здесь большой, а поток «в цикле» упрётся сразу.
+ */
+const MESSAGE_RATE: RateWindowOptions = { limit: 30, ttl: 10_000 };
 
 /** Пользователь, привязанный к сокету после проверки токена. */
 interface SocketData {
@@ -74,10 +97,19 @@ type AppSocket = Socket<
 >;
 
 /**
+ * Разрешённые origin'ы сокета. Заполняются при создании шлюза, до первого
+ * подключения: раньше их взять неоткуда — опции декоратора вычисляются при
+ * загрузке модуля, когда `.env` ещё не разобран.
+ */
+let allowedOrigins: string[] = [];
+
+/**
  * CORS для сокета настраивается отдельно от HTTP: `app.enableCors` до
- * socket.io не относится. Список тот же — из `CORS_ORIGINS`, но читается
- * при каждом подключении: декоратор вычисляется при загрузке модуля, когда
- * `.env` ещё не разобран.
+ * socket.io не относится. Список тот же, что у REST, и берётся так же — из
+ * `CORS_ORIGINS` через `ConfigService`, а не из `process.env` напрямую:
+ * незаданная переменная там означала бы пустой список и молчаливый отказ
+ * всем браузерам, тогда как проверка окружения на старте подставляет
+ * значение по умолчанию.
  */
 function corsOrigin(
   origin: string | undefined,
@@ -90,7 +122,7 @@ function corsOrigin(
     return;
   }
 
-  callback(null, parseCorsOrigins(process.env.CORS_ORIGINS ?? '').includes(origin));
+  callback(null, allowedOrigins.includes(origin));
 }
 
 @WebSocketGateway({ namespace: WS_NAMESPACE, cors: { origin: corsOrigin } })
@@ -99,13 +131,21 @@ export class OrderGateway
 {
   private readonly logger = new Logger(OrderGateway.name);
 
+  /** Частота сообщений — на сокет, а не на пользователя: вкладок может быть много. */
+  private readonly messageRate = new RateWindows();
+
   @WebSocketServer()
   private readonly namespace?: Namespace;
 
   constructor(
     private readonly jwt: SupabaseJwtService,
     private readonly prisma: PrismaService,
-  ) {}
+    config: ConfigService,
+  ) {
+    // Список origin'ов кладётся в модульную переменную, потому что читает его
+    // функция из опций декоратора: до экземпляра шлюза ей не дотянуться.
+    allowedOrigins = parseCorsOrigins(config.getOrThrow<string>('CORS_ORIGINS'));
+  }
 
   /**
    * Проверка токена — middleware namespace'а, а не `handleConnection`:
@@ -121,8 +161,18 @@ export class OrderGateway
     });
   }
 
-  /** Личная комната — сразу: уведомления приходят в неё без всякой подписки. */
-  handleConnection(@ConnectedSocket() socket: AppSocket): void {
+  /**
+   * Личная комната — сразу: уведомления приходят в неё без всякой подписки.
+   *
+   * Вход в комнату ожидается, а не запускается фоном: адаптер может отвечать
+   * не мгновенно, и сообщение, пришедшее раньше, обработалось бы у сокета вне
+   * своей комнаты. Не удалось войти — соединение закрывается: сокет без личной
+   * комнаты выглядит рабочим, но не получает ни одного уведомления.
+   *
+   * `@ConnectedSocket()` здесь нет: это lifecycle-хук, а не обработчик
+   * сообщения, и декораторы параметров Nest в нём не разбирает.
+   */
+  async handleConnection(socket: AppSocket): Promise<void> {
     const user = socket.data.user;
 
     if (!user) {
@@ -132,12 +182,25 @@ export class OrderGateway
     }
 
     this.scheduleExpiry(socket);
-    void socket.join(socketRooms.user(user.id));
+
+    try {
+      await socket.join(socketRooms.user(user.id));
+    } catch (error) {
+      this.logger.error(
+        `Не удалось войти в личную комнату пользователя ${user.id}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+
+      clearExpiry(socket);
+      socket.disconnect(true);
+    }
   }
 
   /** Сокет закрылся — снять таймер: держать его до `exp` уже не за чем. */
-  handleDisconnect(@ConnectedSocket() socket: AppSocket): void {
+  handleDisconnect(socket: AppSocket): void {
     clearExpiry(socket);
+    // Окно частоты живёт на идентификатор сокета, а он больше не повторится.
+    this.messageRate.forget(socket.id);
   }
 
   /**
@@ -153,15 +216,17 @@ export class OrderGateway
     @ConnectedSocket() socket: AppSocket,
     @MessageBody() body: unknown,
   ): Promise<SubscribeAck> {
-    const user = this.activeUser(socket);
-    const orderId = readOrderId(body);
+    return this.handle(socket, socketMessages.subscribeOrder, async () => {
+      const user = this.activeUser(socket);
+      const orderId = readOrderId(body);
 
-    if (!user || !orderId || !(await this.isOrderParticipant(user.id, orderId))) {
-      return { ok: false, error: ORDER_FORBIDDEN };
-    }
+      if (!user || !orderId || !(await this.isOrderParticipant(user.id, orderId))) {
+        return { ok: false, error: ORDER_FORBIDDEN };
+      }
 
-    await socket.join(socketRooms.order(orderId));
-    return { ok: true };
+      await socket.join(socketRooms.order(orderId));
+      return { ok: true };
+    });
   }
 
   @SubscribeMessage(socketMessages.unsubscribeOrder)
@@ -169,37 +234,49 @@ export class OrderGateway
     @ConnectedSocket() socket: AppSocket,
     @MessageBody() body: unknown,
   ): Promise<SubscribeAck> {
-    const orderId = readOrderId(body);
+    return this.handle(socket, socketMessages.unsubscribeOrder, async () => {
+      const orderId = readOrderId(body);
 
-    if (orderId) {
-      await socket.leave(socketRooms.order(orderId));
-    }
+      if (orderId) {
+        await socket.leave(socketRooms.order(orderId));
+      }
 
-    return { ok: true };
+      return { ok: true };
+    });
   }
 
   /** Лента доступных заказов — только компаниям (ТЗ §8). */
   @SubscribeMessage(socketMessages.subscribeFeed)
   async subscribeFeed(@ConnectedSocket() socket: AppSocket): Promise<SubscribeAck> {
-    if (this.activeUser(socket)?.role !== Role.COMPANY) {
-      return { ok: false, error: FEED_FORBIDDEN };
-    }
+    return this.handle(socket, socketMessages.subscribeFeed, async () => {
+      if (this.activeUser(socket)?.role !== Role.COMPANY) {
+        return { ok: false, error: FEED_FORBIDDEN };
+      }
 
-    await socket.join(socketRooms.companyFeed());
-    return { ok: true };
+      await socket.join(socketRooms.companyFeed());
+      return { ok: true };
+    });
   }
 
   @SubscribeMessage(socketMessages.unsubscribeFeed)
   async unsubscribeFeed(@ConnectedSocket() socket: AppSocket): Promise<SubscribeAck> {
-    await socket.leave(socketRooms.companyFeed());
-    return { ok: true };
+    return this.handle(socket, socketMessages.unsubscribeFeed, async () => {
+      await socket.leave(socketRooms.companyFeed());
+      return { ok: true };
+    });
   }
 
   /**
    * Разослать готовые сообщения. Комнат у сообщения может быть несколько —
    * socket.io сам не отправит одно событие дважды тому, кто состоит в обеих.
+   *
+   * `exceptSocketId` — сокет вкладки, которая это действие и выполнила
+   * (`common/actor-context.ts`). Ей событие не нужно: ответ маршрута уже принёс
+   * ей свежий заказ, а перечит по своему же событию — лишний запрос. Уведомлений
+   * это не касается: они несут готовый текст для колокольчика, и единственное
+   * событие с данными должно доезжать в любом случае.
    */
-  emit(messages: RealtimeMessage[]): void {
+  emit(messages: RealtimeMessage[], exceptSocketId?: string | null): void {
     const namespace = this.namespace;
 
     if (!namespace) {
@@ -210,7 +287,12 @@ export class OrderGateway
     }
 
     for (const message of messages) {
-      namespace.to(message.rooms).emit(message.event, message.payload);
+      const actor =
+        message.event === socketEvents.notificationCreated ? null : (exceptSocketId ?? null);
+
+      const target = actor === null ? namespace : namespace.except(actor);
+
+      target.to(message.rooms).emit(message.event, message.payload);
     }
   }
 
@@ -225,7 +307,43 @@ export class OrderGateway
     if (!namespace) return;
 
     for (const eviction of evictions) {
-      namespace.in(eviction.userRoom).socketsLeave(eviction.orderRoom);
+      namespace.in(eviction.members).socketsLeave(eviction.room);
+    }
+  }
+
+  /**
+   * Общая обёртка обработчиков сообщений: лимит частоты и ответ при любом
+   * исходе.
+   *
+   * Ответ обязателен, потому что клиент ждёт ack. Глобальный
+   * `AllExceptionsFilter` в контексте `ws` не действует, и упавший обработчик
+   * без этой обёртки отправлял бы клиенту `exception`, а колбэк подписки
+   * не вызывал бы вовсе: страница осталась бы вне комнаты и молча перестала
+   * получать события.
+   *
+   * Отказ помечается `retryable`: лимит и сбой базы проходят сами, и клиент
+   * повторит попытку, а «не пустили» повтором не исправить.
+   */
+  private async handle(
+    socket: AppSocket,
+    message: string,
+    run: () => Promise<SubscribeAck>,
+  ): Promise<SubscribeAck> {
+    const allowed = this.messageRate.hit(`${socket.id}:${message}`, MESSAGE_RATE);
+
+    if (!allowed.allowed) {
+      return { ok: false, error: TOO_MANY_MESSAGES, retryable: true };
+    }
+
+    try {
+      return await run();
+    } catch (error) {
+      this.logger.error(
+        `Сообщение ${message} не обработано`,
+        error instanceof Error ? error.stack : String(error),
+      );
+
+      return { ok: false, error: SUBSCRIBE_FAILED, retryable: true };
     }
   }
 

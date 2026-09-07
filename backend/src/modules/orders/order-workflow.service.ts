@@ -26,6 +26,7 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import type { UploadedFileInput } from '../files/file-validation.js';
 import { FilesService } from '../files/files.service.js';
+import type { NotificationTarget } from '../realtime/realtime-events.js';
 import { RealtimeService } from '../realtime/realtime.service.js';
 import { orderRef, type OrderRef } from './order-notification.js';
 import { OrderEventType } from './order-state-machine.js';
@@ -213,33 +214,41 @@ export class OrderWorkflowService {
       TRANSITION_TX_OPTIONS,
     );
 
+    // Уведомление создаётся той же транзакцией, что и строки файлов: отдельным
+    // запросом после неё сбой оставил бы файлы в заказе, о которых клиенту
+    // никто не сказал. Вызов идёт только если что-то действительно добавилось —
+    // повторная загрузка тех же файлов отсеивается дедупликацией (ТЗ §4.1),
+    // и сообщать клиенту об изменении, которого не было, незачем.
+    const created: { notification?: NotificationTarget } = {};
+
     const added = await this.files.attachFiles({
       orderId,
       ownerType: FileOwnerType.COMPANY,
       submissionRound: submission.round,
       files: prepared,
       guard: (tx) => this.assertSubmissionOpen(tx, orderId, submission.id),
+      onAttached: async (tx) => {
+        created.notification = await tx.notification.create({
+          data: {
+            // Адресат читается под блокировкой вместе с заказом, а не берётся
+            // из снимка guard'а: у заказа один владелец, и это его строка.
+            userId: submission.order.clientId,
+            type: NotificationType.FILES_UPDATED,
+            orderId,
+            title: notificationTypeLabels[NotificationType.FILES_UPDATED],
+            body: `${orderRef(submission.order)}: исполнитель добавил файлы (сдача №${submission.round})`,
+          },
+        });
+      },
     });
 
-    // Уведомление и событие — только если в заказе действительно что-то
-    // появилось: повторная загрузка тех же файлов отсеивается дедупликацией
-    // (ТЗ §4.1), и сообщать клиенту об изменении, которого не было, незачем.
-    if (added.length > 0) {
-      const notification = await this.prisma.notification.create({
-        data: {
-          // Адресат читается под блокировкой вместе с заказом, а не берётся
-          // из снимка guard'а: у заказа один владелец, и это его строка.
-          userId: submission.order.clientId,
-          type: NotificationType.FILES_UPDATED,
-          orderId,
-          title: notificationTypeLabels[NotificationType.FILES_UPDATED],
-          body: `${orderRef(submission.order)}: исполнитель добавил файлы (сдача №${submission.round})`,
-        },
-      });
-
+    // Рассылка — после коммита: событие изнутри транзакции ушло бы и в случае
+    // отката. `added` здесь только ради читаемости условия — строка уведомления
+    // появляется ровно тогда же, когда и файлы.
+    if (added.length > 0 && created.notification) {
       this.realtime.orderFilesUpdated(
         { id: orderId, clientId: submission.order.clientId },
-        [notification],
+        [created.notification],
       );
     }
 

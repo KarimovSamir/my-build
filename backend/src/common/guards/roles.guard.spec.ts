@@ -21,8 +21,13 @@ class TestRoutes {
 
 type RouteName = keyof TestRoutes;
 
-function contextFor(route: RouteName, user: AuthUser | undefined): ExecutionContext {
+function contextFor(
+  route: RouteName,
+  user: AuthUser | undefined,
+  type: 'http' | 'ws' = 'http',
+): ExecutionContext {
   return {
+    getType: () => type,
     getHandler: () => TestRoutes.prototype[route],
     getClass: () => TestRoutes,
     switchToHttp: () => ({ getRequest: () => ({ user }) }),
@@ -65,6 +70,20 @@ describe('RolesGuard', () => {
   it('требует авторизации, если пользователя в запросе нет вовсе', () => {
     expect(() => guard.canActivate(contextFor('clientOnly', undefined))).toThrow(
       UnauthorizedException,
+    );
+  });
+
+  it('маршрут без ограничения по роли пропускает и в контексте сокета', () => {
+    // Guard глобальный: до обработчиков сообщений шлюза он тоже доходит.
+    expect(guard.canActivate(contextFor('open', client, 'ws'))).toBe(true);
+  });
+
+  it('в контексте сокета роль не проверяет, а отказывает', () => {
+    // `switchToHttp().getRequest()` вернул бы там сокет, и роль читалась бы
+    // из пустоты. Роль на сокете проверяет сам шлюз — молчаливого «пропустить»
+    // тут быть не должно.
+    expect(() => guard.canActivate(contextFor('clientOnly', client, 'ws'))).toThrow(
+      ForbiddenException,
     );
   });
 });

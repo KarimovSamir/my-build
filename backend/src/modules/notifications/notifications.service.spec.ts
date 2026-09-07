@@ -50,13 +50,13 @@ function createPrismaStub() {
   return {
     notification: {
       findMany: vi.fn(async (_args: ListArgs) => [notificationRow()]),
-      findUnique: vi.fn(
-        async (_args: {
-          where: { id: string };
-        }): Promise<ReturnType<typeof notificationRow> | null> => notificationRow({ isRead: true }),
-      ),
       count: vi.fn(async (_args: { where: { userId: string; isRead?: boolean } }) => 1),
       updateMany: vi.fn(async (_args: UpdateManyArgs) => ({ count: 1 })),
+      // Одним запросом: «обновить и перечитать» отвечало бы уже про другой
+      // момент времени. Пустой массив — строки с таким владельцем нет.
+      updateManyAndReturn: vi.fn(async (_args: UpdateManyArgs) => [
+        notificationRow({ isRead: true }),
+      ]),
     },
   };
 }
@@ -187,10 +187,10 @@ describe('NotificationsService.markRead', () => {
     prisma = createPrismaStub();
   });
 
-  it('помечает прочитанным только своё уведомление', async () => {
+  it('помечает прочитанным только своё уведомление, и одним запросом', async () => {
     const dto = await createService(prisma).markRead(USER_ID, NOTIFICATION_ID);
 
-    expect(prisma.notification.updateMany.mock.calls[0]![0]).toEqual({
+    expect(prisma.notification.updateManyAndReturn.mock.calls[0]![0]).toEqual({
       where: { id: NOTIFICATION_ID, userId: USER_ID },
       data: { isRead: true },
     });
@@ -199,7 +199,7 @@ describe('NotificationsService.markRead', () => {
 
   it('на чужое уведомление отдаёт 404, а не 403', async () => {
     // 403 подтвердил бы, что такая строка существует.
-    prisma.notification.updateMany.mockResolvedValueOnce({ count: 0 });
+    prisma.notification.updateManyAndReturn.mockResolvedValueOnce([]);
 
     await expect(
       createService(prisma).markRead(USER_ID, NOTIFICATION_ID),
@@ -212,7 +212,7 @@ describe('NotificationsService.markRead', () => {
       NotFoundException,
     );
 
-    expect(prisma.notification.updateMany).not.toHaveBeenCalled();
+    expect(prisma.notification.updateManyAndReturn).not.toHaveBeenCalled();
   });
 });
 

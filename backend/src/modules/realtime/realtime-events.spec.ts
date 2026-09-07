@@ -10,8 +10,8 @@ import {
 
 import type { AppliedTransition } from '../orders/order-transition.service.js';
 import {
-  notificationsBroadcast,
   orderCreatedBroadcast,
+  orderDeletedBroadcast,
   orderUpdateBroadcast,
   transitionBroadcast,
   type NotificationTarget,
@@ -215,7 +215,7 @@ describe('transitionBroadcast', () => {
     // Исполнитель остаётся: он сторона сделки. Проигравшая компания видит
     // заказ снова как `WAITING` (ТЗ §4.1) — в комнате ей больше не место.
     expect(evictions).toEqual([
-      { userRoom: socketRooms.user(LOSER_ID), orderRoom },
+      { members: socketRooms.user(LOSER_ID), room: orderRoom },
     ]);
   });
 
@@ -300,14 +300,22 @@ describe('orderUpdateBroadcast', () => {
   });
 });
 
-describe('notificationsBroadcast', () => {
+describe('orderDeletedBroadcast', () => {
   it('шлёт только уведомления: заказа, о котором говорить, уже нет', () => {
-    const { messages } = notificationsBroadcast([
+    const { messages } = orderDeletedBroadcast(ORDER_ID, [
       notification(LOSER_ID, NotificationType.ORDER_DELETED),
     ]);
 
     expect(messages).toHaveLength(1);
     expect(messages[0]!.event).toBe(socketEvents.notificationCreated);
     expect(messages[0]!.rooms).toEqual([socketRooms.user(LOSER_ID)]);
+  });
+
+  it('распускает комнату удалённого заказа', () => {
+    const { evictions } = orderDeletedBroadcast(ORDER_ID, []);
+
+    // Без этого участники остались бы в комнате несуществующего заказа
+    // до самого отключения.
+    expect(evictions).toEqual([{ members: orderRoom, room: orderRoom }]);
   });
 });

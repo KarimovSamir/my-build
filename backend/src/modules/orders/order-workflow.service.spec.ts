@@ -123,8 +123,23 @@ function createStubs(options: StubOptions = {}) {
     prepareUploads: vi.fn(async (uploads: UploadedFileInput[]) =>
       uploads.map((upload) => ({ ...upload, fileHash: 'hash' })),
     ),
-    attachFiles: vi.fn(async (_params: unknown) =>
-      Array.from({ length: options.attached ?? 1 }, (_, index) => ({ id: `file-${index}` })),
+    attachFiles: vi.fn(
+      async (params: {
+        onAttached?: (tx: unknown, added: unknown[]) => Promise<void>;
+      }) => {
+        const rows = Array.from({ length: options.attached ?? 1 }, (_, index) => ({
+          id: `file-${index}`,
+        }));
+
+        // Настоящий `FilesService` зовёт `onAttached` внутри той же транзакции,
+        // что и вставка строк, и только если что-то добавилось. Подставная
+        // версия обязана вести себя так же: уведомление о файлах пишется там.
+        if (rows.length > 0) {
+          await params.onAttached?.(tx, rows);
+        }
+
+        return rows;
+      },
     ),
   };
 
@@ -297,18 +312,27 @@ describe('OrderWorkflowService: файлы сдачи', () => {
     });
   });
 
-  it('уведомляет клиента о новых файлах', async () => {
-    const { service, prisma } = createStubs();
+  it('уведомляет клиента о новых файлах той же транзакцией, что и файлы', async () => {
+    const { service, prisma, realtime } = createStubs();
 
     await service.addFiles(addFilesParams());
 
-    expect(prisma.notification.create.mock.calls[0]![0]).toMatchObject({
+    // Запись идёт через транзакцию вставки (`prisma.tx`), а не отдельным
+    // запросом: сбой после коммита оставил бы файлы в заказе, о которых
+    // клиенту никто не сказал.
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+    expect(prisma.tx.notification.create.mock.calls[0]![0]).toMatchObject({
       data: {
         userId: CLIENT_ID,
         type: NotificationType.FILES_UPDATED,
         orderId: ORDER_ID,
       },
     });
+
+    // А рассылка — уже после коммита, теми же строками.
+    expect(realtime.orderFilesUpdated.mock.calls[0]![1]).toEqual([
+      { id: 'notification-tx' },
+    ]);
   });
 
   /**
@@ -334,17 +358,18 @@ describe('OrderWorkflowService: файлы сдачи', () => {
 
     // Заказ блокируется и здесь, и тем же порядком: сначала он, потом сдача.
     expect(trace.filter((step) => step === 'lockOrder')).toHaveLength(2);
-    expect(prisma.notification.create).not.toHaveBeenCalled();
+    expect(prisma.tx.notification.create).not.toHaveBeenCalled();
   });
 
   it('молчит, если все файлы оказались дубликатами', async () => {
     // Дедупликация в пределах сдачи (ТЗ §4.1): в заказе ничего не изменилось,
     // и сообщать клиенту об изменении было бы неправдой.
-    const { service, prisma } = createStubs({ attached: 0 });
+    const { service, prisma, realtime } = createStubs({ attached: 0 });
 
     await service.addFiles(addFilesParams());
 
-    expect(prisma.notification.create).not.toHaveBeenCalled();
+    expect(prisma.tx.notification.create).not.toHaveBeenCalled();
+    expect(realtime.orderFilesUpdated).not.toHaveBeenCalled();
   });
 });
 

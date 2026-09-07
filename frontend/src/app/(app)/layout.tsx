@@ -23,8 +23,11 @@ import { getCurrentUser } from "@/lib/session.server";
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   // Без сессии `getCurrentUser` уводит на вход. Это удобство, а не защита:
   // права проверяет backend, а до рендера — proxy.ts.
-  const user = await getCurrentUser();
-  const unreadCount = await getUnreadCount();
+  //
+  // Оба запроса идут разом: каркас перерисовывается на каждый `router.refresh()`,
+  // то есть на каждое событие сокета, и последовательные ожидания стоили бы
+  // лишнего круга к API при любом движении заказа.
+  const [user, unreadCount] = await Promise.all([getCurrentUser(), getUnreadCount()]);
 
   return (
     <RealtimeProvider>
@@ -52,13 +55,17 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
  * Отказ запроса гасится намеренно: значок над колокольчиком — украшение шапки,
  * и из-за него кабинет не должен уходить в границу ошибок. Настоящую поломку
  * покажет сама страница, которая за данными и пришла.
+ *
+ * Но гасится он в `null`, а не в ноль: ноль означает «читать нечего» и гасит
+ * заодно кнопку «Прочитать все», то есть сорвавшийся запрос запрещал бы
+ * действие при живых уведомлениях на экране.
  */
-async function getUnreadCount(): Promise<number> {
+async function getUnreadCount(): Promise<number | null> {
   try {
     const { count } = await serverApi.get<UnreadCount>("/notifications/unread-count");
 
     return count;
   } catch {
-    return 0;
+    return null;
   }
 }

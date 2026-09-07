@@ -23,14 +23,16 @@ export function notificationHref(
 export const MAX_BELL_COUNT = 99;
 
 /**
- * Число на колокольчике. `null` — непрочитанных нет, значка не рисуем вовсе:
- * ноль в кружке выглядит как уведомление, которого нет.
+ * Число на колокольчике. `null` в ответе — значка нет вовсе: либо непрочитанных
+ * нет (ноль в кружке выглядит как уведомление, которого нет), либо счётчик
+ * неизвестен — запрос за ним не прошёл, и рисовать вместо него ноль значило бы
+ * соврать.
  *
  * Потолок нужен не для красоты: трёхзначное число растягивает кружок и рвёт
  * шапку, а разница между «сто двадцать» и «много» пользователю не нужна.
  */
-export function formatUnreadCount(count: number): string | null {
-  if (!Number.isFinite(count) || count < 1) return null;
+export function formatUnreadCount(count: number | null): string | null {
+  if (count === null || !Number.isFinite(count) || count < 1) return null;
 
   const whole = Math.floor(count);
 
@@ -41,7 +43,7 @@ export function formatUnreadCount(count: number): string | null {
  * Подпись колокольчика для читалки экрана: значок с числом виден глазами,
  * а озвучить его нечем — сам кружок помечен `aria-hidden`.
  */
-export function bellLabel(count: number): string {
+export function bellLabel(count: number | null): string {
   const badge = formatUnreadCount(count);
 
   return badge ? `Уведомления, непрочитанных: ${badge}` : "Уведомления";

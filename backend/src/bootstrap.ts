@@ -2,6 +2,7 @@ import { type INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 
+import { actorContextMiddleware } from './common/actor-context.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { parseCorsOrigins } from './config/env.validation.js';
 
@@ -16,12 +17,16 @@ export function configureApp(app: INestApplication): INestApplication {
 
   app.use(helmet());
 
+  // Автор запроса в терминах WebSocket: нужен рассылке, чтобы не слать событие
+  // той вкладке, которая действие и выполнила (`common/actor-context.ts`).
+  app.use(actorContextMiddleware);
+
   // API отдаёт только JSON и не хранит сессий в cookie — со стороны браузера
   // сюда ходит fetch с Bearer-токеном, поэтому credentials не нужны.
   app.enableCors({
     origin: parseCorsOrigins(config.getOrThrow<string>('CORS_ORIGINS')),
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Socket-Id'],
     maxAge: 86_400,
   });
 

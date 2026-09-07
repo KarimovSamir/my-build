@@ -173,7 +173,9 @@ type TransitionsStub = ReturnType<typeof createTransitionsStub>;
 function createRealtimeStub() {
   return {
     orderCreated: vi.fn((_orderId: string) => undefined),
-    notificationsCreated: vi.fn((_rows: { userId: string }[]) => undefined),
+    orderDeleted: vi.fn(
+      (_orderId: string, _rows: { userId: string }[]) => undefined,
+    ),
   };
 }
 
@@ -538,7 +540,8 @@ describe('OrdersService.remove', () => {
       OrderStatus.WAITING,
     );
 
-    expect(realtime.notificationsCreated.mock.calls[0]![0]).toMatchObject([
+    expect(realtime.orderDeleted.mock.calls[0]![0]).toBe(ORDER_ID);
+    expect(realtime.orderDeleted.mock.calls[0]![1]).toMatchObject([
       { userId: COMPANY_ID },
     ]);
   });
@@ -556,6 +559,6 @@ describe('OrdersService.remove', () => {
       ),
     ).rejects.toThrow(ConflictException);
 
-    expect(realtime.notificationsCreated).not.toHaveBeenCalled();
+    expect(realtime.orderDeleted).not.toHaveBeenCalled();
   });
 });

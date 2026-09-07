@@ -13,11 +13,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { socketEvents } from '@mybuild/shared';
 
+import { actorSocketId } from '../../common/actor-context.js';
 import type { AppliedTransition } from '../orders/order-transition.service.js';
 import { OrderGateway } from './order.gateway.js';
 import {
-  notificationsBroadcast,
   orderCreatedBroadcast,
+  orderDeletedBroadcast,
   orderUpdateBroadcast,
   transitionBroadcast,
   type NotificationTarget,
@@ -74,11 +75,14 @@ export class RealtimeService {
   }
 
   /**
-   * Только уведомления: так уходит `ORDER_DELETED`. Событий про заказ нет —
-   * заказа больше нет, и комнаты у него тоже.
+   * Заказ удалён: уведомления сторонам и роспуск его комнаты.
+   *
+   * Событий про сам заказ нет — рассказывать больше не о чем, а сокеты
+   * участников иначе остались бы в комнате несуществующего заказа
+   * до отключения.
    */
-  notificationsCreated(notifications: NotificationTarget[]): void {
-    this.dispatch(notificationsBroadcast(notifications));
+  orderDeleted(orderId: string, notifications: NotificationTarget[]): void {
+    this.dispatch(orderDeletedBroadcast(orderId, notifications));
   }
 
   private dispatch(broadcast: RealtimeBroadcast): void {
@@ -89,7 +93,9 @@ export class RealtimeService {
     try {
       // Выселения строго до рассылки: см. `realtime-events.ts`.
       this.gateway.evict(broadcast.evictions);
-      this.gateway.emit(broadcast.messages);
+      // Вкладке, которая это действие и выполнила, событие не уходит: ответ
+      // маршрута уже принёс ей свежий заказ (`common/actor-context.ts`).
+      this.gateway.emit(broadcast.messages, actorSocketId());
     } catch (error) {
       this.logger.error(
         'Не удалось разослать события WebSocket',

@@ -1,24 +1,29 @@
 "use client";
 
-import { useContext, useEffect, useEffectEvent } from "react";
+import {
+  useContext,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 
 import { SocketContext } from "@/components/realtime/realtime-provider";
-import { createBurst } from "@/lib/live-updates";
-import { socketMessages, type SocketEvent, type SubscribeAck } from "@/lib/socket";
+import { bindRefresh, bindRoom, createConnectionStore } from "@/lib/realtime-bindings";
+import { socketMessages, type SocketEvent } from "@/lib/socket";
 
 /**
  * Хуки поверх подключения из `RealtimeProvider` (ТЗ §8).
+ *
+ * Здесь только связь с React: когда подписаться и когда снять подписку. Сама
+ * механика — перевход в комнату после обрыва, перечит пропущенного, повтор
+ * устранимого отказа — живёт в чистом `lib/realtime-bindings.ts` и покрыта
+ * тестами там.
  *
  * Правила, общие для всех:
  *
  * - Сокета может не быть (`null`) — до подключения и после ухода со страницы.
  *   Это не ошибка: экран работает и без real-time, данные ему даёт REST.
- * - Подписка на комнату восстанавливается после переподключения. Комнаты живут
- *   на сервере, и обрыв связи они не переживают: переподключившийся сокет —
- *   новый участник, о котором сервер ничего не помнит.
- * - Данные после переподключения перечитываются. socket.io события за время
- *   обрыва не копит, и всё, что произошло, пока связи не было, до вкладки
- *   не доедет вовсе.
  * - Обработчики оборачиваются в `useEffectEvent`: слушатели сокета не должны
  *   пересаживаться из-за того, что страница перерисовалась и передала новую
  *   функцию, но вызываться должна всегда последняя.
@@ -35,11 +40,6 @@ export function useSocket() {
  * `accepts` отсеивает чужое: в личную комнату пользователя приходят события
  * по всем его заказам, и открытая карточка одного заказа не должна
  * перечитываться из-за движения соседнего.
- *
- * Отдельно от событий данные перечитываются после **переподключения**: сон
- * ноутбука, смена сети или перезапуск backend рвут сокет, а socket.io ничего
- * за это время не буферизует — без перечитывания вкладка выглядела бы живой,
- * показывая состояние на момент обрыва.
  */
 export function useRealtimeRefresh(
   events: readonly SocketEvent[],
@@ -60,46 +60,11 @@ export function useRealtimeRefresh(
   useEffect(() => {
     if (!socket) return;
 
-    const names = (key ? key.split(" ") : []) as SocketEvent[];
-    const burst = createBurst(() => run());
-
-    const handle = (payload: unknown) => {
-      if (accept(payload)) burst.schedule();
-    };
-
-    // Пропущено ли что-то. Флаг ставит только разрыв: на первое подключение
-    // перечитывать нечего — страница только что отрисована сервером, и лишний
-    // запрос ушёл бы на каждую загрузку кабинета.
-    let missed = false;
-
-    const onDisconnect = () => {
-      missed = true;
-    };
-
-    const onConnect = () => {
-      if (!missed) return;
-
-      missed = false;
-      burst.schedule();
-    };
-
-    for (const name of names) {
-      socket.on(name, handle);
-    }
-
-    socket.on("disconnect", onDisconnect);
-    socket.on("connect", onConnect);
-
-    return () => {
-      burst.cancel();
-
-      for (const name of names) {
-        socket.off(name, handle);
-      }
-
-      socket.off("disconnect", onDisconnect);
-      socket.off("connect", onConnect);
-    };
+    return bindRefresh(socket, {
+      events: key ? key.split(" ") : [],
+      refresh: () => run(),
+      accepts: (payload) => accept(payload),
+    });
   }, [socket, key]);
 }
 
@@ -120,6 +85,23 @@ export function useOrderRoom(orderId: string, enabled: boolean): void {
   );
 }
 
+/**
+ * Есть ли связь с сервером.
+ *
+ * `false` — сокет разорван дольше нескольких секунд. Нужно интерфейсу, чтобы
+ * пользователь отличал «ничего не происходит» от «обновления не приходят».
+ * На сервере всегда `true`: сокета там нет, и говорить не о чем.
+ *
+ * Через `useSyncExternalStore`, а не через состояние с эффектом: состояние
+ * живёт в сокете, а `setState` в эффекте запрещён правилами React Compiler.
+ */
+export function useRealtimeOnline(): boolean {
+  const socket = useSocket();
+  const store = useMemo(() => createConnectionStore(socket), [socket]);
+
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, () => true);
+}
+
 /** Лента доступных заказов — только компаниям (ТЗ §8). */
 export function useCompanyFeed(enabled: boolean): void {
   useRoom(socketMessages.subscribeFeed, socketMessages.unsubscribeFeed, null, enabled);
@@ -138,25 +120,10 @@ function useRoom(
   useEffect(() => {
     if (!socket || !enabled) return;
 
-    const payload = orderId === null ? {} : { orderId };
-
-    const join = () => {
-      socket.emit(subscribe, payload, (ack: SubscribeAck) => {
-        if (!ack.ok) {
-          console.warn(`WebSocket: ${ack.error ?? "в комнату не пустили"}`);
-        }
-      });
-    };
-
-    if (socket.connected) join();
-    socket.on("connect", join);
-
-    return () => {
-      socket.off("connect", join);
-
-      // Отписываться имеет смысл только у живого сокета: оборванный уже выпал
-      // из всех комнат, а сообщение легло бы в очередь до переподключения.
-      if (socket.connected) socket.emit(unsubscribe, payload);
-    };
+    return bindRoom(socket, {
+      subscribe,
+      unsubscribe,
+      payload: orderId === null ? {} : { orderId },
+    });
   }, [socket, subscribe, unsubscribe, orderId, enabled]);
 }

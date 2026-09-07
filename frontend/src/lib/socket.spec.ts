@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // Параметры объявлены типом мока, а не аргументами: без них `mock.calls`
 // получает тип `[]`, и `calls[0][1]` перестаёт существовать для `tsc`.
 const { io, getAccessToken } = vi.hoisted(() => ({
-  io: vi.fn<(url: string, options: unknown) => { id: string }>(() => ({ id: "socket" })),
+  io: vi.fn<(url: string, options: unknown) => { id: string; connected: boolean }>(() => ({
+    id: "socket",
+    connected: false,
+  })),
   getAccessToken: vi.fn(async () => "token-from-session"),
 }));
 
@@ -11,11 +14,11 @@ vi.mock("socket.io-client", () => ({ io }));
 
 // Путь тот же, каким его пишет `socket.ts`: через алиас `@/` это другой
 // идентификатор модуля, и мок мог бы не примениться.
-vi.mock("@/lib/api.client", () => ({ getAccessToken }));
+vi.mock("@/lib/supabase/client", () => ({ getAccessToken }));
 
 import { WS_NAMESPACE } from "@/lib/types";
 
-import { browserSocket, createAppSocket, WS_URL } from "./socket";
+import { browserSocket, createAppSocket, currentSocketId, WS_URL } from "./socket";
 
 /** Опции, с которыми был создан сокет. */
 function optionsOfLastCall(): { autoConnect?: boolean; auth?: unknown } {
@@ -101,6 +104,24 @@ describe("browserSocket", () => {
 
       await expect(askForAuth()).resolves.toEqual({ token: "token-from-session" });
       expect(getAccessToken).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("currentSocketId", () => {
+  it("у неподключённого сокета идентификатора нет", () => {
+    vi.stubGlobal("window", {});
+
+    try {
+      const socket = browserSocket() as unknown as { connected: boolean };
+
+      // Заголовок `X-Socket-Id` тогда просто не уходит, и событие получают все.
+      expect(currentSocketId()).toBeNull();
+
+      socket.connected = true;
+      expect(currentSocketId()).toBe("socket");
     } finally {
       vi.unstubAllGlobals();
     }

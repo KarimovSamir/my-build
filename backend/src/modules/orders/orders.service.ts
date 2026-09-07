@@ -234,8 +234,9 @@ export class OrdersService {
     );
 
     // После коммита: событие, отправленное изнутри транзакции, ушло бы
-    // и в случае отката. Событий про сам заказ здесь нет — его больше нет.
-    this.realtime.notificationsCreated(notifications);
+    // и в случае отката. Событий про сам заказ здесь нет — его больше нет,
+    // зато его комната распускается: сокеты сидели бы в ней до отключения.
+    this.realtime.orderDeleted(orderId, notifications);
 
     await this.files.removeStorageObjects(storageKeys);
   }

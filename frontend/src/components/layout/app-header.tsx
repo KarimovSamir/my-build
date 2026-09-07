@@ -3,6 +3,7 @@ import { MapPin } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import { NotificationBell } from "@/components/layout/notification-bell";
+import { ConnectionStatus } from "@/components/realtime/connection-status";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Separator } from "@/components/ui/separator";
 import type { CurrentUser } from "@/lib/session";
@@ -23,6 +24,10 @@ export function AppHeader({ user }: { user: CurrentUser }) {
       <div className="min-w-0 flex-1">
         <Breadcrumbs role={user.role} />
       </div>
+
+      {/* Появляется только при обрыве: экран молчит одинаково и когда ничего
+          не произошло, и когда обновления перестали доезжать. */}
+      <ConnectionStatus />
 
       <ThemeToggle />
 

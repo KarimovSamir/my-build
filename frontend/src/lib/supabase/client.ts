@@ -22,3 +22,18 @@ export function getSupabaseBrowserClient(): SupabaseClient {
 
   return browserClient;
 }
+
+/**
+ * Access-токен текущей сессии.
+ *
+ * Живёт рядом с клиентом, а не в `api.client.ts`, потому что нужен не только
+ * запросам: тем же токеном авторизуется сокет (`lib/socket.ts`, ТЗ §8), а тот,
+ * в свою очередь, нужен запросам — и через `api.client` вышел бы круг импортов.
+ *
+ * `getSession` отдаёт уже обновлённый токен: SDK следит за сроком сам.
+ */
+export async function getAccessToken(): Promise<string | null> {
+  const { data } = await getSupabaseBrowserClient().auth.getSession();
+
+  return data.session?.access_token ?? null;
+}

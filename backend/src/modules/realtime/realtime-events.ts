@@ -55,10 +55,16 @@ export interface RealtimeMessage {
  * отозвано, отклонено или проиграло выбор, заказ для неё снова выглядит как
  * `WAITING` (ТЗ §4.1) — и оставь мы её в комнате, следующее
  * `order:status_changed` рассказало бы ей о настоящем движении заказа.
+ *
+ * Второй случай — удалённый заказ: комнаты у него больше нет, и выселяются
+ * из неё все её участники разом, поэтому «кого» — это тоже комната, а не
+ * обязательно личная.
  */
 export interface RoomEviction {
-  userRoom: string;
-  orderRoom: string;
+  /** Кого выселяем: все, кто состоит в этой комнате. */
+  members: string;
+  /** Откуда: комната, которую они покидают. */
+  room: string;
 }
 
 /**
@@ -129,6 +135,11 @@ export function transitionBroadcast(
     });
   }
 
+  // Событие уходит на любое изменение статуса предложения, включая перевод
+  // в `SENT` при отправке. §8 описывает его как «принято/отклонено/отозвано»,
+  // но выкидывать этот случай нельзя: соседняя вкладка компании узнаёт
+  // об отправленном предложении только так — список `/offers` слушает
+  // именно `offer:status_changed`.
   for (const update of applied.offerUpdates) {
     messages.push({
       rooms: [clientRoom, socketRooms.user(update.companyId)],
@@ -141,7 +152,7 @@ export function transitionBroadcast(
 
   const evictions = applied.offerUpdates
     .filter((update) => !isActiveOffer(update.status))
-    .map((update) => ({ userRoom: socketRooms.user(update.companyId), orderRoom }));
+    .map((update) => ({ members: socketRooms.user(update.companyId), room: orderRoom }));
 
   return { evictions, messages };
 }
@@ -169,13 +180,23 @@ export function orderUpdateBroadcast(
 }
 
 /**
- * Только уведомления, без событий про заказ: так уходит `ORDER_DELETED` —
- * заказа больше нет, и комнаты у него тоже.
+ * Заказ удалён (`ORDER_DELETED`): уведомления сторонам и роспуск комнаты.
+ *
+ * События про сам заказ нет — рассказывать больше не о чем. Зато комнату надо
+ * распустить руками: сокеты остаются в ней до отключения, а комната заказа,
+ * которого нет, — это участники, которых никто не выселит, и имя, которое
+ * достанется следующему заказу разве что при совпадении uuid.
  */
-export function notificationsBroadcast(
+export function orderDeletedBroadcast(
+  orderId: string,
   notifications: NotificationTarget[],
 ): RealtimeBroadcast {
-  return { evictions: [], messages: notificationMessages(notifications) };
+  const room = socketRooms.order(orderId);
+
+  return {
+    evictions: [{ members: room, room }],
+    messages: notificationMessages(notifications),
+  };
 }
 
 /**

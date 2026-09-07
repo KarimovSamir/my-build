@@ -32,6 +32,16 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
+    // Guard глобальный, поэтому попадает и на обработчики сообщений WebSocket,
+    // а там `switchToHttp().getRequest()` вернул бы сокет, а не запрос: чтение
+    // `user` молча дало бы `undefined` и отказ на ровном месте. Роль на сокете
+    // проверяет сам шлюз (`OrderGateway`, ТЗ §8) — там она лежит в `socket.data`.
+    if (context.getType() !== 'http') {
+      throw new ForbiddenException(
+        'Проверка роли работает только в HTTP-контексте: у сообщения сокета роль проверяет шлюз',
+      );
+    }
+
     const { user } = context.switchToHttp().getRequest<RequestWithUser>();
 
     if (!user) {

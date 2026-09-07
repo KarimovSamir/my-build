@@ -17,38 +17,80 @@ import { browserSocket, type Socket } from "@/lib/socket";
  */
 export const SocketContext = createContext<Socket | null>(null);
 
+/**
+ * Паузы перед повторной попыткой подключиться после отказа рукопожатия.
+ *
+ * socket.io после `connect_error` сам не повторяет — и это правильно для
+ * настоящего отказа в правах. Но тем же отказом выглядит и временная беда:
+ * недоступный JWKS Supabase на стороне backend превращается в «Токен
+ * недействителен или истёк». Без повторов минутный сбой оставлял бы вкладку
+ * без real-time до перезагрузки страницы.
+ *
+ * Повторов немного и они редеют: если дело в самой сессии, попытки кончатся
+ * меньше чем за минуту, а кабинет без сессии всё равно уведёт на вход.
+ */
+const RETRY_DELAYS_MS: readonly number[] = [1_000, 3_000, 10_000, 30_000];
+
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const socket = browserSocket();
 
   useEffect(() => {
     if (!socket) return;
 
-    /**
-     * Отказ авторизации — не повод молчать, но и не повод падать: страницы
-     * работают и без сокета. socket.io сам не переподключается после ошибки
-     * middleware, и это правильно: токен от этого годным не станет, а кабинет
-     * без сессии всё равно уведёт на вход.
-     */
-    const warn = (error: Error) => console.warn(`WebSocket: ${error.message}`);
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const clearRetry = () => {
+      if (timer === null) return;
+
+      clearTimeout(timer);
+      timer = null;
+    };
+
+    /** Подключились — значит прошлые неудачи больше ни о чём не говорят. */
+    const onConnect = () => {
+      attempt = 0;
+      clearRetry();
+    };
+
+    const onError = (error: Error) => {
+      console.warn(`WebSocket: ${error.message}`);
+
+      const delay = RETRY_DELAYS_MS[attempt];
+
+      // Попытки кончились: дело не во временном сбое.
+      if (delay === undefined) return;
+
+      attempt += 1;
+      clearRetry();
+
+      timer = setTimeout(() => {
+        timer = null;
+        // Токен спрашивается заново перед каждой попыткой (`lib/socket.ts`),
+        // так что обновлённая сессия подхватится сама.
+        socket.connect();
+      }, delay);
+    };
 
     /**
      * Сервер закрывает сокет сам, когда истекает срок токена (ТЗ §6). После
      * такого разрыва socket.io не переподключается, хотя причина уже прошла:
      * Supabase к этому моменту обновил сессию, и функция `auth` в `lib/socket`
-     * возьмёт свежий токен на новой попытке. Если же сессии больше нет,
-     * откажет рукопожатие — а после `connect_error` повторов не будет,
-     * то есть цикл сам себя останавливает.
+     * возьмёт свежий токен на новой попытке.
      */
     const reconnect = (reason: string) => {
       if (reason === "io server disconnect") socket.connect();
     };
 
-    socket.on("connect_error", warn);
+    socket.on("connect", onConnect);
+    socket.on("connect_error", onError);
     socket.on("disconnect", reconnect);
     socket.connect();
 
     return () => {
-      socket.off("connect_error", warn);
+      clearRetry();
+      socket.off("connect", onConnect);
+      socket.off("connect_error", onError);
       socket.off("disconnect", reconnect);
       socket.disconnect();
     };
