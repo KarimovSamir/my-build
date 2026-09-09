@@ -1,6 +1,6 @@
 import { Role, roleLabels, type UserProfile } from "@/lib/types";
 
-import { initialOf } from "./format";
+import { companyInitial, personInitial } from "./format";
 
 /**
  * Текущий пользователь в том виде, в каком его показывает интерфейс.
@@ -19,16 +19,19 @@ export interface CurrentUser extends UserProfile {
 }
 
 export function toCurrentUser(profile: UserProfile): CurrentUser {
-  const displayName =
-    profile.role === Role.COMPANY && profile.companyName
-      ? profile.companyName
-      : [profile.firstName, profile.lastName].filter(Boolean).join(" ");
+  const byCompanyName = profile.role === Role.COMPANY && Boolean(profile.companyName);
+
+  const displayName = byCompanyName
+    ? profile.companyName!
+    : [profile.firstName, profile.lastName].filter(Boolean).join(" ");
 
   return {
     ...profile,
     displayName,
     roleLabel: roleLabels[profile.role],
-    initial: initialOf(displayName),
+    // Буква считается по тому, что показано: у названия компании правовая форма
+    // пропускается, у имени человека — нет.
+    initial: byCompanyName ? companyInitial(displayName) : personInitial(displayName),
   };
 }
 

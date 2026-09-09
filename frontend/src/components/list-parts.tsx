@@ -4,13 +4,15 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { previousPage } from "@/lib/list-params";
 
 /**
  * Общие детали списков кабинета: пагинация, пустые состояния, скелет.
  *
- * Списков три — заказы клиента, лента компании и её предложения, — и выглядеть
- * они обязаны одинаково: «Показано N из M» и кнопки листания на разных экранах
- * не должны отличаться ни текстом, ни отступами.
+ * Списков шесть — заказы клиента, лента компании и её предложения, уведомления,
+ * подрядчики и документы, — и выглядеть они обязаны одинаково: «Показано N из M»
+ * и кнопки листания на разных экранах не должны отличаться ни текстом,
+ * ни отступами.
  *
  * Компоненты серверные: ссылки собираются на сервере, состояния в браузере
  * им не нужны.
@@ -37,7 +39,9 @@ export function PaginationBar({
       </span>
 
       <div className="flex gap-2">
-        <PageLink href={hrefFor(page - 1)} disabled={page <= 1}>
+        {/* «Назад» со страницы за пределами выборки ведёт к последней странице
+            с данными, а не на соседнюю пустую (`previousPage`). */}
+        <PageLink href={hrefFor(previousPage(page, totalPages))} disabled={page <= 1}>
           Назад
         </PageLink>
         <PageLink href={hrefFor(page + 1)} disabled={page >= totalPages}>

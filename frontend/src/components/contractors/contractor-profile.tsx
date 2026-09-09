@@ -14,7 +14,7 @@ import {
   contractorLocation,
 } from "@/lib/contractor-view";
 import { contractorsHref } from "@/lib/contractors-filter";
-import { initialOf } from "@/lib/format";
+import { companyInitial } from "@/lib/format";
 
 /**
  * Карточка подрядчика (ТЗ §7): название, город, контакты, число завершённых
@@ -75,7 +75,7 @@ export function ContractorProfile({ contractor }: { contractor: ContractorCard }
           <CardContent className="flex items-center gap-3">
             <Avatar className="size-12 shrink-0">
               <AvatarFallback className="bg-primary text-primary-foreground text-lg font-medium">
-                {initialOf(contractor.companyName)}
+                {companyInitial(contractor.companyName)}
               </AvatarFallback>
             </Avatar>
 

@@ -70,20 +70,43 @@ export function formatFileSize(bytes: number): string {
 const legalForms = new Set(["ООО", "ОАО", "ЗАО", "ПАО", "АО", "ИП", "LLC", "LTD", "INC"]);
 
 /**
- * Буква для аватара — первая буква значащего слова названия.
- *
- * Кавычки и знаки препинания в счёт не идут, иначе буквой стала бы ««».
- * Пустое название сюда прийти не должно (`companyName` обязателен для роли
- * `COMPANY`, ТЗ §3), но аватар без буквы выглядел бы поломкой вёрстки —
- * поэтому запасной знак вопроса.
+ * Слова названия. Кавычки и знаки препинания в счёт не идут, иначе первой
+ * буквой стала бы ««».
  */
-export function initialOf(name: string): string {
-  const words = name.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  const meaningful = words.find((word) => !legalForms.has(word.toUpperCase()));
+function nameWords(name: string): string[] {
+  return name.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+}
+
+/**
+ * Пустое имя сюда прийти не должно, но аватар без буквы выглядел бы поломкой
+ * вёрстки — поэтому запасной знак вопроса.
+ */
+function firstLetter(word: string | undefined): string {
+  return (word ?? "").charAt(0).toUpperCase() || "?";
+}
+
+/** Буква для аватара человека — первая буква имени, как оно написано. */
+export function personInitial(name: string): string {
+  return firstLetter(nameWords(name)[0]);
+}
+
+/**
+ * Буква для аватара компании — первая буква значащего слова названия:
+ * правовая форма пропускается.
+ *
+ * Правило намеренно отделено от `personInitial`: список ОПФ применительно
+ * к ФИО означал бы, что имя, совпавшее с формой, покажет букву фамилии.
+ *
+ * Порядок каталога при этом алфавитный по полному названию — сортировать
+ * по значащему слову базе нечем (`ORDER_BY` в `contractors.service.ts`).
+ * Расхождение видно только на названиях с разной ОПФ и остаётся косметическим.
+ */
+export function companyInitial(name: string): string {
+  const words = nameWords(name);
 
   // Название из одной правовой формы — случай надуманный, но буква нужна
   // и тогда: пусть будет её собственная.
-  return (meaningful ?? words[0] ?? "").charAt(0).toUpperCase() || "?";
+  return firstLetter(words.find((word) => !legalForms.has(word.toUpperCase())) ?? words[0]);
 }
 
 /** Дата в виде «25 дек 2025». */

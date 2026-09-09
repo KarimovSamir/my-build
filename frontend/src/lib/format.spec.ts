@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { formatArea, formatDate, formatFileSize, formatMoney, initialOf } from "./format";
+import {
+  companyInitial,
+  formatArea,
+  formatDate,
+  formatFileSize,
+  formatMoney,
+  personInitial,
+} from "./format";
 
 /** Неразрывный пробел — тот же, что ставит `Intl` для русской локали. */
 const NBSP = " ";
@@ -86,25 +93,38 @@ describe("formatArea", () => {
   });
 });
 
-describe("initialOf", () => {
+describe("companyInitial", () => {
   it("берёт первую букву названия в верхнем регистре", () => {
-    expect(initialOf("СтройГрад")).toBe("С");
-    expect(initialOf("  анна Петрова")).toBe("А");
+    expect(companyInitial("СтройГрад")).toBe("С");
+    expect(companyInitial("  строй град")).toBe("С");
   });
 
   it("пропускает правовую форму: иначе весь каталог был бы из букв «О»", () => {
-    expect(initialOf("ООО «СтройГрад»")).toBe("С");
-    expect(initialOf('ЗАО "Ремонт Плюс"')).toBe("Р");
-    expect(initialOf("Ltd Basement")).toBe("B");
+    expect(companyInitial("ООО «СтройГрад»")).toBe("С");
+    expect(companyInitial('ЗАО "Ремонт Плюс"')).toBe("Р");
+    expect(companyInitial("Ltd Basement")).toBe("B");
   });
 
   it("название из одной правовой формы всё равно даёт букву", () => {
-    expect(initialOf("ООО")).toBe("О");
+    expect(companyInitial("ООО")).toBe("О");
   });
 
   it("на пустом названии даёт знак вопроса, а не пустой аватар", () => {
-    expect(initialOf("")).toBe("?");
-    expect(initialOf("   ")).toBe("?");
-    expect(initialOf("«»")).toBe("?");
+    expect(companyInitial("")).toBe("?");
+    expect(companyInitial("   ")).toBe("?");
+    expect(companyInitial("«»")).toBe("?");
+  });
+});
+
+describe("personInitial", () => {
+  it("берёт первую букву имени в верхнем регистре", () => {
+    expect(personInitial("  анна Петрова")).toBe("А");
+    expect(personInitial("")).toBe("?");
+  });
+
+  it("правовые формы к имени не применяет", () => {
+    // Имя, совпавшее с ОПФ, иначе показывало бы букву фамилии.
+    expect(personInitial("Ао Мин")).toBe("А");
+    expect(companyInitial("Ао Мин")).toBe("М");
   });
 });

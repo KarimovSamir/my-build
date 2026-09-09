@@ -33,15 +33,29 @@ import {
  * второй раз на фронте незачем. `router.refresh()` следом нужен каркасу —
  * имя в боковом меню и город в шапке приходят из layout'а.
  */
-export function ProfileForm({ profile }: { profile: UserProfile }) {
+export function ProfileForm({ profile: fromServer }: { profile: UserProfile }) {
   const router = useRouter();
   // Профиль в том виде, в каком он сейчас на сервере: с ним сверяется форма,
   // чтобы кнопка «Сохранить» не предлагала сохранить то же самое.
-  const [saved, setSaved] = useState(profile);
-  const [values, setValues] = useState<ProfileFormValues>(() => toProfileForm(profile));
+  const [state, setState] = useState({ saved: fromServer, server: fromServer });
+  const [values, setValues] = useState<ProfileFormValues>(() => toProfileForm(fromServer));
   const [errors, setErrors] = useState<ProfileFormErrors>({});
   const [formError, setFormError] = useState<string[] | null>(null);
   const [pending, setPending] = useState(false);
+
+  const saved = state.saved;
+
+  // Серверный рендер — источник правды: сравнение по ссылке отличает «пришёл
+  // новый профиль» от обычного перерисовывания, и делается это в рендере,
+  // а не в эффекте (`CLAUDE.md` §10) — иначе кадр между ними показывал бы
+  // устаревшие данные.
+  if (state.server !== fromServer) {
+    setState({ saved: fromServer, server: fromServer });
+
+    // Начатую правку новый ответ не затирает: человек мог печатать, пока
+    // каркас перечитывал профиль.
+    if (!isProfileChanged(values, saved)) setValues(toProfileForm(fromServer));
+  }
 
   const changed = isProfileChanged(values, saved);
 
@@ -76,7 +90,9 @@ export function ProfileForm({ profile }: { profile: UserProfile }) {
         toProfileBody(values, saved.role),
       );
 
-      setSaved(updated);
+      // Ответ маршрута — уже записанный профиль: форма сходится с ним сразу,
+      // не дожидаясь серверного ре-рендера.
+      setState((current) => ({ ...current, saved: updated }));
       setValues(toProfileForm(updated));
       toast.success("Профиль сохранён");
 

@@ -23,6 +23,11 @@ import { documentsHref } from "@/lib/documents-filter";
  * на первую — остаться на третьей странице другой выборки почти всегда значит
  * увидеть пустой экран.
  *
+ * Переход именно `push`, а не `replace`: выбор заказа — отдельное осознанное
+ * действие, как переход по вкладке, и «назад» обязано возвращать прежнюю
+ * выборку. `replace` у поиска оправдан только тем, что там адрес меняет каждая
+ * набранная буква.
+ *
  * Адрес компонент собирает сам: через границу клиентского компонента едут
  * только данные, функцию-сборщик серверная страница передать не может.
  */
@@ -44,7 +49,7 @@ export function OrderSelect({
   const router = useRouter();
 
   function handleChange(next: string) {
-    router.replace(
+    router.push(
       documentsHref({ ownerType, orderId: next === ALL_ORDERS ? null : next }),
       { scroll: false },
     );

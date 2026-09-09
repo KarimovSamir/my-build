@@ -115,9 +115,20 @@ export function PasswordForm({ email }: { email: string }) {
 
       <CardContent>
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
-          {/* Скрытое поле с адресом: без него менеджер паролей не понимает,
-              для какой учётной записи сохранять новый пароль. */}
-          <input type="hidden" name="username" autoComplete="username" value={email} readOnly />
+          {/* Поле с адресом: без него менеджер паролей не понимает, для какой
+              учётной записи сохранять новый пароль. Убрано с глаз классом
+              `sr-only`, а не `type="hidden"`: настоящие скрытые поля браузеры
+              при сопоставлении учётной записи не учитывают. */}
+          <input
+            type="text"
+            name="username"
+            autoComplete="username"
+            value={email}
+            readOnly
+            tabIndex={-1}
+            aria-hidden
+            className="sr-only"
+          />
 
           <Field
             id="currentPassword"

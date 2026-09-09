@@ -12,7 +12,6 @@
 
 import { Role } from "@/lib/types";
 
-import { UUID_PATTERN } from "./list-params";
 import { getHomeHref } from "./navigation";
 
 export interface Crumb {
@@ -37,6 +36,11 @@ const segmentLabels: Record<string, string> = {
 /**
  * Как назвать идентификатор в крошке. Имя даёт раздел, внутри которого он стоит:
  * `/orders/{id}` — это заказ, `/contractors/{id}` — компания.
+ *
+ * Подпись не зависит от того, похож ли сегмент на идентификатор: других детей
+ * у этих разделов нет (`/orders/new` разобран выше по имени), а страница мусора
+ * в адресе — это «Заказ не найден», то есть та же сущность. Показывать вместо
+ * подписи сам сегмент значило бы рисовать в шапке кабинета что угодно из адреса.
  */
 const entityLabels: Record<string, string> = {
   orders: "Заказ",
@@ -77,10 +81,7 @@ function crumbLabel(segment: string, parent: string | undefined): string {
 
   // Идентификатор в подпись не годится, но и назвать его можно только по
   // разделу: раздела нет в списке — показываем сегмент как есть.
-  return (
-    (UUID_PATTERN.test(segment) ? entityLabels[parent ?? ""] : undefined) ??
-    decodeSegment(segment)
-  );
+  return entityLabels[parent ?? ""] ?? decodeSegment(segment);
 }
 
 /**

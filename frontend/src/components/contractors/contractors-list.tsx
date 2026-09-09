@@ -11,7 +11,7 @@ import { serverApi } from "@/lib/api.server";
 import { completedOrdersText, contractorLocation } from "@/lib/contractor-view";
 import { contractorsHref, isEmptyContractorsFilter } from "@/lib/contractors-filter";
 import type { ContractorsFilter } from "@/lib/contractors-filter";
-import { initialOf } from "@/lib/format";
+import { companyInitial } from "@/lib/format";
 
 /**
  * Каталог подрядчиков (ТЗ §5, §7).
@@ -91,7 +91,7 @@ function ContractorRow({ contractor }: { contractor: ContractorListItem }) {
       >
         <Avatar className="size-10 shrink-0">
           <AvatarFallback className="bg-primary text-primary-foreground font-medium">
-            {initialOf(contractor.companyName)}
+            {companyInitial(contractor.companyName)}
           </AvatarFallback>
         </Avatar>
 

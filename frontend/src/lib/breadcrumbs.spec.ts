@@ -72,14 +72,24 @@ describe("buildBreadcrumbs", () => {
     ]);
   });
 
-  it("не падает на неправильной процентной последовательности", () => {
-    // `/orders/%` уронил бы `decodeURIComponent` прямо в шапке кабинета.
-    expect(() => buildBreadcrumbs("/orders/%", Role.CLIENT)).not.toThrow();
-    expect(trail("/orders/%", Role.CLIENT).at(-1)).toEqual(["%", null]);
+  it("мусор в адресе сущности подписывает разделом, а не собой", () => {
+    // Страница такого адреса — «Компания не найдена», то есть та же сущность.
+    // Показывать в шапке кабинета что попало из адреса незачем.
+    expect(trail("/contractors/мусор", Role.CLIENT).at(-1)).toEqual(["Компания", null]);
+    expect(trail("/orders/%", Role.CLIENT).at(-1)).toEqual(["Заказ", null]);
   });
 
-  it("раскодирует обычный сегмент", () => {
-    expect(trail("/orders/%D0%B4%D0%BE%D0%BC", Role.CLIENT).at(-1)).toEqual(["дом", null]);
+  it("не падает на неправильной процентной последовательности", () => {
+    // `/settings/%` уронил бы `decodeURIComponent` прямо в шапке кабинета.
+    expect(() => buildBreadcrumbs("/settings/%", Role.CLIENT)).not.toThrow();
+    expect(trail("/settings/%", Role.CLIENT).at(-1)).toEqual(["%", null]);
+  });
+
+  it("раскодирует обычный сегмент неизвестного раздела", () => {
+    expect(trail("/settings/%D0%B4%D0%BE%D0%BC", Role.CLIENT).at(-1)).toEqual([
+      "дом",
+      null,
+    ]);
   });
 
   it("текущей помечает последнюю крошку", () => {
