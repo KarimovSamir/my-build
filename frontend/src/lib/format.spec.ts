@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatArea, formatDate, formatFileSize, formatMoney } from "./format";
+import { formatArea, formatDate, formatFileSize, formatMoney, initialOf } from "./format";
 
 /** Неразрывный пробел — тот же, что ставит `Intl` для русской локали. */
 const NBSP = " ";
@@ -83,5 +83,28 @@ describe("formatArea", () => {
     expect(formatArea(62.5)).toBe("62,5 м²");
     expect(formatArea(100)).toBe("100 м²");
     expect(formatArea(1500)).toBe(`1${NBSP}500 м²`);
+  });
+});
+
+describe("initialOf", () => {
+  it("берёт первую букву названия в верхнем регистре", () => {
+    expect(initialOf("СтройГрад")).toBe("С");
+    expect(initialOf("  анна Петрова")).toBe("А");
+  });
+
+  it("пропускает правовую форму: иначе весь каталог был бы из букв «О»", () => {
+    expect(initialOf("ООО «СтройГрад»")).toBe("С");
+    expect(initialOf('ЗАО "Ремонт Плюс"')).toBe("Р");
+    expect(initialOf("Ltd Basement")).toBe("B");
+  });
+
+  it("название из одной правовой формы всё равно даёт букву", () => {
+    expect(initialOf("ООО")).toBe("О");
+  });
+
+  it("на пустом названии даёт знак вопроса, а не пустой аватар", () => {
+    expect(initialOf("")).toBe("?");
+    expect(initialOf("   ")).toBe("?");
+    expect(initialOf("«»")).toBe("?");
   });
 });

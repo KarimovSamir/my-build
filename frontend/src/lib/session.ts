@@ -1,5 +1,7 @@
 import { Role, roleLabels, type UserProfile } from "@/lib/types";
 
+import { initialOf } from "./format";
+
 /**
  * Текущий пользователь в том виде, в каком его показывает интерфейс.
  *
@@ -26,7 +28,7 @@ export function toCurrentUser(profile: UserProfile): CurrentUser {
     ...profile,
     displayName,
     roleLabel: roleLabels[profile.role],
-    initial: displayName.trim().charAt(0).toUpperCase() || "?",
+    initial: initialOf(displayName),
   };
 }
 

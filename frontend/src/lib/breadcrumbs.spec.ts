@@ -5,6 +5,7 @@ import { Role } from "@/lib/types";
 import { buildBreadcrumbs, type Crumb } from "./breadcrumbs";
 
 const ORDER_ID = "6f1c7a0e-0000-4000-8000-000000000001";
+const COMPANY_ID = "6f1c7a0e-0000-4000-8000-000000000002";
 
 /** Крошки в виде «подпись → адрес», где `null` — текст без ссылки. */
 function trail(pathname: string, role: Role | null): [string, string | null][] {
@@ -46,6 +47,20 @@ describe("buildBreadcrumbs", () => {
       ["Все заказы", "/orders"],
       ["Заказ", null],
     ]);
+  });
+
+  it("идентификатор подписывается по разделу, в котором стоит", () => {
+    // В каталоге подрядчиков это компания, а не заказ.
+    expect(trail(`/contractors/${COMPANY_ID}`, Role.CLIENT)).toEqual([
+      ["Главная", "/orders"],
+      ["Подрядчики", "/contractors"],
+      ["Компания", null],
+    ]);
+  });
+
+  it("идентификатор в неизвестном разделе остаётся собой", () => {
+    // Назвать его нечем: выдуманная подпись врала бы.
+    expect(trail(`/settings/${COMPANY_ID}`, Role.CLIENT).at(-1)).toEqual([COMPANY_ID, null]);
   });
 
   it("у компании «Все заказы» остаются текстом: такого раздела у неё нет", () => {

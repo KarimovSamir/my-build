@@ -12,6 +12,7 @@
 
 import { Role } from "@/lib/types";
 
+import { UUID_PATTERN } from "./list-params";
 import { getHomeHref } from "./navigation";
 
 export interface Crumb {
@@ -33,8 +34,14 @@ const segmentLabels: Record<string, string> = {
   settings: "Настройки",
 };
 
-/** Динамический сегмент — идентификатор сущности, а не название раздела. */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * Как назвать идентификатор в крошке. Имя даёт раздел, внутри которого он стоит:
+ * `/orders/{id}` — это заказ, `/contractors/{id}` — компания.
+ */
+const entityLabels: Record<string, string> = {
+  orders: "Заказ",
+  contractors: "Компания",
+};
 
 export function buildBreadcrumbs(pathname: string, role: Role | null): Crumb[] {
   const segments = pathname.split("/").filter(Boolean);
@@ -54,13 +61,26 @@ export function buildBreadcrumbs(pathname: string, role: Role | null): Crumb[] {
     const current = index === segments.length - 1;
 
     crumbs.push({
-      label: segmentLabels[segment] ?? (UUID.test(segment) ? "Заказ" : decodeSegment(segment)),
+      label: crumbLabel(segment, segments[index - 1]),
       href: current || !isReachable(href, role) ? null : href,
       current,
     });
   });
 
   return crumbs;
+}
+
+function crumbLabel(segment: string, parent: string | undefined): string {
+  const known = segmentLabels[segment];
+
+  if (known) return known;
+
+  // Идентификатор в подпись не годится, но и назвать его можно только по
+  // разделу: раздела нет в списке — показываем сегмент как есть.
+  return (
+    (UUID_PATTERN.test(segment) ? entityLabels[parent ?? ""] : undefined) ??
+    decodeSegment(segment)
+  );
 }
 
 /**

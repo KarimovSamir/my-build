@@ -6,6 +6,7 @@ import {
   BURST_DELAY_MS,
   COMPANY_FEED_EVENTS,
   COMPANY_OFFERS_EVENTS,
+  DOCUMENTS_EVENTS,
   NOTIFICATIONS_EVENTS,
   ORDER_DETAIL_EVENTS,
   ORDERS_LIST_EVENTS,
@@ -21,6 +22,7 @@ describe("состав событий", () => {
     "мои предложения": COMPANY_OFFERS_EVENTS,
     "лента компании": COMPANY_FEED_EVENTS,
     "уведомления и колокольчик": NOTIFICATIONS_EVENTS,
+    документы: DOCUMENTS_EVENTS,
   };
 
   /**
@@ -54,6 +56,15 @@ describe("состав событий", () => {
    */
   it("счётчик непрочитанных слушает только уведомления", () => {
     expect(NOTIFICATIONS_EVENTS).toEqual([socketEvents.notificationCreated]);
+  });
+
+  /**
+   * Документы пополняются единственным событием — загрузкой файлов сдачи.
+   * Статус заказа состав файлов не меняет, а `notification:created` заставил бы
+   * раздел перечитываться на каждое движение по любому заказу.
+   */
+  it("документы слушают только файлы", () => {
+    expect(DOCUMENTS_EVENTS).toEqual([socketEvents.orderFilesUpdated]);
   });
 });
 

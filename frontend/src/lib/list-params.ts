@@ -38,6 +38,22 @@ export function readEnumParam<T extends string>(
   return parsed && known.has(parsed) ? (parsed as T) : null;
 }
 
+/**
+ * Идентификатор сущности в адресе: заказ у фильтра документов, например.
+ *
+ * Проверка не косметическая: backend принимает такие параметры через
+ * `@IsUUID` и отвечает на мусор 400, а адрес правит пользователь. Без проверки
+ * ссылка с опечаткой превращала бы раздел в экран ошибки вместо списка.
+ */
+export const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function readUuidParam(value: string | string[] | undefined): string | null {
+  const parsed = firstParam(value);
+
+  return parsed && UUID_PATTERN.test(parsed) ? parsed : null;
+}
+
 export function readQueryParam(value: string | string[] | undefined): string {
   return (firstParam(value) ?? "").trim().slice(0, MAX_QUERY_LENGTH);
 }
