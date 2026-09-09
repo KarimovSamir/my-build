@@ -20,7 +20,7 @@ import {
   isEmptyDocumentsFilter,
   type DocumentsFilter,
 } from "@/lib/documents-filter";
-import { isImageMimeType } from "@/lib/file-kind";
+import { fileKindLabel, isImageMimeType } from "@/lib/file-kind";
 import { formatDate, formatFileSize } from "@/lib/format";
 
 /**
@@ -111,8 +111,14 @@ function DocumentRow({
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{document.originalName}</p>
+        {/*
+          Тип назван словом, а не только иконкой: иконка различает картинку
+          и документ, а PDF, DWG и DXF в списке выглядели бы одинаково —
+          хотя тип ТЗ §7 требует показывать.
+        */}
         <p className="text-muted-foreground mt-0.5 text-xs">
-          {formatFileSize(document.sizeBytes)} · {formatDate(document.createdAt)} ·{" "}
+          {fileKindLabel(document.mimeType)} · {formatFileSize(document.sizeBytes)} ·{" "}
+          {formatDate(document.createdAt)} ·{" "}
           {documentOwnerLabel(document.ownerType, viewer)}
         </p>
       </div>

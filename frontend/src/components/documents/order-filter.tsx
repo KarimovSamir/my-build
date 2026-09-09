@@ -1,5 +1,4 @@
 import {
-  isExecutorOffer,
   MAX_PAGE_SIZE,
   Role,
   type CompanyOfferItem,
@@ -21,10 +20,14 @@ import type { DocumentsFilter } from "@/lib/documents-filter";
  * и принятые предложения компании. Правило то же, что у `buildDocumentsWhere`
  * на backend: документы есть там, где пользователь сторона сделки.
  *
- * Список ограничен одной страницей `MAX_PAGE_SIZE`: фильтр — это удобство,
- * а не право доступа, и подгрузка по мере прокрутки ради него не окупается.
- * Заказ, не попавший в варианты, всё равно фильтруется — через адрес
- * (`withSelectedOrder`).
+ * Список ограничен одной страницей `MAX_PAGE_SIZE` заказов: фильтр — это
+ * удобство, а не право доступа, и подгрузка по мере прокрутки ради него
+ * не окупается. Заказ, не попавший в варианты, всё равно фильтруется — через
+ * адрес (`withSelectedOrder`).
+ *
+ * Отбор идёт на сервере, а не по полученной странице: у компании предложений
+ * может быть больше страницы, и отсев после пагинации оставлял бы фильтр
+ * пустым при полном списке документов.
  */
 async function loadOrderOptions(viewer: Role) {
   if (viewer === Role.CLIENT) {
@@ -35,15 +38,14 @@ async function loadOrderOptions(viewer: Role) {
     return toOrderOptions(page.items);
   }
 
+  // `executor=true` — предложения, которыми компания стала исполнителем.
+  // Непринятое предложение заказа компании не делает: файлов по нему
+  // в разделе нет, и вариант фильтра дал бы всегда пустой список.
   const page = await serverApi.get<Paginated<CompanyOfferItem>>("/company/offers", {
-    query: { pageSize: MAX_PAGE_SIZE },
+    query: { pageSize: MAX_PAGE_SIZE, executor: "true" },
   });
 
-  // Предложение, которое не приняли, заказ компании не делает: файлов
-  // по нему в разделе нет, и вариант фильтра дал бы всегда пустой список.
-  return toOrderOptions(
-    page.items.filter((offer) => isExecutorOffer(offer.status)).map((offer) => offer.order),
-  );
+  return toOrderOptions(page.items.map((offer) => offer.order));
 }
 
 export async function OrderFilter({

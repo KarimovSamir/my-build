@@ -425,12 +425,57 @@ describe('Предложения (e2e)', () => {
       ).not.toContain(alphaOffer.body.id);
     });
 
+    /**
+     * `?executor=` нужен разделу «Документы»: там в фильтре «Заказ» должны быть
+     * только заказы, где компания стала исполнителем. Отбор идёт до пагинации,
+     * иначе у компании с длинным списком предложений вариантов не осталось бы.
+     */
+    it('executor разводит принятые предложения и остальные', async () => {
+      const waiting = await seedOrder('Заказ, по которому только предложились');
+      const pending = await postOffer(alphaToken, waiting.id);
+
+      const taken = await seedOrder('Заказ, который отдали исполнителю');
+      const accepted = await postOffer(alphaToken, taken.id);
+      await request(app.getHttpServer())
+        .post(`/orders/${taken.id}/accept-offer/${accepted.body.id}`)
+        .set('Authorization', `Bearer ${clientToken}`)
+        .expect(200);
+
+      const ids = async (executor: string): Promise<string[]> => {
+        const response = await request(app.getHttpServer())
+          .get('/company/offers')
+          .query({ pageSize: 100, executor })
+          .set('Authorization', `Bearer ${alphaToken}`);
+
+        expect(response.status).toBe(200);
+        return response.body.items.map((item: { id: string }) => item.id);
+      };
+
+      const mine = await ids('true');
+      expect(mine).toContain(accepted.body.id);
+      expect(mine).not.toContain(pending.body.id);
+
+      const rest = await ids('false');
+      expect(rest).toContain(pending.body.id);
+      expect(rest).not.toContain(accepted.body.id);
+    });
+
     it('отклоняет неизвестный статус предложения', async () => {
       const response = await request(app.getHttpServer())
         .get('/company/offers')
         .query({ status: 'НЕИЗВЕСТНО' })
         .set('Authorization', `Bearer ${betaToken}`);
 
+      expect(response.status).toBe(400);
+    });
+
+    it('отклоняет мусор в executor', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/company/offers')
+        .query({ executor: 'да' })
+        .set('Authorization', `Bearer ${betaToken}`);
+
+      // Не «полный список молча»: иначе фильтр документов тихо развалился бы.
       expect(response.status).toBe(400);
     });
   });

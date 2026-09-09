@@ -12,7 +12,7 @@ import {
   OrderCategory,
   OrderStatus,
   Role,
-  type ContractorCard,
+  type ContractorListItem,
 } from '@mybuild/shared';
 
 import { PrismaService } from '../src/prisma/prisma.service.js';
@@ -49,7 +49,7 @@ describe('Подрядчики (e2e)', () => {
   async function listContractors(
     token: string,
     query: Record<string, string> = {},
-  ): Promise<ContractorCard[]> {
+  ): Promise<ContractorListItem[]> {
     const response = await request(app.getHttpServer())
       .get('/contractors')
       .query({ pageSize: '100', q: MARK, ...query })
@@ -138,17 +138,17 @@ describe('Подрядчики (e2e)', () => {
   });
 
   describe('GET /contractors', () => {
-    it('отдаёт компании с контактами и числом завершённых заказов', async () => {
+    it('отдаёт компании с числом завершённых заказов и без контактов', async () => {
       const items = await listContractors(clientToken);
 
       expect(items).toHaveLength(2);
+      // Сравнение полное, а не по подмножеству: смысл в том, что почты
+      // и телефона в строке списка нет — их отдаёт только карточка.
       expect(items[0]).toEqual({
         id: alpha.id,
         companyName: `Альфастрой ${MARK}`,
         city: 'Москва',
         country: 'Россия',
-        email: alpha.email,
-        phone: '+7 900 000-00-00',
         completedOrdersCount: 1,
       });
       // Предложение, которое не выбрали, завершённым заказом не считается.
@@ -209,7 +209,7 @@ describe('Подрядчики (e2e)', () => {
   });
 
   describe('GET /contractors/:id', () => {
-    it('отдаёт карточку компании', async () => {
+    it('отдаёт карточку компании с контактами', async () => {
       const response = await request(app.getHttpServer())
         .get(`/contractors/${alpha.id}`)
         .set('Authorization', `Bearer ${clientToken}`);
@@ -219,6 +219,9 @@ describe('Подрядчики (e2e)', () => {
         id: alpha.id,
         companyName: `Альфастрой ${MARK}`,
         city: 'Москва',
+        // Ради контактов карточку и открывают (ТЗ §7) — в списке их нет.
+        email: alpha.email,
+        phone: '+7 900 000-00-00',
         completedOrdersCount: 1,
       });
     });

@@ -7,7 +7,7 @@
  * расширений, по которой тип определяет backend.
  */
 
-import { FILE_EXTENSION_MIME, fileExtension } from "@/lib/types";
+import { FILE_EXTENSION_MIME, fileExtension, type AllowedFileMimeType } from "@/lib/types";
 
 const IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
   "image/png",
@@ -16,8 +16,41 @@ const IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /** Тип из базы или из `File.type`. Параметры после «;» отбрасываются. */
+function normalizeMimeType(mimeType: string): string {
+  return mimeType.split(";")[0]!.trim().toLowerCase();
+}
+
 export function isImageMimeType(mimeType: string): boolean {
-  return IMAGE_MIME_TYPES.has(mimeType.split(";")[0]!.trim().toLowerCase());
+  return IMAGE_MIME_TYPES.has(normalizeMimeType(mimeType));
+}
+
+/**
+ * Как тип файла называется в списке (ТЗ §7: «имя, тип, размер, дата…»).
+ *
+ * Название берётся из типа, а не из расширения в имени: имя пишет пользователь,
+ * а `mimeType` проставил backend по своей таблице расширений и сверил
+ * по первым байтам. Ключи — весь список разрешённых типов, поэтому новый тип
+ * в allowlist не соберётся, пока ему не придумано название.
+ */
+const MIME_LABELS: Record<AllowedFileMimeType, string> = {
+  "application/pdf": "PDF",
+  "image/png": "PNG",
+  "image/jpeg": "JPEG",
+  "image/webp": "WEBP",
+  "image/vnd.dwg": "DWG",
+  "application/dxf": "DXF",
+};
+
+/**
+ * Строка вроде «PDF» или «DWG».
+ *
+ * Запасное «Файл» — не мёртвая ветка: allowlist за время жизни проекта уже
+ * менялся, а строки `OrderFile` со старым типом остаются в базе навсегда.
+ */
+export function fileKindLabel(mimeType: string): string {
+  const labels: Record<string, string | undefined> = MIME_LABELS;
+
+  return labels[normalizeMimeType(mimeType)] ?? "Файл";
 }
 
 /**

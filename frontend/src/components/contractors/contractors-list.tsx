@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 
-import { DEFAULT_PAGE_SIZE, type ContractorCard, type Paginated } from "@/lib/types";
+import { DEFAULT_PAGE_SIZE, type ContractorListItem, type Paginated } from "@/lib/types";
 
 import { EmptyCard, OutOfRange, PaginationBar } from "@/components/list-parts";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -17,11 +17,12 @@ import { initialOf } from "@/lib/format";
  * Каталог подрядчиков (ТЗ §5, §7).
  *
  * В строке — то, по чему компанию выбирают глазами: название, город и число
- * завершённых заказов. Контакты остались карточке: в списке из десяти строк
- * почта и телефон превращаются в шум, а нужны они уже после выбора.
+ * завершённых заказов. Контакты остались карточке, и не только ради вида:
+ * `GET /contractors` их не отдаёт вовсе (`ContractorListItem`), поэтому почта
+ * и телефон всех компаний не уезжают в браузер на каждый запрос списка.
  */
 export async function ContractorsList({ filter }: { filter: ContractorsFilter }) {
-  const page = await serverApi.get<Paginated<ContractorCard>>("/contractors", {
+  const page = await serverApi.get<Paginated<ContractorListItem>>("/contractors", {
     query: {
       q: filter.q,
       page: filter.page,
@@ -75,7 +76,7 @@ export async function ContractorsList({ filter }: { filter: ContractorsFilter })
   );
 }
 
-function ContractorRow({ contractor }: { contractor: ContractorCard }) {
+function ContractorRow({ contractor }: { contractor: ContractorListItem }) {
   const location = contractorLocation(contractor);
 
   return (

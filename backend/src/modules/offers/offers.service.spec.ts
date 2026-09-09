@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { OfferStatus } from '@mybuild/shared';
+import { EXECUTOR_OFFER_STATUSES, OfferStatus } from '@mybuild/shared';
 
 import { Prisma } from '../../generated/prisma/client.js';
 import type { PrismaService } from '../../prisma/prisma.service.js';
@@ -11,6 +11,7 @@ import type {
   OrderTransitionService,
 } from '../orders/order-transition.service.js';
 import type { RealtimeService } from '../realtime/realtime.service.js';
+import { ListCompanyOffersQueryDto } from './dto/list-company-offers.dto.js';
 import { OffersService } from './offers.service.js';
 
 /**
@@ -297,7 +298,7 @@ describe('OffersService.listOwnOffers', () => {
     vi.restoreAllMocks();
   });
 
-  it('фильтр по статусу попадает в запрос, а его отсутствие — нет', async () => {
+  function listWith() {
     const rows = [{ ...offerRow(), order: orderRowForList() }];
 
     const prisma = {
@@ -313,22 +314,93 @@ describe('OffersService.listOwnOffers', () => {
       {} as RealtimeService,
     );
 
-    await service.listOwnOffers(COMPANY_ID, { page: 1, pageSize: 20 });
-    expect(prisma.offer.findMany.mock.calls[0]![0]).toMatchObject({
-      where: { companyId: COMPANY_ID },
-    });
-    expect(prisma.offer.findMany.mock.calls[0]![0].where.status).toBeUndefined();
+    return { service, prisma };
+  }
 
-    await service.listOwnOffers(COMPANY_ID, {
-      page: 1,
-      pageSize: 20,
-      status: OfferStatus.SENT,
+  it('без фильтров условия по статусу нет', async () => {
+    const { service, prisma } = listWith();
+
+    await service.listOwnOffers(COMPANY_ID, query());
+
+    expect(lastWhere(prisma)).toEqual({ companyId: COMPANY_ID });
+  });
+
+  it('вкладка статуса попадает в запрос', async () => {
+    const { service, prisma } = listWith();
+
+    await service.listOwnOffers(COMPANY_ID, query({ status: OfferStatus.SENT }));
+
+    expect(lastWhere(prisma)).toEqual({
+      companyId: COMPANY_ID,
+      status: { equals: OfferStatus.SENT },
     });
-    expect(prisma.offer.findMany.mock.calls[1]![0]).toMatchObject({
-      where: { companyId: COMPANY_ID, status: OfferStatus.SENT },
+  });
+
+  /**
+   * Ради этого параметр и появился: фильтр «Заказ» в разделе «Документы»
+   * отбирал исполнительские предложения уже из полученной страницы, и у
+   * компании с длинным списком в вариантах не оставалось ни одного заказа.
+   */
+  it('executor=true оставляет только заказы, где компания исполнитель', async () => {
+    const { service, prisma } = listWith();
+
+    await service.listOwnOffers(COMPANY_ID, query({ executor: 'true' }));
+
+    expect(lastWhere(prisma)).toEqual({
+      companyId: COMPANY_ID,
+      status: { in: [...EXECUTOR_OFFER_STATUSES] },
+    });
+  });
+
+  it('executor=false оставляет остальные', async () => {
+    const { service, prisma } = listWith();
+
+    await service.listOwnOffers(COMPANY_ID, query({ executor: 'false' }));
+
+    expect(lastWhere(prisma)).toEqual({
+      companyId: COMPANY_ID,
+      status: { notIn: [...EXECUTOR_OFFER_STATUSES] },
+    });
+  });
+
+  it('заданные вместе, фильтры пересекаются', async () => {
+    const { service, prisma } = listWith();
+
+    await service.listOwnOffers(
+      COMPANY_ID,
+      query({ status: OfferStatus.COMPLETED, executor: 'true' }),
+    );
+
+    expect(lastWhere(prisma)).toEqual({
+      companyId: COMPANY_ID,
+      status: { equals: OfferStatus.COMPLETED, in: [...EXECUTOR_OFFER_STATUSES] },
     });
   });
 });
+
+/**
+ * Запрос в том виде, в каком его отдаёт `ValidationPipe`: настоящий DTO,
+ * а не похожий объект. `executorOnly` — геттер на прототипе, и подделка
+ * литералом проверяла бы не тот разбор, который работает в приложении.
+ */
+function query(
+  fields: Partial<Pick<ListCompanyOffersQueryDto, 'status' | 'executor'>> = {},
+): ListCompanyOffersQueryDto {
+  return Object.assign(new ListCompanyOffersQueryDto(), {
+    page: 1,
+    pageSize: 20,
+    ...fields,
+  });
+}
+
+/** Условие последнего запроса списка: то же `where` уходит и в `count`. */
+function lastWhere(prisma: {
+  offer: { findMany: { mock: { calls: [{ where: Prisma.OfferWhereInput }][] } } };
+}): Prisma.OfferWhereInput {
+  const { calls } = prisma.offer.findMany.mock;
+
+  return calls[calls.length - 1]![0].where;
+}
 
 /** Заказ в том объёме, в каком его читает список предложений компании. */
 function orderRowForList() {

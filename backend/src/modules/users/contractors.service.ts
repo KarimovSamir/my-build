@@ -5,7 +5,7 @@
  */
 
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { ContractorCard, Paginated } from '@mybuild/shared';
+import type { ContractorCard, ContractorListItem, Paginated } from '@mybuild/shared';
 
 import type { SearchQueryDto } from '../../common/dto/pagination.dto.js';
 import { pageRequest, toPage } from '../../common/pagination.js';
@@ -17,21 +17,32 @@ import { COMPLETED_OFFERS_FILTER, buildContractorsWhere } from './contractor-sea
 const NOT_FOUND = 'Подрядчик не найден';
 
 /**
- * Что читается из базы под карточку. Число завершённых заказов считает сам
+ * Что читается из базы под строку списка. Число завершённых заказов считает сам
  * Postgres (`_count` с фильтром) — отдельным запросом на строку это дало бы
  * по запросу на каждую компанию в списке.
+ *
+ * Контактов здесь нет: список их не показывает, а страница каталога уезжает
+ * в браузер целиком. Один select на оба маршрута отдавал бы почту и телефон
+ * каждой компании на каждый запрос списка — то есть выгружал бы контакты всей
+ * площадки постранично, ничего ими не рисуя.
  */
-const CONTRACTOR_SELECT = {
+const CONTRACTOR_LIST_SELECT = {
   id: true,
   companyName: true,
   city: true,
   country: true,
-  email: true,
-  phone: true,
   _count: { select: { offers: { where: COMPLETED_OFFERS_FILTER } } },
 } satisfies Prisma.UserSelect;
 
-type ContractorRow = Prisma.UserGetPayload<{ select: typeof CONTRACTOR_SELECT }>;
+/** Карточка одной компании: то же плюс контакты (ТЗ §7). */
+const CONTRACTOR_CARD_SELECT = {
+  ...CONTRACTOR_LIST_SELECT,
+  email: true,
+  phone: true,
+} satisfies Prisma.UserSelect;
+
+type ContractorListRow = Prisma.UserGetPayload<{ select: typeof CONTRACTOR_LIST_SELECT }>;
+type ContractorCardRow = Prisma.UserGetPayload<{ select: typeof CONTRACTOR_CARD_SELECT }>;
 
 /** Алфавит, а не «лучшие сверху»: сортировать по заслугам на MVP нечем. */
 const ORDER_BY: Prisma.UserOrderByWithRelationInput[] = [
@@ -43,7 +54,7 @@ const ORDER_BY: Prisma.UserOrderByWithRelationInput[] = [
 export class ContractorsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(query: SearchQueryDto): Promise<Paginated<ContractorCard>> {
+  async list(query: SearchQueryDto): Promise<Paginated<ContractorListItem>> {
     const where = buildContractorsWhere(query.q);
     const request = pageRequest(query);
 
@@ -51,14 +62,14 @@ export class ContractorsService {
       this.prisma.user.count({ where }),
       this.prisma.user.findMany({
         where,
-        select: CONTRACTOR_SELECT,
+        select: CONTRACTOR_LIST_SELECT,
         orderBy: ORDER_BY,
         skip: request.skip,
         take: request.pageSize,
       }),
     ]);
 
-    return toPage(rows.map(toContractorCard), request, total);
+    return toPage(rows.map(toListItem), request, total);
   }
 
   /**
@@ -78,7 +89,7 @@ export class ContractorsService {
       // Условие каталога целиком, а не только `id`: по этому адресу нельзя
       // прочитать профиль клиента, подставив его идентификатор.
       where: { ...buildContractorsWhere(), id: contractorId },
-      select: CONTRACTOR_SELECT,
+      select: CONTRACTOR_CARD_SELECT,
       take: 1,
     });
 
@@ -91,11 +102,11 @@ export class ContractorsService {
 }
 
 /**
- * Строка базы → контракт API. Счётчик разбирается через деструктуризацию,
+ * Строка базы → строка списка. Счётчик разбирается через деструктуризацию,
  * а не читается полем: `_count` — имя из Prisma, и обращение к нему точкой
  * линтер считает нарушением (`no-underscore-dangle`).
  */
-function toContractorCard({ _count, ...row }: ContractorRow): ContractorCard {
+function toListItem({ _count, ...row }: ContractorListRow): ContractorListItem {
   return {
     id: row.id,
     // Выборка отбирает строки с `companyName IS NOT NULL`, и то же гарантирует
@@ -103,8 +114,11 @@ function toContractorCard({ _count, ...row }: ContractorRow): ContractorCard {
     companyName: row.companyName!,
     city: row.city,
     country: row.country,
-    email: row.email,
-    phone: row.phone,
     completedOrdersCount: _count.offers,
   };
+}
+
+/** Строка базы → карточка компании: то же плюс контакты. */
+function toContractorCard(row: ContractorCardRow): ContractorCard {
+  return { ...toListItem(row), email: row.email, phone: row.phone };
 }

@@ -9,6 +9,7 @@
 
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
+  EXECUTOR_OFFER_STATUSES,
   OfferStatus,
   type AvailableOrderItem,
   type CompanyOfferItem,
@@ -245,11 +246,7 @@ export class OffersService {
     companyId: string,
     query: ListCompanyOffersQueryDto,
   ): Promise<Paginated<CompanyOfferItem>> {
-    const where: Prisma.OfferWhereInput = { companyId };
-
-    if (query.status) {
-      where.status = query.status;
-    }
+    const where: Prisma.OfferWhereInput = { companyId, ...offerStatusFilter(query) };
 
     const request = pageRequest(query);
 
@@ -281,4 +278,30 @@ export class OffersService {
       total,
     );
   }
+}
+
+/**
+ * Условие по статусу для списка своих предложений.
+ *
+ * Два фильтра складываются, а не спорят: `status` — вкладка на экране «Мои
+ * предложения», `executor` — «заказы, где я исполнитель» для раздела
+ * «Документы». Заданные вместе, они пересекаются, и это честный ответ:
+ * `?status=SENT&executor=true` пустой не по ошибке.
+ */
+function offerStatusFilter(
+  query: ListCompanyOffersQueryDto,
+): Pick<Prisma.OfferWhereInput, 'status'> {
+  const status: Prisma.EnumOfferStatusFilter = {};
+
+  if (query.status) {
+    status.equals = query.status;
+  }
+
+  if (query.executorOnly !== undefined) {
+    // Копия, а не сам список: он объявлен `readonly`, а `in` ждёт
+    // изменяемый массив.
+    status[query.executorOnly ? 'in' : 'notIn'] = [...EXECUTOR_OFFER_STATUSES];
+  }
+
+  return Object.keys(status).length > 0 ? { status } : {};
 }
