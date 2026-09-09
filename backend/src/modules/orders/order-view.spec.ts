@@ -9,7 +9,13 @@ import {
 } from '@mybuild/shared';
 
 import { Prisma } from '../../generated/prisma/client.js';
-import { toOrderDetail, toOrderListItem, type OfferRow, type OrderDetailRow } from './order-view.js';
+import {
+  toAvailableOrderItem,
+  toOrderDetail,
+  toOrderListItem,
+  type OfferRow,
+  type OrderDetailRow,
+} from './order-view.js';
 
 /**
  * Приватность заказа (ТЗ §4.1) — самое дорогое место этого модуля: ошибка
@@ -315,6 +321,51 @@ describe('toOrderDetail — компания, которая в заказе н�
     expect(view.clientBudget).toBe('120000');
     expect(view.squareMeters).toBe(100);
   });
+
+  it('не видит, сколько места занимают файлы заказа', () => {
+    // Сумма по всем файлам выдала бы существование сдач, которых компания
+    // не видит: заказ приходит ей как «ищет исполнителя» (ТЗ §4.1).
+    // Загружать ей всё равно нечего — потолок её не касается.
+    expect(toOrderDetail(order(), { id: OUTSIDER_ID }).filesSizeBytes).toBeNull();
+    expect(toOrderDetail(order(), { id: RIVAL_ID }).filesSizeBytes).toBeNull();
+  });
+});
+
+describe('toOrderDetail — объём файлов заказа', () => {
+  /** Задание клиента и сдача исполнителя: потолок общий на то и другое. */
+  const withBothSides = order({
+    files: [
+      {
+        id: 'file-1',
+        orderId: ORDER_ID,
+        ownerType: FileOwnerType.CLIENT,
+        submissionRound: 0,
+        originalName: 'План.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 1024,
+        createdAt: '2026-09-01T09:05:00.000Z',
+      },
+      {
+        id: 'file-2',
+        orderId: ORDER_ID,
+        ownerType: FileOwnerType.COMPANY,
+        submissionRound: 1,
+        originalName: 'Смета.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 3072,
+        createdAt: '2026-09-03T11:30:00.000Z',
+      },
+    ],
+  });
+
+  it('считает файлы обеих сторон — место в хранилище одно на всех', () => {
+    expect(toOrderDetail(withBothSides, { id: CLIENT_ID }).filesSizeBytes).toBe(4096);
+    expect(toOrderDetail(withBothSides, { id: EXECUTOR_ID }).filesSizeBytes).toBe(4096);
+  });
+
+  it('заказ без файлов занимает ноль, а не «неизвестно»', () => {
+    expect(toOrderDetail(order({ files: [] }), { id: CLIENT_ID }).filesSizeBytes).toBe(0);
+  });
 });
 
 describe('toOrderListItem', () => {
@@ -344,5 +395,32 @@ describe('toOrderListItem', () => {
     expect(item.status).toBe(OrderStatus.WAITING);
     expect(item.contractorName).toBeNull();
     expect(item.deadline).toBeNull();
+  });
+});
+
+describe('toAvailableOrderItem', () => {
+  /** В ленту заказ попадает и с отозванным предложением — строка `Offer` остаётся. */
+  const withdrawn = order({
+    status: OrderStatus.WAITING,
+    price: null,
+    deadline: null,
+    offers: [offer(RIVAL_ID, OfferStatus.WITHDRAWN, { proposedPrice: new Prisma.Decimal('90000.00') })],
+  });
+
+  it('несёт прежнее предложение компании: форма откроется его ценой и сроком', () => {
+    const item = toAvailableOrderItem(withdrawn, { id: RIVAL_ID });
+
+    expect(item.ownOffer).toMatchObject({
+      status: OfferStatus.WITHDRAWN,
+      proposedPrice: '90000',
+    });
+  });
+
+  it('чужое предложение в ленту не отдаёт', () => {
+    // Цены конкурентов компания не видит нигде (ТЗ §4.1), и лента —
+    // не исключение: своего предложения у неё по этому заказу нет.
+    const item = toAvailableOrderItem(withdrawn, { id: OUTSIDER_ID });
+
+    expect(item.ownOffer).toBeNull();
   });
 });

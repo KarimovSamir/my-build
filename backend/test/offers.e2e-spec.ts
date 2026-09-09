@@ -106,6 +106,25 @@ describe('Предложения (e2e)', () => {
     return response.body.items.map((item: { id: string }) => item.id);
   }
 
+  /** Строка ленты целиком — там, где проверяется не только её наличие. */
+  async function availableRow(
+    token: string,
+    orderNumber: number,
+    orderId: string,
+  ): Promise<{ ownOffer: { status: OfferStatus; proposedPrice: string } | null }> {
+    const response = await request(app.getHttpServer())
+      .get('/company/orders/available')
+      .query({ q: String(orderNumber), pageSize: 100 })
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+
+    const row = response.body.items.find((item: { id: string }) => item.id === orderId);
+    expect(row).toBeDefined();
+
+    return row;
+  }
+
   function orderStatus(orderId: string) {
     return prisma.order
       .findUniqueOrThrow({ where: { id: orderId }, select: { status: true } })
@@ -291,6 +310,18 @@ describe('Предложения (e2e)', () => {
       expect(withdrawn.status).toBe(200);
       expect(withdrawn.body.status).toBe(OfferStatus.WITHDRAWN);
       expect(await availableIds(alphaToken, order.orderNumber)).toContain(order.id);
+
+      // Вернувшийся заказ несёт прежнее предложение: форма отправки открывается
+      // его ценой и сроком — так же, как на карточке заказа.
+      const row = await availableRow(alphaToken, order.orderNumber, order.id);
+      expect(row.ownOffer).toMatchObject({
+        status: OfferStatus.WITHDRAWN,
+        proposedPrice: '85000',
+      });
+
+      // А чужого предложения соседняя компания в ленте не видит.
+      const rival = await availableRow(betaToken, order.orderNumber, order.id);
+      expect(rival.ownOffer).toBeNull();
 
       // И новое предложение по тому же заказу отправляется как обычно.
       expect((await postOffer(alphaToken, order.id)).status).toBe(201);

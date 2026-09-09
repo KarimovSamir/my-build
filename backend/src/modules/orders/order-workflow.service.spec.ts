@@ -38,6 +38,8 @@ interface StubSubmission {
   id: string;
   round: number;
   submittedAt: Date | null;
+  /** Текст, который уже лежит в сдаче: по нему считается «комментарий сменился». */
+  comment: string;
 }
 
 interface StubOptions {
@@ -284,7 +286,7 @@ describe('OrderWorkflowService: файлы сдачи', () => {
 
   it('дописывает файлы в уже открытую сдачу и обновляет её комментарий', async () => {
     const { service, prisma, files } = createStubs({
-      submissions: [{ id: 'submission-1', round: 1, submittedAt: null }],
+      submissions: [{ id: 'submission-1', round: 1, submittedAt: null, comment: 'Первый этап' }],
     });
 
     await service.addFiles(addFilesParams({ comment: 'Добавил разрез' }));
@@ -300,7 +302,7 @@ describe('OrderWorkflowService: файлы сдачи', () => {
   it('после сданного раунда открывает следующий', async () => {
     const { service, prisma } = createStubs({
       lockedStatus: OrderStatus.COMPLETION_DISPUTED,
-      submissions: [{ id: 'submission-1', round: 1, submittedAt: new Date() }],
+      submissions: [{ id: 'submission-1', round: 1, submittedAt: new Date(), comment: 'Первый этап' }],
     });
 
     await service.addFiles(
@@ -343,7 +345,7 @@ describe('OrderWorkflowService: файлы сдачи', () => {
    */
   it('не даёт дописать файлы в сдачу, закрытую во время загрузки', async () => {
     const { service, prisma, files, trace } = createStubs({
-      submissions: [{ id: 'submission-1', round: 1, submittedAt: null }],
+      submissions: [{ id: 'submission-1', round: 1, submittedAt: null, comment: 'Первый этап' }],
     });
 
     files.attachFiles.mockImplementation(async (params) => {
@@ -371,12 +373,47 @@ describe('OrderWorkflowService: файлы сдачи', () => {
     expect(prisma.tx.notification.create).not.toHaveBeenCalled();
     expect(realtime.orderFilesUpdated).not.toHaveBeenCalled();
   });
+
+  it('шлёт «перечитай», если файлы дубликаты, а комментарий сменился', async () => {
+    // Комментарий описывает сдачу целиком, и клиент видит его на карточке.
+    // Без события у него остался бы прежний текст до перезагрузки страницы.
+    const { service, prisma, realtime } = createStubs({
+      submissions: [
+        { id: 'submission-1', round: 1, submittedAt: null, comment: 'Первый этап' },
+      ],
+      attached: 0,
+    });
+
+    await service.addFiles(addFilesParams({ comment: 'Первый этап, добавил разрез' }));
+
+    expect(prisma.tx.orderSubmission.update).toHaveBeenCalledTimes(1);
+    // Уведомления при этом нет: в колокольчик правка текста не идёт,
+    // а карточке достаточно повода перечитать заказ.
+    expect(prisma.tx.notification.create).not.toHaveBeenCalled();
+    expect(realtime.orderFilesUpdated.mock.calls[0]![1]).toEqual([]);
+  });
+
+  it('не пишет и не рассылает, если комментарий повторили тем же текстом', async () => {
+    // То же правило, что у повторного уточнения площади тем же числом:
+    // события не было, значит и рассказывать не о чем.
+    const { service, prisma, realtime } = createStubs({
+      submissions: [
+        { id: 'submission-1', round: 1, submittedAt: null, comment: 'Первый этап' },
+      ],
+      attached: 0,
+    });
+
+    await service.addFiles(addFilesParams({ comment: 'Первый этап' }));
+
+    expect(prisma.tx.orderSubmission.update).not.toHaveBeenCalled();
+    expect(realtime.orderFilesUpdated).not.toHaveBeenCalled();
+  });
 });
 
 describe('OrderWorkflowService: сдача работы', () => {
   it('закрывает сдачу и проводит переход одной транзакцией', async () => {
     const { service, prisma, transitions } = createStubs({
-      submissions: [{ id: 'submission-1', round: 1, submittedAt: null }],
+      submissions: [{ id: 'submission-1', round: 1, submittedAt: null, comment: 'Первый этап' }],
       filesInRound: 2,
     });
 
@@ -410,7 +447,7 @@ describe('OrderWorkflowService: сдача работы', () => {
 
   it('не даёт сдать сдачу без единого файла', async () => {
     const { service } = createStubs({
-      submissions: [{ id: 'submission-1', round: 1, submittedAt: null }],
+      submissions: [{ id: 'submission-1', round: 1, submittedAt: null, comment: 'Первый этап' }],
       filesInRound: 0,
     });
 

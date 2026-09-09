@@ -59,6 +59,9 @@ export function WorkCard({
                 orderId={order.id}
                 round={nextRound}
                 filesInRound={submissions.open?.files.length ?? 0}
+                // Исполнитель — сторона сделки, поэтому число ему приходит
+                // всегда; `?? 0` только чтобы не тащить сюда `null`.
+                usedBytes={order.filesSizeBytes ?? 0}
               />
             ) : null}
 

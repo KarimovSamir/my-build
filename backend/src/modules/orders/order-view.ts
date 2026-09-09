@@ -14,6 +14,7 @@ import {
   companySeesTaskFiles,
   isActiveOffer,
   isExecutorOffer,
+  type AvailableOrderItem,
   type IsoDateString,
   type MoneyString,
   type ObjectType,
@@ -161,6 +162,29 @@ export function toOrderListItem(order: OrderRow, viewer: OrderViewer): OrderList
   };
 }
 
+/**
+ * Строка ленты доступных заказов (ТЗ §4.1, §7).
+ *
+ * От обычной строки списка отличается прежним предложением компании: в ленту
+ * заказ попадает и с отозванным или отклонённым предложением, и форма отправки
+ * открывается его ценой и сроком — так же, как на карточке заказа.
+ *
+ * Своё предложение берётся тем же `resolveVisibility`, что и везде: второй
+ * способ определить «чьё это предложение» — второе место, где приватность
+ * может разойтись.
+ */
+export function toAvailableOrderItem(
+  order: OrderRow,
+  viewer: OrderViewer,
+): AvailableOrderItem {
+  const ownOffer = resolveVisibility(order, viewer).ownOffer;
+
+  return {
+    ...toOrderListItem(order, viewer),
+    ownOffer: ownOffer ? toOfferDto(ownOffer) : null,
+  };
+}
+
 /** Карточка заказа целиком, с оглядкой на то, кто её открыл. */
 export function toOrderDetail(
   order: OrderDetailRow,
@@ -184,6 +208,12 @@ export function toOrderDetail(
     client: view.isParty ? order.client : null,
     offers: visibleOffers(order, view),
     files: visibleFiles(order, view),
+    // По всем файлам заказа, а не по видимым: столько места он и занимает.
+    // Сторонам сделки это нужно — они и загружают; остальным сумма выдала бы
+    // сдачи, которых они не видят (ТЗ §4.1).
+    filesSizeBytes: view.isParty
+      ? order.files.reduce((total, file) => total + file.sizeBytes, 0)
+      : null,
     submissions: view.isParty ? order.submissions.map(toSubmissionDto) : [],
     // Считается по настоящему статусу заказа: компании он виден как `WAITING`,
     // и собранная по нему кнопка обещала бы то, на что сервер ответит 409.

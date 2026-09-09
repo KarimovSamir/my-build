@@ -53,6 +53,7 @@ export function AddWorkFilesDialog({
   orderId,
   round,
   filesInRound,
+  usedBytes,
 }: {
   orderId: string;
   /** Номер сдачи, в которую уйдут файлы: он виден компании до отправки. */
@@ -62,6 +63,8 @@ export function AddWorkFilesDialog({
    * API, что действительно добавилось: дубликаты отсеиваются молча.
    */
   filesInRound: number;
+  /** Сколько байт занимают все файлы заказа — на них и стоит потолок. */
+  usedBytes: number;
 }) {
   const sync = useOrderSync();
   const [open, setOpen] = useState(false);
@@ -155,6 +158,7 @@ export function AddWorkFilesDialog({
                 setErrors((current) => ({ ...current, files: undefined }));
               }}
               disabled={pending}
+              usedBytes={usedBytes}
             />
             <FieldMessage
               error={errors.files}

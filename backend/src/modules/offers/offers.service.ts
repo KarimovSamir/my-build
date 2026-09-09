@@ -10,9 +10,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   OfferStatus,
+  type AvailableOrderItem,
   type CompanyOfferItem,
   type OfferDto,
-  type OrderListItem,
   type Paginated,
 } from '@mybuild/shared';
 
@@ -26,7 +26,7 @@ import {
   OrderTransitionService,
   TRANSITION_TX_OPTIONS,
 } from '../orders/order-transition.service.js';
-import { toOfferDto, toOrderListItem } from '../orders/order-view.js';
+import { toAvailableOrderItem, toOfferDto, toOrderListItem } from '../orders/order-view.js';
 import { RealtimeService } from '../realtime/realtime.service.js';
 import { buildAvailableOrdersWhere } from './available-orders.js';
 import type { CreateOfferDto } from './dto/create-offer.dto.js';
@@ -206,15 +206,18 @@ export class OffersService {
   /**
    * Лента доступных для предложений заказов (ТЗ §4.1).
    *
-   * Заказ показывается компании тем же `toOrderListItem`, что и клиенту:
-   * правила видимости общие, а участия в заказе у компании здесь нет —
-   * значит, статус она видит как `WAITING`, а цену сделки и подрядчика
-   * не видит вовсе.
+   * Заказ показывается компании теми же правилами видимости, что и клиенту:
+   * участия в заказе у неё здесь нет — значит, статус она видит как `WAITING`,
+   * а цену сделки и подрядчика не видит вовсе.
+   *
+   * Сверх строки списка отдаётся своё прежнее предложение: в ленту заказ
+   * попадает и с отозванным или отклонённым предложением, и форма отправки
+   * открывается его ценой и сроком — как на карточке заказа.
    */
   async listAvailableOrders(
     companyId: string,
     query: SearchQueryDto,
-  ): Promise<Paginated<OrderListItem>> {
+  ): Promise<Paginated<AvailableOrderItem>> {
     const where = buildAvailableOrdersWhere(companyId, query.q);
     const request = pageRequest(query);
 
@@ -231,7 +234,7 @@ export class OffersService {
     ]);
 
     return toPage(
-      rows.map((row) => toOrderListItem(row, { id: companyId })),
+      rows.map((row) => toAvailableOrderItem(row, { id: companyId })),
       request,
       total,
     );

@@ -29,6 +29,10 @@ import { useRealtimeRefresh } from "@/lib/use-realtime";
  * Число приходит с сервера (`GET /notifications/unread-count`) и им же
  * перепроверяется после каждого события: считать «плюс один» на событие
  * нельзя — то же уведомление могли прочитать в соседней вкладке.
+ *
+ * По той же причине каждый серверный рендер перебивает то, что насчитал
+ * `refresh()`: события о прочтении в §8 нет, и про отметку из соседней вкладки
+ * эта вкладка узнаёт только из серверного счётчика.
  */
 
 export interface Unread {
@@ -44,23 +48,36 @@ export interface Unread {
   refresh: () => void;
 }
 
+/**
+ * Счётчик на момент серверного рендера. `null` — запрос за ним не прошёл.
+ *
+ * Объект вокруг одного числа — не украшательство. Состояние синхронизируется
+ * с сервером сравнением по ссылке (как в `OrderLive`), а число сравнивается
+ * по значению: повтор того же числа неотличим от «нового рендера не было».
+ * Из-за этого счётчик залипал — сервер отдавал прежнее число, сверка молчала,
+ * и в шапке оставалось значение, посчитанное по событию. Объект серверный
+ * рендер создаёт заново каждый раз, поэтому сверка срабатывает всегда.
+ */
+export interface UnreadSnapshot {
+  count: number | null;
+}
+
 const UnreadContext = createContext<Unread | null>(null);
 
 export function UnreadProvider({
-  count: fromServer,
+  snapshot: fromServer,
   children,
 }: {
-  /** Счётчик на момент серверного рендера. `null` — запрос за ним не прошёл. */
-  count: number | null;
+  snapshot: UnreadSnapshot;
   children: ReactNode;
 }) {
   // Серверный рендер — источник правды при входе и после `router.refresh()`.
   // Сверка в рендере, а не в эффекте: тот же приём, что в карточке заказа,
   // иначе между двумя рендерами мелькнёт устаревшее число.
-  const [state, setState] = useState({ count: fromServer, server: fromServer });
+  const [state, setState] = useState({ count: fromServer.count, server: fromServer });
 
   if (state.server !== fromServer) {
-    setState({ count: fromServer, server: fromServer });
+    setState({ count: fromServer.count, server: fromServer });
   }
 
   const refresh = useCallback(() => {

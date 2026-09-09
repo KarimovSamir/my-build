@@ -62,6 +62,7 @@ function order(patch: Partial<OrderDetail> = {}): OrderDetail {
     client: null,
     offers: [],
     files: [],
+    filesSizeBytes: 0,
     submissions: [],
     canSubmitOffer: false,
     ...patch,

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_FILES_PER_REQUEST,
   MAX_FILE_SIZE_BYTES,
+  MAX_ORDER_FILES_BYTES,
   ObjectType,
   OrderCategory,
   ORDER_LIMITS,
@@ -204,17 +205,43 @@ describe("addFiles", () => {
     expect(rejected).toEqual([]);
   });
 
-  it("молча пропускает повторно выбранный файл", () => {
+  it("повторно выбранный файл не добавляет и объясняет почему", () => {
     const { files, rejected } = addFiles([file("план.pdf", 100)], [file("план.pdf", 100)]);
 
     expect(files).toHaveLength(1);
-    expect(rejected).toEqual([]);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]).toContain("уже в списке");
   });
 
-  it("файл с тем же именем, но другого размера — другой файл", () => {
-    const { files } = addFiles([file("план.pdf", 100)], [file("план.pdf", 200)]);
+  it("одно имя при разном размере — всё равно одно имя", () => {
+    // В списке это две одинаковые строки, и какая из них какая — не понять
+    // ни в форме, ни потом в заказе.
+    const { files, rejected } = addFiles([file("план.pdf", 100)], [file("план.pdf", 200)]);
 
-    expect(files).toHaveLength(2);
+    expect(files).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+  });
+
+  it("регистр в имени не спасает", () => {
+    // В ключ хранилища имя уходит в нижнем регистре (`sanitizeFileName`),
+    // да и человек читает «План.pdf» и «план.pdf» как один файл.
+    const { files, rejected } = addFiles([file("План.pdf", 100)], [file("план.pdf", 200)]);
+
+    expect(files).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+  });
+
+  it("одинаковые имена внутри одной пачки тоже отсекаются", () => {
+    // Перетаскиванием из двух папок так сделать можно, и первый файл
+    // при этом остаётся: отказ получают только следующие за ним.
+    const { files, rejected } = addFiles(
+      [],
+      [file("смета.pdf", 100), file("смета.pdf", 200), file("смета.pdf", 300)],
+    );
+
+    expect(files).toHaveLength(1);
+    // Одна причина, а не две одинаковые: это одна новость для пользователя.
+    expect(rejected).toHaveLength(1);
   });
 
   it("не пускает отклонённый файл в список и называет причину", () => {
@@ -235,5 +262,43 @@ describe("addFiles", () => {
     expect(rejected).toEqual([
       `Больше ${MAX_FILES_PER_REQUEST} файлов за раз приложить нельзя`,
     ]);
+  });
+
+  it("не берёт файл, который не влезает в остаток от потолка заказа", () => {
+    // Занято всё, кроме десяти байт. Настоящая проверка на backend, но узнать
+    // про отказ после того, как файл уехал на сервер, — плохой обмен.
+    const { files, rejected } = addFiles(
+      [],
+      [file("смета.pdf", 1024)],
+      MAX_ORDER_FILES_BYTES - 10,
+    );
+
+    expect(files).toEqual([]);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]).toContain("не помещается");
+  });
+
+  it("считает вместе с уже выбранными, но ещё не отправленными", () => {
+    // Заказ занял 35 МБ из 50, выбирают два файла по 10 МБ: первый влезает
+    // в остаток, второй — уже нет. Размеры под потолком на файл (20 МБ),
+    // иначе отсеет проверка отдельного файла, а не потолок заказа.
+    const megabyte = 1024 * 1024;
+
+    const { files, rejected } = addFiles(
+      [],
+      [file("первый.pdf", 10 * megabyte), file("второй.pdf", 10 * megabyte)],
+      MAX_ORDER_FILES_BYTES - 15 * megabyte,
+    );
+
+    expect(files.map((item) => item.name)).toEqual(["первый.pdf"]);
+    expect(rejected).toHaveLength(1);
+  });
+
+  it("без указания занятого места считает заказ пустым", () => {
+    // Форма создания заказа: заказа ещё нет, занимать нечему.
+    const { files, rejected } = addFiles([], [file("план.pdf", 1024)]);
+
+    expect(files).toHaveLength(1);
+    expect(rejected).toEqual([]);
   });
 });

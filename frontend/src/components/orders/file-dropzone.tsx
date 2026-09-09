@@ -8,6 +8,7 @@ import {
   ALLOWED_FILE_EXTENSIONS_HINT,
   MAX_FILES_PER_REQUEST,
   MAX_FILE_SIZE_BYTES,
+  MAX_ORDER_FILES_BYTES,
 } from "@/lib/types";
 
 import { Button } from "@/components/ui/button";
@@ -29,21 +30,31 @@ export function FileDropzone({
   files,
   onChange,
   disabled,
+  usedBytes = 0,
 }: {
   /** Идентификатор области выбора: на неё указывает подпись поля. */
   id: string;
   files: File[];
   onChange: (files: File[]) => void;
   disabled?: boolean;
+  /**
+   * Сколько уже занято файлами этого заказа. У нового заказа — ноль, поэтому
+   * значение по умолчанию: форма создания ничем не занята по определению.
+   */
+  usedBytes?: number;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [rejected, setRejected] = useState<string[]>([]);
 
+  // Занятое вместе с тем, что уже выбрано, но ещё не отправлено: счётчик
+  // отвечает на вопрос «сколько останется, если я нажму загрузить».
+  const occupied = usedBytes + files.reduce((total, file) => total + file.size, 0);
+
   function accept(incoming: FileList | null) {
     if (!incoming?.length) return;
 
-    const result = addFiles(files, [...incoming]);
+    const result = addFiles(files, [...incoming], usedBytes);
     setRejected(result.rejected);
     onChange(result.files);
   }
@@ -87,6 +98,10 @@ export function FileDropzone({
         <span className="text-muted-foreground text-xs">
           {ALLOWED_FILE_EXTENSIONS_HINT} · до {MAX_FILE_SIZE_BYTES / 1024 / 1024} МБ ·
           не больше {MAX_FILES_PER_REQUEST} файлов
+        </span>
+        <span className="text-muted-foreground text-xs">
+          Файлы заказа: {formatFileSize(occupied)} из{" "}
+          {formatFileSize(MAX_ORDER_FILES_BYTES)}
         </span>
       </button>
 

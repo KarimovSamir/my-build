@@ -2,6 +2,7 @@ import { FileText, Image as ImageIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import {
+  MAX_ORDER_FILES_BYTES,
   canDeleteOrder,
   formatOrderNumber,
   objectTypeLabels,
@@ -18,7 +19,13 @@ import { SubmissionsCard } from "@/components/orders/submissions-card";
 import { WorkCard } from "@/components/orders/work-card";
 import { PageHeader } from "@/components/page-shell";
 import { OrderStatusBadge } from "@/components/status-badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { isImageMimeType } from "@/lib/file-kind";
 import { formatArea, formatDate, formatFileSize, formatMoney } from "@/lib/format";
 import {
@@ -90,7 +97,7 @@ export function OrderDetailView({
             </CardContent>
           </Card>
 
-          <ClientFilesCard access={access} />
+          <ClientFilesCard access={access} filesSizeBytes={order.filesSizeBytes} />
 
           {access.isOwner ? <OrderOffersCard orderId={order.id} actions={actions} /> : null}
 
@@ -181,13 +188,31 @@ export function OrderDetailView({
 }
 
 /** Файлы задания. Их видят только стороны сделки — остальным API их не отдаёт. */
-function ClientFilesCard({ access }: { access: OrderDetailAccess }) {
+function ClientFilesCard({
+  access,
+  filesSizeBytes,
+}: {
+  access: OrderDetailAccess;
+  /** Объём всех файлов заказа. `null` — смотрящий не сторона сделки. */
+  filesSizeBytes: number | null;
+}) {
   const files = access.clientFiles;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Файлы клиента</CardTitle>
+        {/*
+          Счёт идёт по всему заказу, а не по этой карточке: потолок общий
+          на задание клиента и сдачи исполнителя, и в подписи это сказано
+          прямо, чтобы число не читалось как «столько весит список выше».
+        */}
+        {filesSizeBytes === null ? null : (
+          <CardDescription>
+            Файлы заказа занимают {formatFileSize(filesSizeBytes)} из{" "}
+            {formatFileSize(MAX_ORDER_FILES_BYTES)}
+          </CardDescription>
+        )}
       </CardHeader>
 
       <CardContent>

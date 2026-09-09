@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   FileOwnerType,
+  MAX_ORDER_FILES_BYTES,
   NotificationType,
   ObjectType,
   OfferStatus,
@@ -288,6 +289,43 @@ describe('Сделка и приёмка (e2e)', () => {
         where: { orderId, type: NotificationType.FILES_UPDATED },
       });
       expect(notification?.userId).toBe(client.id);
+
+      // Занятое место считается по всем файлам заказа: по нему интерфейс
+      // показывает «столько-то из 50 МБ».
+      const storedBytes = stored.reduce((total, file) => total + file.sizeBytes, 0);
+      expect(response.body.filesSizeBytes).toBe(storedBytes);
+    });
+
+    it('не пускает файлы сверх потолка заказа', async () => {
+      const { orderId } = await seedOrderInProgress('Потолок объёма');
+
+      // Место занимается строкой в базе, а не настоящими мегабайтами:
+      // гонять 50 МБ через живой Supabase ради одной проверки незачем,
+      // а `sizeBytes` — обычная колонка.
+      await prisma.orderFile.create({
+        data: {
+          orderId,
+          storageKey: `orders/${orderId}/client/0/fake-big-file`,
+          ownerType: FileOwnerType.CLIENT,
+          submissionRound: 0,
+          fileHash: 'f'.repeat(64),
+          originalName: 'Огромный.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: MAX_ORDER_FILES_BYTES,
+        },
+      });
+
+      const response = await postFiles(executorToken, orderId, 'Ещё чуть-чуть');
+
+      expect(response.status).toBe(400);
+      expect(String(response.body.message)).toContain('не помещаются');
+
+      // Ни строки, ни сдачи: отказ случается до записи.
+      expect(
+        await prisma.orderFile.count({
+          where: { orderId, ownerType: FileOwnerType.COMPANY },
+        }),
+      ).toBe(0);
     });
 
     it('дописывает файлы в ту же сдачу и обновляет комментарий', async () => {

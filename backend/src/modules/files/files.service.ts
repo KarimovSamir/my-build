@@ -6,9 +6,16 @@
  * их с базой и правами. Логики статусов заказа здесь нет — она в state-машине.
  */
 
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   FileOwnerType,
+  MAX_ORDER_FILES_BYTES,
   Role,
   companySeesTaskFiles,
   isExecutorOffer,
@@ -83,8 +90,15 @@ export interface AttachFilesParams {
  */
 const ATTACH_TX_OPTIONS = { timeout: 15_000, maxWait: 10_000 } as const;
 
+/** Байты в мегабайты для текста ошибки: «14,5», а не «15204352». */
+function toMegabytes(bytes: number): string {
+  return (bytes / 1024 / 1024).toLocaleString('ru-RU', { maximumFractionDigits: 1 });
+}
+
 @Injectable()
 export class FilesService {
+  private readonly logger = new Logger(FilesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
@@ -125,6 +139,10 @@ export class FilesService {
       return [];
     }
 
+    // Быстрый отказ до похода в бакет: перелив в 50 МБ незачем сначала
+    // заливать, а потом убирать. Настоящая проверка — под транзакцией ниже.
+    await this.assertOrderQuota(this.prisma, orderId, fresh);
+
     const keys = fresh.map((file) =>
       buildStorageKey(orderId, ownerType, submissionRound, file),
     );
@@ -148,6 +166,10 @@ export class FilesService {
         // отдельным запросом она отвечала бы про состояние, которое к моменту
         // вставки уже устарело.
         await params.guard?.(tx);
+
+        // Под той же транзакцией, что и вставка: снимок выше мог устареть —
+        // параллельный запрос успел занять место, пока файлы ехали в бакет.
+        await this.assertOrderQuota(tx, orderId, fresh);
 
         const created = await tx.orderFile.createManyAndReturn({
           data: fresh.map((file, index) => ({
@@ -175,7 +197,19 @@ export class FilesService {
       }, ATTACH_TX_OPTIONS);
     } catch (error) {
       // Загруженное без строки в базе — мусор, который уже никто не найдёт.
-      await this.storage.remove(keys);
+      // Но убирается не вся пачка, а только осиротевшее: в ключе лежит SHA-256
+      // содержимого, поэтому у параллельного запроса с тем же файлом в ту же
+      // сдачу ключ ровно такой же. Успей тот запрос закоммитить строку — и
+      // `remove(keys)` удалил бы объект из-под неё, а «Скачать» отдало бы 404.
+      await this.removeOrphanObjects(orderId, submissionRound, fresh, keys).catch(
+        (cleanupError: unknown) => {
+          // Уборка ходит и в базу, и в хранилище, то есть падает по тем же
+          // причинам, что и сама вставка. Лишний объект в бакете — меньшее зло,
+          // чем подменённая причина отказа: наружу должна уйти исходная ошибка.
+          this.logger.error('Не удалось убрать объекты после отката', cleanupError);
+        },
+      );
+
       throw error;
     }
 
@@ -215,11 +249,20 @@ export class FilesService {
     };
   }
 
-  /** Файлы заказа. Порядок — от старой сдачи к новой, внутри сдачи по времени. */
+  /**
+   * Файлы заказа. Порядок — от старой сдачи к новой, внутри сдачи по времени.
+   *
+   * `id` третьим ключом обязателен, хотя и выглядит лишним: `createdAt` идёт
+   * из `DEFAULT CURRENT_TIMESTAMP`, а это время **начала транзакции**, одно
+   * на все строки одной вставки. Без третьего ключа порядок файлов, залитых
+   * одним запросом, остаётся на усмотрение Postgres и может меняться между
+   * запросами. Осмысленного порядка внутри такой пачки не существует —
+   * нужен хотя бы устойчивый.
+   */
   async listOrderFiles(orderId: string): Promise<OrderFileDto[]> {
     const files = await this.prisma.orderFile.findMany({
       where: { orderId },
-      orderBy: [{ submissionRound: 'asc' }, { createdAt: 'asc' }],
+      orderBy: [{ submissionRound: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     });
 
     return files.map(toOrderFileDto);
@@ -306,14 +349,50 @@ export class FilesService {
   }
 
   /**
+   * Файлы заказа целиком должны укладываться в `MAX_ORDER_FILES_BYTES`.
+   *
+   * Считается по всем файлам заказа, а не по сдаче и не по владельцу: лимит
+   * существует ради квоты хранилища, а ей безразлично, кто занял место.
+   * Дубликаты сюда не доходят — их отсеял `dropDuplicates`, и места они
+   * не занимают.
+   *
+   * Зовётся дважды: снимком до загрузки в бакет (чтобы не заливать то, что
+   * всё равно не примут) и внутри транзакции вставки (потому что снимок мог
+   * устареть). `client` — либо сам Prisma, либо клиент транзакции.
+   */
+  private async assertOrderQuota(
+    client: Pick<PrismaService, 'orderFile'> | Prisma.TransactionClient,
+    orderId: string,
+    adding: PreparedFile[],
+  ): Promise<void> {
+    const { _sum } = await client.orderFile.aggregate({
+      where: { orderId },
+      _sum: { sizeBytes: true },
+    });
+
+    const used = _sum.sizeBytes ?? 0;
+    const incoming = adding.reduce((total, file) => total + file.sizeBytes, 0);
+
+    if (used + incoming > MAX_ORDER_FILES_BYTES) {
+      throw new BadRequestException(
+        `Файлы заказа не помещаются в ${toMegabytes(MAX_ORDER_FILES_BYTES)} МБ: ` +
+          `занято ${toMegabytes(used)} МБ, добавляется ${toMegabytes(incoming)} МБ`,
+      );
+    }
+  }
+
+  /**
    * Убрать объекты, на которые не сослалась ни одна строка.
    *
-   * Часть строк не создалась из-за гонки: `skipDuplicates` пропустил их,
-   * потому что параллельный запрос успел записать тот же файл в ту же сдачу.
-   * Просто удалить «несохранённые» ключи нельзя — у чужой строки ключ ровно
-   * тот же (в нём хеш содержимого), и удаление оставило бы её без объекта.
-   * Поэтому спрашиваем базу, какие ключи сейчас в ходу, и убираем остальные:
-   * осиротеть может только объект с другим именем файла при том же содержимом.
+   * Зовётся из двух мест, и причина у них одна. Либо часть строк не создалась
+   * из-за гонки (`skipDuplicates` пропустил их, потому что параллельный запрос
+   * успел записать тот же файл в ту же сдачу), либо транзакция откатилась
+   * целиком и своих строк не осталось вовсе.
+   *
+   * Просто удалить «несохранённые» ключи в обоих случаях нельзя — у чужой
+   * строки ключ ровно тот же (в нём хеш содержимого), и удаление оставило бы
+   * её без объекта. Поэтому спрашиваем базу, какие ключи сейчас в ходу,
+   * и убираем остальные.
    */
   private async removeOrphanObjects(
     orderId: string,

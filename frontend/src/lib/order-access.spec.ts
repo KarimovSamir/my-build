@@ -70,6 +70,7 @@ function order(patch: Partial<OrderDetail> = {}): OrderDetail {
     client: { id: CLIENT_ID, firstName: "Иван", lastName: "Петров", city: null, country: null },
     offers: [],
     files: [],
+    filesSizeBytes: 0,
     submissions: [],
     canSubmitOffer: false,
     ...patch,

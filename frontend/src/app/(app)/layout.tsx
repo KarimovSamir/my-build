@@ -31,7 +31,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
 
   return (
     <RealtimeProvider>
-      <UnreadProvider count={unreadCount}>
+      {/* Снимок оборачивается в объект намеренно — см. `UnreadSnapshot`. */}
+      <UnreadProvider snapshot={{ count: unreadCount }}>
         <div className="flex min-h-screen">
           <AppSidebar user={user} />
 

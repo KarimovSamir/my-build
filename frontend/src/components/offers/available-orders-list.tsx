@@ -5,7 +5,7 @@ import {
   formatOrderNumber,
   objectTypeLabels,
   orderCategoryLabels,
-  type OrderListItem,
+  type AvailableOrderItem,
   type Paginated,
 } from "@/lib/types";
 
@@ -34,7 +34,7 @@ import { formatDate, formatMoney } from "@/lib/format";
  * то, ради чего компания сюда и смотрит.
  */
 export async function AvailableOrdersList({ filter }: { filter: AvailableFilter }) {
-  const page = await serverApi.get<Paginated<OrderListItem>>("/company/orders/available", {
+  const page = await serverApi.get<Paginated<AvailableOrderItem>>("/company/orders/available", {
     query: {
       q: filter.q,
       page: filter.page,
@@ -92,7 +92,7 @@ export async function AvailableOrdersList({ filter }: { filter: AvailableFilter 
   );
 }
 
-function AvailableOrderRow({ order }: { order: OrderListItem }) {
+function AvailableOrderRow({ order }: { order: AvailableOrderItem }) {
   return (
     <li className="flex flex-col gap-4 px-4 py-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -131,8 +131,14 @@ function AvailableOrderRow({ order }: { order: OrderListItem }) {
           <Button variant="outline" asChild>
             <Link href={`/orders/${order.id}`}>Подробнее</Link>
           </Button>
+          {/*
+            Прежнее предложение передаётся и здесь: заказ попадает в ленту
+            и с отозванным или отклонённым предложением, и форма должна
+            открыться его ценой и сроком — как на карточке заказа.
+          */}
           <OfferDialog
             order={{ id: order.id, orderNumber: order.orderNumber, title: order.title }}
+            offer={order.ownOffer}
           />
         </div>
       </div>

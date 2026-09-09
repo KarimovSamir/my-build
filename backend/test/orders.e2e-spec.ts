@@ -246,8 +246,14 @@ describe('Заказы (e2e)', () => {
       expect(response.body.orderNumber).toBeGreaterThan(0);
 
       // Кириллица в имени файла не должна ломаться на границе multipart.
-      expect(response.body.files.map((file: { originalName: string }) => file.originalName))
-        .toEqual(['План квартиры.pdf', 'photo.png']);
+      // Порядок не проверяется: у файлов одной вставки `createdAt` совпадает
+      // до миллисекунды (это время начала транзакции), и внутри пачки он
+      // определяется только третьим ключом сортировки — идентификатором.
+      expect(
+        response.body.files
+          .map((file: { originalName: string }) => file.originalName)
+          .toSorted(),
+      ).toEqual(['photo.png', 'План квартиры.pdf'].toSorted());
       expect(response.body.files.every((file: { submissionRound: number }) => file.submissionRound === 0)).toBe(true);
     });
 

@@ -14,6 +14,7 @@ import {
   ALLOWED_FILE_EXTENSIONS_HINT,
   MAX_FILES_PER_REQUEST,
   MAX_FILE_SIZE_BYTES,
+  MAX_ORDER_FILES_BYTES,
   MONEY_PATTERN,
   ORDER_LIMITS,
   fileExtension,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/types";
 
 import { isCalendarDate, isPastDate, normalizeNumber } from "./form-input";
+import { formatFileSize } from "./format";
 
 /** Значения полей формы. Всё строками — так их отдаёт браузер. */
 export interface OrderFormValues {
@@ -152,17 +154,28 @@ export function fileRejectionReason(file: File): string | null {
 /**
  * Добавить выбранные файлы к уже приложенным.
  *
- * Возвращает и новый список, и причины отказов — их показывает dropzone.
- * Повторно выбранный файл (то же имя и размер) не дублируется: backend всё
- * равно отбросит его по хешу, но пользователю видеть две одинаковые строки
- * незачем.
+ * Возвращает и новый список, и причины отказов — их показывает dropzone
+ * красным (решение пользователя).
+ *
+ * Двух файлов с одинаковым именем в одной загрузке быть не может: в списке
+ * они выглядели бы одной строкой, и какой из них какой — не понять ни в форме,
+ * ни потом в заказе. Это касается и того же файла, выбранного второй раз:
+ * молча его пропускать значило бы съесть выбор пользователя без объяснения.
+ *
+ * `usedBytes` — сколько уже занято файлами этого заказа (0 у нового заказа).
+ * Файл, который не влезает в остаток от `MAX_ORDER_FILES_BYTES`, отсеивается
+ * здесь же: узнать про отказ после того, как двадцать мегабайт уехали
+ * на сервер, — плохой обмен. Настоящая проверка всё равно на backend.
  */
 export function addFiles(
   current: File[],
   incoming: File[],
+  usedBytes = 0,
 ): { files: File[]; rejected: string[] } {
   const files = [...current];
   const rejected: string[] = [];
+
+  let occupied = usedBytes + current.reduce((total, file) => total + file.size, 0);
 
   for (const file of incoming) {
     const reason = fileRejectionReason(file);
@@ -171,7 +184,11 @@ export function addFiles(
       continue;
     }
 
-    if (files.some((kept) => kept.name === file.name && kept.size === file.size)) {
+    if (files.some((kept) => sameName(kept, file))) {
+      rejected.push(
+        `«${file.name}» уже в списке. Два файла с одинаковым именем в одну ` +
+          `загрузку не добавить — переименуйте один из них`,
+      );
       continue;
     }
 
@@ -180,10 +197,31 @@ export function addFiles(
       break;
     }
 
+    if (occupied + file.size > MAX_ORDER_FILES_BYTES) {
+      rejected.push(
+        `«${file.name}» не помещается: на заказ отведено ${formatFileSize(MAX_ORDER_FILES_BYTES)}`,
+      );
+      continue;
+    }
+
+    occupied += file.size;
     files.push(file);
   }
 
-  return { files, rejected };
+  // Одинаковые причины схлопываются: три файла с одним именем — это одна
+  // новость для пользователя, а не три строки подряд.
+  return { files, rejected: [...new Set(rejected)] };
+}
+
+/**
+ * Одно ли это имя с точки зрения заказа.
+ *
+ * Регистр не считается: в ключ хранилища имя уходит приведённым к нижнему
+ * (`sanitizeFileName` на backend), да и человек читает «План.pdf» и «план.pdf»
+ * как один и тот же файл.
+ */
+function sameName(left: File, right: File): boolean {
+  return left.name.toLowerCase() === right.name.toLowerCase();
 }
 
 /**

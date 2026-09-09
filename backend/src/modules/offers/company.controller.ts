@@ -2,8 +2,8 @@ import { Controller, Get, Query } from '@nestjs/common';
 
 import {
   Role,
+  type AvailableOrderItem,
   type CompanyOfferItem,
-  type OrderListItem,
   type Paginated,
 } from '@mybuild/shared';
 
@@ -30,7 +30,7 @@ export class CompanyController {
   availableOrders(
     @CurrentUser() user: AuthUser,
     @Query() query: SearchQueryDto,
-  ): Promise<Paginated<OrderListItem>> {
+  ): Promise<Paginated<AvailableOrderItem>> {
     return this.offers.listAvailableOrders(user.id, query);
   }
 

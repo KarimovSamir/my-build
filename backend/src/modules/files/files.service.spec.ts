@@ -2,7 +2,13 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { createHash } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FileOwnerType, OfferStatus, OrderStatus, Role } from '@mybuild/shared';
+import {
+  FileOwnerType,
+  MAX_ORDER_FILES_BYTES,
+  OfferStatus,
+  OrderStatus,
+  Role,
+} from '@mybuild/shared';
 
 import {
   pdfBytes,
@@ -69,6 +75,8 @@ function createPrismaStub(overrides: {
   existingHashes?: string[];
   /** Ключи объектов, на которые уже ссылаются строки в базе (проверка гонки). */
   liveKeys?: string[];
+  /** Сколько байт файлы заказа занимают уже сейчас (проверка потолка). */
+  usedBytes?: number;
   order?: StubOrder | null;
 }) {
   const stub = {
@@ -95,6 +103,11 @@ function createPrismaStub(overrides: {
           : (overrides.existingHashes ?? []).map((fileHash) => ({ fileHash })),
       ),
       findUnique: vi.fn(async () => null),
+      // Сколько места файлы заказа занимают уже сейчас — по этому числу
+      // считается потолок в 50 МБ.
+      aggregate: vi.fn(async (_args: unknown) => ({
+        _sum: { sizeBytes: overrides.usedBytes ?? 0 },
+      })),
     },
     order: {
       findUnique: vi.fn(async (args: OrderFindUniqueArgs) => {
@@ -356,6 +369,112 @@ describe('FilesService.attachFiles', () => {
     ).rejects.toThrow('база не ответила');
 
     expect(storage.remove).not.toHaveBeenCalled();
+  });
+
+  it('при откате не трогает объект, занятый чужой строкой', async () => {
+    // Тот же файл под тем же именем пришёл двумя запросами разом: первый
+    // закоммитил строку, наш упал. Ключ у них общий (в нём хеш содержимого),
+    // и удаление всей пачки оставило бы живую строку без объекта — «Скачать»
+    // отдало бы 404. Второй файл никому не достался и убирается.
+    const prisma = createPrismaStub({ liveKeys: [keyOf('первый', 'a.pdf')] });
+    prisma.orderFile.createManyAndReturn.mockRejectedValueOnce(
+      new Error('сдача уже отправлена'),
+    );
+
+    await expect(
+      createService(prisma, storage).attachFiles({
+        orderId: ORDER_ID,
+        ownerType: FileOwnerType.CLIENT,
+        submissionRound: 0,
+        files: [await upload('a.pdf', 'первый'), await upload('b.pdf', 'второй')],
+      }),
+    ).rejects.toThrow('сдача уже отправлена');
+
+    expect(storage.remove.mock.calls[0]![0]).toEqual([
+      expect.stringContaining(`${hashOf('второй').slice(0, 16)}-b.pdf`),
+    ]);
+  });
+
+  it('сбой уборки при откате не подменяет причину отказа', async () => {
+    // Уборка ходит в базу и падает по тем же причинам, что и сама вставка.
+    // Наружу должна уйти исходная ошибка, иначе разбираться будут не с той.
+    const prisma = createPrismaStub({});
+    prisma.orderFile.createManyAndReturn.mockRejectedValueOnce(
+      new Error('база недоступна'),
+    );
+    prisma.orderFile.findMany.mockImplementation(async (args: {
+      select: Record<string, boolean>;
+    }) => {
+      if (args.select.storageKey) throw new Error('и уборка не прошла');
+      return [];
+    });
+
+    await expect(
+      createService(prisma, storage).attachFiles({
+        orderId: ORDER_ID,
+        ownerType: FileOwnerType.CLIENT,
+        submissionRound: 0,
+        files: [await upload('a.pdf', 'первый')],
+      }),
+    ).rejects.toThrow('база недоступна');
+  });
+
+  it('не пускает файлы, которые не влезают в потолок заказа', async () => {
+    // Потолок общий на весь заказ — и на задание клиента, и на сдачи
+    // исполнителя: место в хранилище одно на всех.
+    const prisma = createPrismaStub({ usedBytes: MAX_ORDER_FILES_BYTES - 10 });
+
+    await expect(
+      createService(prisma, storage).attachFiles({
+        orderId: ORDER_ID,
+        ownerType: FileOwnerType.COMPANY,
+        submissionRound: 1,
+        files: [await upload('смета.pdf', 'содержимое длиннее десяти байт')],
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    // Отказ до похода в бакет: заливать то, что всё равно не примут, незачем.
+    expect(storage.upload).not.toHaveBeenCalled();
+    expect(prisma.orderFile.createManyAndReturn).not.toHaveBeenCalled();
+  });
+
+  it('впритык к потолку файлы принимает', async () => {
+    const file = await upload('смета.pdf', 'ровно столько, сколько осталось');
+    const prisma = createPrismaStub({
+      usedBytes: MAX_ORDER_FILES_BYTES - file.sizeBytes,
+    });
+
+    const files = await createService(prisma, storage).attachFiles({
+      orderId: ORDER_ID,
+      ownerType: FileOwnerType.COMPANY,
+      submissionRound: 1,
+      files: [file],
+    });
+
+    expect(files).toHaveLength(1);
+  });
+
+  it('потолок перепроверяется под транзакцией, а не только снимком', async () => {
+    // Пока файлы ехали в бакет, место мог занять параллельный запрос.
+    // Первый вызов (снимок до загрузки) отвечает «свободно», второй
+    // (уже внутри транзакции) — «занято».
+    const prisma = createPrismaStub({});
+    prisma.orderFile.aggregate
+      .mockResolvedValueOnce({ _sum: { sizeBytes: 0 } })
+      .mockResolvedValueOnce({ _sum: { sizeBytes: MAX_ORDER_FILES_BYTES } });
+
+    await expect(
+      createService(prisma, storage).attachFiles({
+        orderId: ORDER_ID,
+        ownerType: FileOwnerType.COMPANY,
+        submissionRound: 1,
+        files: [await upload('смета.pdf', 'содержимое')],
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    // Объект успел уехать в бакет — и его убирают вместе с откатом.
+    expect(storage.upload).toHaveBeenCalledTimes(1);
+    expect(storage.remove).toHaveBeenCalledTimes(1);
   });
 
   it('не принимает пустой список файлов', async () => {
