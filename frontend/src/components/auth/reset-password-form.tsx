@@ -7,6 +7,7 @@ import { Field, FormError } from "@/components/form-parts";
 import { Button } from "@/components/ui/button";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { resolveAfterAuthHref } from "@/lib/auth-redirect";
+import { MIN_PASSWORD_LENGTH, validateNewPassword } from "@/lib/password-form";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 /**
@@ -14,9 +15,10 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
  *
  * Форма работает поверх временной сессии, которую создала ссылка из письма:
  * без неё Supabase не примет смену пароля и вернёт ошибку.
+ *
+ * Требования к паролю — общие с регистрацией и настройками
+ * (`lib/password-form.ts`).
  */
-
-const MIN_PASSWORD_LENGTH = 8;
 
 export function ResetPasswordForm() {
   const router = useRouter();
@@ -30,13 +32,10 @@ export function ResetPasswordForm() {
     const form = new FormData(event.currentTarget);
     const password = String(form.get("password"));
 
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      setError(`Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов`);
-      return;
-    }
+    const issue = validateNewPassword(password, String(form.get("passwordConfirm")));
 
-    if (password !== String(form.get("passwordConfirm"))) {
-      setError("Пароли не совпадают");
+    if (issue) {
+      setError(issue.message);
       return;
     }
 

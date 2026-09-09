@@ -14,7 +14,7 @@ import {
 } from "@/lib/types";
 
 import { DatePicker } from "@/components/date-picker";
-import { Field, FieldMessage, FormError } from "@/components/form-parts";
+import { Field, FieldMessage, FormErrors } from "@/components/form-parts";
 import { FileDropzone } from "@/components/orders/file-dropzone";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -243,19 +243,7 @@ export function NewOrderForm() {
         </Card>
       </div>
 
-      {formError ? (
-        <FormError>
-          {formError.length === 1 ? (
-            formError[0]
-          ) : (
-            <span className="flex flex-col gap-1">
-              {formError.map((message) => (
-                <span key={message}>{message}</span>
-              ))}
-            </span>
-          )}
-        </FormError>
-      ) : null}
+      {formError ? <FormErrors messages={formError} /> : null}
 
       <div className="flex flex-wrap justify-end gap-3">
         <Button variant="outline" asChild>

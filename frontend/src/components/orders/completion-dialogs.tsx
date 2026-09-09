@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { ORDER_LIMITS, type OrderDetail } from "@/lib/types";
 
-import { FieldMessage, FormError } from "@/components/form-parts";
+import { FieldMessage, FormErrors } from "@/components/form-parts";
 import { useOrderSync } from "@/components/orders/order-live";
 import { Button } from "@/components/ui/button";
 import {
@@ -215,19 +215,7 @@ function CompletionDecision({
             <FieldMessage id="completion-comment-message" error={error} hint={hint} />
           </div>
 
-          {formError ? (
-            <FormError>
-              {formError.length === 1 ? (
-                formError[0]
-              ) : (
-                <span className="flex flex-col gap-1">
-                  {formError.map((message) => (
-                    <span key={message}>{message}</span>
-                  ))}
-                </span>
-              )}
-            </FormError>
-          ) : null}
+          {formError ? <FormErrors messages={formError} /> : null}
 
           <DialogFooter>
             <DialogClose asChild>

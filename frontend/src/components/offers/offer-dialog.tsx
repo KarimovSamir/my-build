@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { formatOrderNumber, isPendingOffer, OFFER_LIMITS, type OfferDto } from "@/lib/types";
 
 import { DatePicker } from "@/components/date-picker";
-import { Field, FieldMessage, FormError } from "@/components/form-parts";
+import { Field, FieldMessage, FormErrors } from "@/components/form-parts";
 import { useOrderSync } from "@/components/orders/order-live";
 import { Button } from "@/components/ui/button";
 import {
@@ -205,19 +205,7 @@ export function OfferDialog({
             />
           </div>
 
-          {formError ? (
-            <FormError>
-              {formError.length === 1 ? (
-                formError[0]
-              ) : (
-                <span className="flex flex-col gap-1">
-                  {formError.map((message) => (
-                    <span key={message}>{message}</span>
-                  ))}
-                </span>
-              )}
-            </FormError>
-          ) : null}
+          {formError ? <FormErrors messages={formError} /> : null}
 
           <p className="text-muted-foreground text-xs">
             Предложение можно изменить или отозвать, пока клиент не выбрал

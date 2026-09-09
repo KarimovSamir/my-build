@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { getHomeHref } from "@/lib/navigation";
+import { MIN_PASSWORD_LENGTH, validateNewPassword } from "@/lib/password-form";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   isValidPhone,
@@ -34,9 +35,10 @@ import {
  * Пределы длины берутся из `shared/` — теми же числами триггер отвечает
  * на слишком длинное значение исключением. Здесь они стоят, чтобы человек
  * упёрся в границу поля, а не в ошибку регистрации.
+ *
+ * Требования к паролю — общие со сбросом и настройками
+ * (`lib/password-form.ts`).
  */
-
-const MIN_PASSWORD_LENGTH = 8;
 
 export function RegisterForm() {
   const router = useRouter();
@@ -60,13 +62,10 @@ export function RegisterForm() {
       return;
     }
 
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      setError(`Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов`);
-      return;
-    }
+    const issue = validateNewPassword(password, String(form.get("passwordConfirm")));
 
-    if (password !== String(form.get("passwordConfirm"))) {
-      setError("Пароли не совпадают");
+    if (issue) {
+      setError(issue.message);
       return;
     }
 

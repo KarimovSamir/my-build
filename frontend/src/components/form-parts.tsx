@@ -92,6 +92,28 @@ export function FormError({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Ответ сервера об ошибке: одно сообщение строкой, несколько — списком.
+ *
+ * Валидация DTO приходит несколькими строками сразу (`apiErrorMessages`),
+ * и склеивать их в одну фразу — значит превращать «поле A и поле B» в кашу.
+ */
+export function FormErrors({ messages }: { messages: string[] }) {
+  return (
+    <FormError>
+      {messages.length === 1 ? (
+        messages[0]
+      ) : (
+        <span className="flex flex-col gap-1">
+          {messages.map((message) => (
+            <span key={message}>{message}</span>
+          ))}
+        </span>
+      )}
+    </FormError>
+  );
+}
+
 /** Успешное завершение: письмо отправлено, пароль изменён. */
 export function FormSuccess({ children }: { children: ReactNode }) {
   return (

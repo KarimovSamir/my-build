@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { ORDER_LIMITS, type OrderDetail } from "@/lib/types";
 
-import { Field, FieldMessage, FormError } from "@/components/form-parts";
+import { Field, FieldMessage, FormErrors } from "@/components/form-parts";
 import { FileDropzone } from "@/components/orders/file-dropzone";
 import { useOrderSync } from "@/components/orders/order-live";
 import { Button } from "@/components/ui/button";
@@ -397,22 +397,5 @@ export function VerifyAreaDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** Сообщения об ошибке запроса: одно строкой, несколько — списком. */
-function FormErrors({ messages }: { messages: string[] }) {
-  return (
-    <FormError>
-      {messages.length === 1 ? (
-        messages[0]
-      ) : (
-        <span className="flex flex-col gap-1">
-          {messages.map((message) => (
-            <span key={message}>{message}</span>
-          ))}
-        </span>
-      )}
-    </FormError>
   );
 }
