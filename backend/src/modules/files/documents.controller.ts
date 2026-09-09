@@ -4,38 +4,54 @@ import {
   NotFoundException,
   Param,
   ParseUUIDPipe,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 
-import type { DownloadLink } from '@mybuild/shared';
+import type { DocumentListItem, DownloadLink, Paginated } from '@mybuild/shared';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { Throttle } from '../../common/decorators/throttle.decorator.js';
 import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
 import type { AuthUser } from '../auth/auth-user.js';
+import { DocumentsService } from './documents.service.js';
+import { ListDocumentsQueryDto } from './dto/list-documents.dto.js';
 import { FilesService } from './files.service.js';
 
 /**
- * Документы пользователя (ТЗ §5).
+ * Документы пользователя (ТЗ §5): единый список файлов по всем своим заказам
+ * и ссылка на скачивание.
  *
- * Пока здесь только скачивание: оно нужно уже на странице заказа (Фаза 3),
- * а единый список всех файлов по всем заказам (`GET /documents`) появится
- * в Фазе 6 и будет жить на этом же контроллере.
+ * Права здесь не в guard'ах, а в самих запросах, и причина у обоих маршрутов
+ * одна: `:id` — это файл, а не заказ, и `OwnershipGuard` искать по нему нечего.
+ * Список ограничивает `buildDocumentsWhere`, отдельный файл — `assertFileAccess`.
+ * Право даёт связь с заказом, а не роль в токене; роль всё же передаётся —
+ * по ней различается «любая компания» в правиле о файлах задания (ТЗ §4.1).
  *
- * Права проверяет `FilesService.assertFileAccess`: их даёт связь с заказом,
- * а не роль в токене. Роль всё же передаётся — по ней различается «любая
- * компания» в правиле о файлах задания (ТЗ §4.1).
- *
- * `ThrottleGuard` стоит на контроллере целиком, хотя маршрут только читает:
- * каждое скачивание — обращение к Supabase Storage за подписью, то есть
- * расход внешней квоты, а не своей базы. Лимит на будущий `GET /documents`
- * (Фаза 6) при этом уже стоит: он ляжет на этот же контроллер.
+ * `ThrottleGuard` стоит на контроллере целиком, хотя оба маршрута только
+ * читают: каждое скачивание — обращение к Supabase Storage за подписью,
+ * то есть расход внешней квоты, а не своей базы.
  */
 @UseGuards(ThrottleGuard)
 @Throttle({ limit: 60, ttl: 60_000 })
 @Controller('documents')
 export class DocumentsController {
-  constructor(private readonly files: FilesService) {}
+  constructor(
+    private readonly files: FilesService,
+    private readonly documents: DocumentsService,
+  ) {}
+
+  /**
+   * Все свои файлы одним списком: фильтры по владельцу и заказу, пагинация.
+   * Смысл раздела — найти файл, не заходя в заказы (ТЗ §7).
+   */
+  @Get()
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query() query: ListDocumentsQueryDto,
+  ): Promise<Paginated<DocumentListItem>> {
+    return this.documents.list(user.id, query);
+  }
 
   /**
    * Signed URL на скачивание. Подпись живёт пять минут и выдаётся только

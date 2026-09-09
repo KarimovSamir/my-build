@@ -36,7 +36,13 @@ export interface UserProfile {
   updatedAt: IsoDateString;
 }
 
-/** Карточка компании в разделе «Подрядчики». */
+/**
+ * Компания в разделе «Подрядчики» (ТЗ §5).
+ *
+ * Один тип и на список, и на карточку: состав полей у них совпадает — название,
+ * город, контакты и число завершённых заказов (ТЗ §7). Разводить их на «строку»
+ * и «карточку» значило бы завести два описания одного и того же.
+ */
 export interface ContractorCard {
   id: string;
   companyName: string;
@@ -44,6 +50,7 @@ export interface ContractorCard {
   country: string | null;
   email: string;
   phone: string;
+  /** Сколько заказов компания довела до статуса «Завершён». */
   completedOrdersCount: number;
 }
 
@@ -68,6 +75,20 @@ export interface OrderFileDto {
 export interface DownloadLink {
   url: string;
   originalName: string;
+}
+
+/**
+ * Строка раздела «Документы» (`GET /documents`, ТЗ §5).
+ *
+ * Тот же файл, что и в заказе, плюс номер и название заказа: смысл раздела —
+ * найти свой файл, не заходя в заказы (ТЗ §7), а `orderId` для этого ничего
+ * не говорит. Кто загрузил, отвечает `ownerType` — клиент или исполнитель;
+ * имени здесь нет намеренно, у заказа обе стороны и так известны из самого
+ * заказа.
+ */
+export interface DocumentListItem extends OrderFileDto {
+  orderNumber: number;
+  orderTitle: string;
 }
 
 /**

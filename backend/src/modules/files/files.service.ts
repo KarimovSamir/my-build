@@ -32,6 +32,7 @@ import {
   type UploadedFileInput,
 } from './file-validation.js';
 import { prepareFile, readFileBuffer } from './uploaded-file.js';
+import { toOrderFileDto } from './file-view.js';
 import { StorageService } from './storage.service.js';
 
 /**
@@ -460,18 +461,4 @@ const ASCII_PRINTABLE = /^[\x20-\x7E]+$/;
  */
 function toDownloadName(originalName: string): string {
   return ASCII_PRINTABLE.test(originalName) ? originalName : sanitizeFileName(originalName);
-}
-
-/** Строка базы → контракт API. `storageKey` наружу не уходит. */
-function toOrderFileDto(file: OrderFile): OrderFileDto {
-  return {
-    id: file.id,
-    orderId: file.orderId,
-    ownerType: file.ownerType,
-    submissionRound: file.submissionRound,
-    originalName: file.originalName,
-    mimeType: file.mimeType,
-    sizeBytes: file.sizeBytes,
-    createdAt: file.createdAt.toISOString(),
-  };
 }
