@@ -234,8 +234,13 @@
 
 ### 7.4 — Деплой и README
 
-- Frontend → Cloudflare Workers через `@opennextjs/cloudflare`; backend → Railway / Render / Fly; секреты в env площадок; CORS на домен фронта.
-- README: архитектура, скриншоты, «планируется» из §11, известные ограничения.
-- **Здесь же закрываются открытые вопросы `CLAUDE.md` §8.1 (усыпление free-тарифа) и §8.2 (HIBP и русские шаблоны писем)** — до того, как ссылка уйдёт в портфолио. Напомнить пользователю обязательно.
+Площадки выбраны пользователем и описаны в `CLAUDE.md` §7 («Куда это едет»): **фронт — Vercel Hobby, backend — Render Free, база и хранилище — текущий проект Supabase.**
+
+- Backend на Render: Build `npm ci && npm run build -w backend`, Start `cd backend && node dist/main.js`, Health Check Path `/health`, переменные из `backend/env.example` плюс `NODE_ENV=production` и `CORS_ORIGINS` с доменом фронта.
+- Фронт на Vercel: root — корень репозитория, переменные из `frontend/env.example` с прод-доменом backend.
+- Supabase: прод-домен фронта в **Site URL** и **Redirect URLs** (Authentication → URL Configuration) — иначе ссылки из писем ведут на localhost.
+- После деплоя — прогон `npm run security:check -w backend` против прод-окружения.
+- Пингер на `GET /health` каждые 10 минут (cron-job.org) — этим закрывается **§8.1**. §8.2 пользователь закрыл раньше, запись уже в §7.
+- README: архитектура, скриншоты, «планируется» из §11, известные ограничения (английские письма Supabase, отсутствие HIBP, возможная задержка первого ответа).
 
 **DoD:** проект задеплоен и открывается по ссылке, тесты зелёные, README готов, секретов в репозитории нет.

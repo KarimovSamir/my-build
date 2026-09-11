@@ -47,8 +47,15 @@ desktop.ini
 # Сгенерированный клиент Prisma — воссоздаётся командой npm run db:generate
 backend/src/generated/
 
-# Локальные настройки Claude Code
-.claude/settings.local.json
+# Рабочие файлы ИИ-агента и требования — в репозиторий не идут.
+# Это внутренняя кухня разработки: правила работы, план подфаз, журнал и ТЗ.
+.claude/
+.mcp.json
+CLAUDE.md
+AGENTS.md
+/PLAN.md
+/progress.md
+/MyBuild_NestJS_TZ.md
 
 # Кэш инструментов
 .eslintcache
