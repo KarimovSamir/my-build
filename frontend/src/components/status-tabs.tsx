@@ -19,7 +19,10 @@ export interface StatusTab {
 
 export function StatusTabs({ label, tabs }: { label: string; tabs: StatusTab[] }) {
   return (
-    <nav aria-label={label} className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
+    <nav
+      aria-label={label}
+      className="scrollbar-slim -mx-1 flex gap-1 overflow-x-auto px-1 pb-1"
+    >
       {tabs.map((tab) => (
         <Link
           key={tab.href}

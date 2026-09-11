@@ -25,7 +25,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
-    "storage:setup": "tsx scripts/ensure-storage-bucket.ts"
+    "storage:setup": "tsx scripts/ensure-storage-bucket.ts",
+    "security:check": "tsx scripts/check-security.ts"
   },
   "dependencies": {
     "@mybuild/shared": "^0.1.0",

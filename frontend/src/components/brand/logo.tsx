@@ -7,9 +7,17 @@ import { cn } from "@/lib/utils";
  * Логотип MyBuild: картинка плюс название.
  *
  * Размер задаётся не числом, а одним из трёх шагов: картинка и текст обязаны
- * меняться вместе, а `width`/`height` у `next/image` — совпадать с высотой на
+ * меняться вместе, а высота в пропсах `next/image` — совпадать с высотой на
  * экране. Иначе браузер предзагружает один вариант картинки, а рисует другой.
+ *
+ * Ширина считается из пропорций самого файла, а не берётся равной высоте:
+ * логотип не квадратный, и от квадрата в пропсах `next/image` в dev-режиме
+ * писал в консоль предупреждение «width or height modified, but not the other»
+ * — отрисованная ширина не совпадала с объявленной.
  */
+
+/** Пропорции `public/mybuild-logo.png` — 1125 × 773. */
+const LOGO_RATIO = 1125 / 773;
 
 const sizes = {
   sm: { px: 24, image: "h-6", text: "text-base" },
@@ -33,7 +41,7 @@ export function Logo({ href = "/", className, size = "md" }: LogoProps) {
       <Image
         src="/mybuild-logo.png"
         alt=""
-        width={px}
+        width={Math.round(px * LOGO_RATIO)}
         height={px}
         className={cn("w-auto object-contain", image)}
         priority
