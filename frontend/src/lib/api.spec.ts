@@ -167,6 +167,51 @@ describe("ошибки", () => {
     expect(error.validationMessages).toEqual(["Заказ уже в работе"]);
   });
 
+  it("обрывает запрос по истечении ожидания и говорит об этом текстом", async () => {
+    // Повисший запрос держал бы серверный рендер до таймаута площадки:
+    // вместо границы ошибок пользователь видел бы бесконечную загрузку.
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        }),
+    );
+
+    const error = (await api.get("/orders", { timeoutMs: 10 }).catch(
+      (reason: unknown) => reason,
+    )) as InstanceType<typeof ApiRequestError>;
+
+    expect(error).toBeInstanceOf(ApiRequestError);
+    expect(error.statusCode).toBe(504);
+    expect(error.message).toContain("не ответил вовремя");
+  });
+
+  it("ожидание можно снять вовсе", async () => {
+    replyWith({});
+
+    await api.get("/orders", { timeoutMs: 0 });
+
+    expect(lastCall().init.signal).toBeUndefined();
+  });
+
+  it("отмена вызывающего кода таймаутом не называется", async () => {
+    const controller = new AbortController();
+
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        }),
+    );
+
+    const pending = api.get("/orders", { signal: controller.signal }).catch(
+      (reason: unknown) => reason,
+    );
+    controller.abort();
+
+    expect(await pending).not.toBeInstanceOf(ApiRequestError);
+  });
+
   it("не-JSON тело не роняет разбор", async () => {
     fetchMock.mockResolvedValue(new Response("<html>502</html>", { status: 502 }));
 

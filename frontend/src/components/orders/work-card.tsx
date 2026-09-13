@@ -8,6 +8,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { OrderCompanyActions } from "@/lib/order-actions";
 import type { SubmissionsView } from "@/lib/submissions";
+import { countCompanyFiles } from "@/lib/work-form";
 import { workHint } from "@/lib/work-view";
 
 /**
@@ -58,7 +59,10 @@ export function WorkCard({
               <AddWorkFilesDialog
                 orderId={order.id}
                 round={nextRound}
-                filesInRound={submissions.open?.files.length ?? 0}
+                filesBefore={countCompanyFiles(order)}
+                takenNames={(submissions.open?.files ?? []).map(
+                  (file) => file.originalName,
+                )}
                 // Исполнитель — сторона сделки, поэтому число ему приходит
                 // всегда; `?? 0` только чтобы не тащить сюда `null`.
                 usedBytes={order.filesSizeBytes ?? 0}

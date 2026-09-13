@@ -8,7 +8,6 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 
 export interface HealthResponse {
   status: 'ok' | 'degraded';
-  uptimeSeconds: number;
   database: 'up' | 'down';
 }
 
@@ -21,7 +20,9 @@ export interface HealthResponse {
  * Единственный публичный маршрут API: мониторинг ходит сюда без токена.
  * Поэтому наружу уходит только «up» или «down»: текст ошибки Prisma/pg
  * содержит хост, порт и имя базы, и показывать его кому угодно нельзя —
- * причина пишется в лог, где её видит только владелец сервиса.
+ * причина пишется в лог, где её видит только владелец сервиса. По той же
+ * причине в ответе нет ничего о самом процессе — время работы рассказывало бы
+ * первому встречному, когда сервис перезапускали.
  *
  * Ограничение частоты щедрое: маршрут делает настоящий запрос к базе,
  * но по нему же ходит внешний пингер, будящий бесплатный тариф Supabase.
@@ -44,17 +45,9 @@ export class HealthController {
       this.logger.error(`База недоступна: ${database.error ?? 'причина неизвестна'}`);
       response.status(HttpStatus.SERVICE_UNAVAILABLE);
 
-      return {
-        status: 'degraded',
-        uptimeSeconds: Math.round(process.uptime()),
-        database: 'down',
-      };
+      return { status: 'degraded', database: 'down' };
     }
 
-    return {
-      status: 'ok',
-      uptimeSeconds: Math.round(process.uptime()),
-      database: 'up',
-    };
+    return { status: 'ok', database: 'up' };
   }
 }

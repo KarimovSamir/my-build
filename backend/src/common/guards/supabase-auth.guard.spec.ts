@@ -17,7 +17,7 @@ class TestRoutes {
   @Public()
   open(): void {}
 
-  protected_(): void {}
+  guarded(): void {}
 }
 
 type RouteName = keyof TestRoutes;
@@ -70,7 +70,7 @@ describe('SupabaseAuthGuard', () => {
   });
 
   it('отказывает без заголовка Authorization', async () => {
-    const { context } = contextFor('protected_', { headers: {} });
+    const { context } = contextFor('guarded', { headers: {} });
 
     await expect(guardWith(failIfCalled).canActivate(context)).rejects.toThrow(
       UnauthorizedException,
@@ -80,7 +80,7 @@ describe('SupabaseAuthGuard', () => {
   it('кладёт пользователя в запрос после успешной проверки', async () => {
     const user = { id: 'u1', email: 'a@b.test', emailVerified: true, role: Role.CLIENT };
     const verify = vi.fn().mockResolvedValue(user);
-    const { context, request } = contextFor('protected_', {
+    const { context, request } = contextFor('guarded', {
       headers: { authorization: 'Bearer token' },
     });
 
@@ -90,7 +90,7 @@ describe('SupabaseAuthGuard', () => {
   });
 
   it('превращает ошибку проверки токена в 401', async () => {
-    const { context } = contextFor('protected_', {
+    const { context } = contextFor('guarded', {
       headers: { authorization: 'Bearer bad' },
     });
     const guard = guardWith(() => Promise.reject(new InvalidTokenError('Токен истёк')));
@@ -99,7 +99,7 @@ describe('SupabaseAuthGuard', () => {
   });
 
   it('не пускает с неподтверждённым email (ТЗ §6)', async () => {
-    const { context } = contextFor('protected_', {
+    const { context } = contextFor('guarded', {
       headers: { authorization: 'Bearer token' },
     });
     const guard = guardWith(() =>
@@ -121,7 +121,7 @@ describe('SupabaseAuthGuard', () => {
     // и попытка прочитать заголовки роняла бы каждое сообщение сокета.
     const context = {
       getType: () => 'ws',
-      getHandler: () => TestRoutes.prototype.protected_,
+      getHandler: () => TestRoutes.prototype.guarded,
       getClass: () => TestRoutes,
       switchToHttp: () => {
         throw new Error('HTTP-контекста у сокета нет');
@@ -132,7 +132,7 @@ describe('SupabaseAuthGuard', () => {
   });
 
   it('не прячет посторонние ошибки под 401', async () => {
-    const { context } = contextFor('protected_', {
+    const { context } = contextFor('guarded', {
       headers: { authorization: 'Bearer token' },
     });
     const guard = guardWith(() => Promise.reject(new Error('JWKS недоступен')));

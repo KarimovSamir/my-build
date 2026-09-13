@@ -14,6 +14,19 @@ import type { ApiError } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
+/**
+ * Сколько ждать ответа, прежде чем оборвать запрос.
+ *
+ * Без предела повисший запрос держит серверный рендер до таймаута площадки,
+ * и страница выглядит не ошибкой, а бесконечной загрузкой: ни границы ошибок,
+ * ни понятного текста. Предел взят с запасом — бесплатный Render просыпается
+ * не мгновенно, — но конечный: честная ошибка лучше зависшей вкладки.
+ *
+ * У загрузки файлов свой: 50 МБ на медленном канале идут дольше любого ответа.
+ */
+const REQUEST_TIMEOUT_MS = 30_000;
+const UPLOAD_TIMEOUT_MS = 120_000;
+
 /** Ошибка API в виде исключения — с кодом и разобранным телом ответа. */
 export class ApiRequestError extends Error {
   constructor(
@@ -40,6 +53,8 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
   query?: Record<string, string | number | boolean | undefined | null>;
   /** Access-токен Supabase. Без него запрос уйдёт без заголовка Authorization. */
   token?: string | null;
+  /** Своё ожидание ответа в миллисекундах. `0` — ждать сколько угодно. */
+  timeoutMs?: number;
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -69,14 +84,46 @@ async function parseError(response: Response): Promise<ApiRequestError> {
   return new ApiRequestError(response.status, message, body);
 }
 
+/**
+ * Ожидание ответа поверх сигнала вызывающего кода, если тот его передал.
+ * `AbortSignal.any` сохраняет обе причины отмены — своя не отменяет чужую.
+ */
+function withTimeout(
+  signal: AbortSignal | null | undefined,
+  timeoutMs: number,
+): AbortSignal | null | undefined {
+  if (timeoutMs <= 0) return signal;
+
+  const limit = AbortSignal.timeout(timeoutMs);
+
+  return signal ? AbortSignal.any([signal, limit]) : limit;
+}
+
+/**
+ * Истёкшее ожидание — такой же ответ API, как и код состояния: пользователю
+ * нужен текст, а не `TimeoutError` из недр fetch. 504 выбран, чтобы ошибка
+ * шла обычным путём `api-errors.ts` и не путалась с 401.
+ *
+ * Причина смотрится и в сигнале: не всякая реализация fetch отклоняет обещание
+ * именно этой ошибкой, а `AbortSignal.any` причину отмены сохраняет.
+ */
+function isTimeout(error: unknown, signal: AbortSignal | null | undefined): boolean {
+  if (error instanceof Error && error.name === "TimeoutError") return true;
+
+  const reason: unknown = signal?.aborted ? signal.reason : null;
+
+  return reason instanceof Error && reason.name === "TimeoutError";
+}
+
 export async function apiFetch<T>(
   path: string,
-  { body, query, headers, token, ...init }: RequestOptions = {},
+  { body, query, headers, token, timeoutMs, signal, ...init }: RequestOptions = {},
 ): Promise<T> {
   const isFormData = body instanceof FormData;
 
-  const response = await fetch(buildUrl(path, query), {
+  const request = {
     ...init,
+    signal: withTimeout(signal, timeoutMs ?? (isFormData ? UPLOAD_TIMEOUT_MS : REQUEST_TIMEOUT_MS)),
     headers: {
       ...(isFormData ? {} : body !== undefined
         ? { "Content-Type": "application/json" }
@@ -85,7 +132,19 @@ export async function apiFetch<T>(
       ...headers,
     },
     body: isFormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  };
+
+  let response: Response;
+
+  try {
+    response = await fetch(buildUrl(path, query), request);
+  } catch (error) {
+    if (isTimeout(error, request.signal)) {
+      throw new ApiRequestError(504, "Сервер не ответил вовремя. Попробуйте ещё раз", null);
+    }
+
+    throw error;
+  }
 
   if (!response.ok) {
     throw await parseError(response);

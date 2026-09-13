@@ -294,6 +294,24 @@ describe("addFiles", () => {
     expect(rejected).toHaveLength(1);
   });
 
+  it("не берёт имя, уже приложенное к этой сдаче", () => {
+    // Правило «одно имя — одна строка» действует не только внутри одной
+    // отправки: двумя заходами в ту же сдачу иначе кладутся два разных файла
+    // с одинаковым именем, и различить их в заказе нельзя.
+    const { files, rejected } = addFiles([], [file("акт.pdf", 100)], 0, ["Акт.pdf"]);
+
+    expect(files).toEqual([]);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]).toContain("уже приложен");
+  });
+
+  it("новое имя рядом с уже приложенными проходит", () => {
+    const { files, rejected } = addFiles([], [file("смета.pdf", 100)], 0, ["акт.pdf"]);
+
+    expect(files.map((item) => item.name)).toEqual(["смета.pdf"]);
+    expect(rejected).toEqual([]);
+  });
+
   it("без указания занятого места считает заказ пустым", () => {
     // Форма создания заказа: заказа ещё нет, занимать нечему.
     const { files, rejected } = addFiles([], [file("план.pdf", 1024)]);

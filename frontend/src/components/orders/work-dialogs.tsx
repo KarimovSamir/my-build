@@ -25,8 +25,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiErrorMessage, apiErrorMessages } from "@/lib/api-errors";
 import { browserApi } from "@/lib/api.client";
 import { validateSquareMeters } from "@/lib/order-form";
+import { resolveSubmissions } from "@/lib/submissions";
 import {
-  countRoundFiles,
+  countCompanyFiles,
   describeUpload,
   emptyWorkFilesForm,
   toVerifiedAreaBody,
@@ -52,17 +53,20 @@ import {
 export function AddWorkFilesDialog({
   orderId,
   round,
-  filesInRound,
+  filesBefore,
+  takenNames,
   usedBytes,
 }: {
   orderId: string;
   /** Номер сдачи, в которую уйдут файлы: он виден компании до отправки. */
   round: number;
   /**
-   * Сколько файлов в этой сдаче уже есть. Нужен, чтобы посчитать по ответу
+   * Сколько файлов компании в заказе сейчас. Нужен, чтобы посчитать по ответу
    * API, что действительно добавилось: дубликаты отсеиваются молча.
    */
-  filesInRound: number;
+  filesBefore: number;
+  /** Имена файлов, уже приложенных к этой сдаче: одноимённых в ней не будет. */
+  takenNames: readonly string[];
   /** Сколько байт занимают все файлы заказа — на них и стоит потолок. */
   usedBytes: number;
 }) {
@@ -106,7 +110,12 @@ export function AddWorkFilesDialog({
 
       // Считаем по ответу, а не по числу выбранных файлов: те, что уже есть
       // в этой сдаче, backend отбрасывает и уведомление клиенту не создаёт.
-      const outcome = describeUpload(countRoundFiles(detail, round) - filesInRound, round);
+      // Номер сдачи тоже берётся из ответа: решает его сервер, и за время
+      // запроса он мог оказаться следующим.
+      const outcome = describeUpload(
+        countCompanyFiles(detail) - filesBefore,
+        resolveSubmissions(detail).open?.round ?? round,
+      );
 
       const notify = outcome.changed ? toast.success : toast.info;
       notify(outcome.title, { description: outcome.description });
@@ -159,6 +168,7 @@ export function AddWorkFilesDialog({
               }}
               disabled={pending}
               usedBytes={usedBytes}
+              takenNames={takenNames}
             />
             <FieldMessage
               error={errors.files}

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { FileOwnerType, ORDER_LIMITS, type OrderFileDto } from "@/lib/types";
 
 import {
-  countRoundFiles,
+  countCompanyFiles,
   describeUpload,
   emptyWorkFilesForm,
   toVerifiedAreaBody,
@@ -78,8 +78,8 @@ describe("toWorkFilesFormData", () => {
   });
 });
 
-describe("countRoundFiles", () => {
-  it("считает только файлы компании и только своего раунда", () => {
+describe("countCompanyFiles", () => {
+  it("считает файлы компании по всем сдачам и не считает файлы клиента", () => {
     const order = {
       files: [
         file(FileOwnerType.CLIENT, 0),
@@ -89,9 +89,13 @@ describe("countRoundFiles", () => {
       ],
     };
 
-    expect(countRoundFiles(order, 1)).toBe(2);
-    expect(countRoundFiles(order, 2)).toBe(1);
-    expect(countRoundFiles(order, 3)).toBe(0);
+    // Именно по всем: номер сдачи известен до запроса, а сервер за это время
+    // мог открыть следующую — счёт по старому номеру дал бы «ничего не добавилось».
+    expect(countCompanyFiles(order)).toBe(3);
+  });
+
+  it("у заказа без файлов компании считает ноль", () => {
+    expect(countCompanyFiles({ files: [file(FileOwnerType.CLIENT, 0)] })).toBe(0);
   });
 });
 

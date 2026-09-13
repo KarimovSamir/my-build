@@ -64,14 +64,17 @@ export function toWorkFilesFormData(values: WorkFilesFormValues): FormData {
   return body;
 }
 
-/** Сколько файлов компании лежит в сдаче с этим номером. */
-export function countRoundFiles(
-  order: Pick<OrderDetail, "files">,
-  round: number,
-): number {
-  return order.files.filter(
-    (file) => file.ownerType === FileOwnerType.COMPANY && file.submissionRound === round,
-  ).length;
+/**
+ * Сколько файлов компании лежит в заказе — по всем сдачам сразу.
+ *
+ * Считать по номеру сдачи нельзя: номер известен до запроса, а сервер решает
+ * под блокировкой заказа и может открыть следующую сдачу (клиент успел вернуть
+ * работу на доработку). Разница по старому номеру дала бы тогда ноль, то есть
+ * «Новых файлов нет» после удачной загрузки. Файлы из заказа не пропадают,
+ * поэтому общий счёт растёт ровно на то, что добавилось.
+ */
+export function countCompanyFiles(order: Pick<OrderDetail, "files">): number {
+  return order.files.filter((file) => file.ownerType === FileOwnerType.COMPANY).length;
 }
 
 /** Заголовок и пояснение тоста после загрузки файлов. */

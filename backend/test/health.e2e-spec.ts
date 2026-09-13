@@ -64,15 +64,15 @@ describe('Health (e2e)', () => {
       status: 'degraded',
       database: 'down',
     });
-    expect(typeof response.body.uptimeSeconds).toBe('number');
   });
 
   it('не раскрывает наружу подробности ошибки базы', async () => {
     const response = await request(app.getHttpServer()).get('/health');
 
     // Текст ошибки Prisma/pg содержит хост, порт и имя базы: маршрут публичный,
-    // и показывать это кому угодно нельзя (находка 2-С1).
-    expect(Object.keys(response.body)).toEqual(['status', 'uptimeSeconds', 'database']);
+    // и показывать это кому угодно нельзя (находка 2-С1). Сведений о процессе
+    // в ответе тоже нет — маршрут отвечает только про базу.
+    expect(Object.keys(response.body)).toEqual(['status', 'database']);
     expect(JSON.stringify(response.body)).not.toContain('127.0.0.1');
   });
 

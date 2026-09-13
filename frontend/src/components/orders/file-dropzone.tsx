@@ -31,6 +31,7 @@ export function FileDropzone({
   onChange,
   disabled,
   usedBytes = 0,
+  takenNames,
 }: {
   /** Идентификатор области выбора: на неё указывает подпись поля. */
   id: string;
@@ -42,6 +43,11 @@ export function FileDropzone({
    * значение по умолчанию: форма создания ничем не занята по определению.
    */
   usedBytes?: number;
+  /**
+   * Имена, уже приложенные туда же, куда уйдёт загрузка. У нового заказа их
+   * нет; у сдачи это её файлы — одноимённые в списке неразличимы.
+   */
+  takenNames?: readonly string[];
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -54,7 +60,7 @@ export function FileDropzone({
   function accept(incoming: FileList | null) {
     if (!incoming?.length) return;
 
-    const result = addFiles(files, [...incoming], usedBytes);
+    const result = addFiles(files, [...incoming], usedBytes, takenNames);
     setRejected(result.rejected);
     onChange(result.files);
   }
