@@ -92,7 +92,7 @@ describe('Заказы (e2e)', () => {
         category: OrderCategory.PLAN_IMPLEMENTATION,
         objectType: ObjectType.APARTMENT,
         description: 'Описание работ для проверки списка',
-        address: 'Москва, ул. Тестовая, 1',
+        address: 'Баку, ул. Тестовая, 1',
         squareMeters: 60,
         clientBudget: '90000.00',
         status: data.status ?? OrderStatus.WAITING,
@@ -218,7 +218,7 @@ describe('Заказы (e2e)', () => {
         .field('category', OrderCategory.PLAN_IMPLEMENTATION)
         .field('objectType', ObjectType.APARTMENT)
         .field('description', 'Полный ремонт под ключ, с заменой проводки')
-        .field('address', 'Москва, ул. Тестовая, 5')
+        .field('address', 'Баку, ул. Тестовая, 5')
         .field('squareMeters', '100.5')
         .field('clientBudget', '150000.50')
         .field('desiredStartDate', tomorrow())
@@ -236,7 +236,7 @@ describe('Заказы (e2e)', () => {
         status: OrderStatus.WAITING,
         squareMeters: 100.5,
         clientBudget: '150000.5',
-        address: 'Москва, ул. Тестовая, 5',
+        address: 'Баку, ул. Тестовая, 5',
         // Цена и срок появляются только при принятии предложения (ТЗ §3).
         price: null,
         deadline: null,
@@ -265,7 +265,7 @@ describe('Заказы (e2e)', () => {
         .field('category', OrderCategory.PLAN_CREATION)
         .field('objectType', ObjectType.HOUSE)
         .field('description', 'Нужен проект дома на участке')
-        .field('address', 'Казань, ул. Проверочная, 2')
+        .field('address', 'Гянджа, ул. Проверочная, 2')
         .field('squareMeters', '80')
         // Браузер отправляет незаполненные поля пустыми строками, а не пропускает их.
         .field('clientBudget', '')
@@ -288,7 +288,7 @@ describe('Заказы (e2e)', () => {
         .field('title', 'Нет описания')
         .field('category', OrderCategory.PLAN_CREATION)
         .field('objectType', ObjectType.APARTMENT)
-        .field('address', 'Москва, ул. Тестовая, 7')
+        .field('address', 'Баку, ул. Тестовая, 7')
         .field('squareMeters', '50');
 
       expect(response.status).toBe(400);
@@ -303,7 +303,7 @@ describe('Заказы (e2e)', () => {
         .field('category', OrderCategory.PLAN_CREATION)
         .field('objectType', ObjectType.APARTMENT)
         .field('description', 'Описание достаточной длины')
-        .field('address', 'Москва, ул. Тестовая, 8')
+        .field('address', 'Баку, ул. Тестовая, 8')
         .field('squareMeters', '50')
         .field('desiredStartDate', '2020-01-01');
 
@@ -319,7 +319,7 @@ describe('Заказы (e2e)', () => {
         .field('category', 'DEMOLITION')
         .field('objectType', ObjectType.APARTMENT)
         .field('description', 'Описание достаточной длины')
-        .field('address', 'Москва, ул. Тестовая, 9')
+        .field('address', 'Баку, ул. Тестовая, 9')
         .field('squareMeters', '-5');
 
       expect(response.status).toBe(400);
@@ -337,7 +337,7 @@ describe('Заказы (e2e)', () => {
         .field('category', OrderCategory.PLAN_CREATION)
         .field('objectType', ObjectType.APARTMENT)
         .field('description', 'Описание достаточной длины')
-        .field('address', 'Москва, ул. Тестовая, 10')
+        .field('address', 'Баку, ул. Тестовая, 10')
         .field('squareMeters', '50')
         .attach('files', Buffer.from('MZ'), {
           filename: 'вирус.exe',
@@ -359,7 +359,7 @@ describe('Заказы (e2e)', () => {
         .field('category', OrderCategory.PLAN_CREATION)
         .field('objectType', ObjectType.APARTMENT)
         .field('description', 'Описание достаточной длины')
-        .field('address', 'Москва, ул. Тестовая, 11')
+        .field('address', 'Баку, ул. Тестовая, 11')
         .field('squareMeters', '50')
         .attach('files', Buffer.from('MZ\x90\x00исполняемый'), {
           filename: 'план.pdf',
@@ -379,7 +379,7 @@ describe('Заказы (e2e)', () => {
         .field('category', OrderCategory.PLAN_CREATION)
         .field('objectType', ObjectType.APARTMENT)
         .field('description', 'Описание достаточной длины')
-        .field('address', 'Москва, ул. Тестовая, 11')
+        .field('address', 'Баку, ул. Тестовая, 11')
         .field('squareMeters', '50');
 
       expect(response.status).toBe(403);

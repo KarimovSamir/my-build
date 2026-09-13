@@ -85,7 +85,7 @@ describe('FilesService (e2e)', () => {
         category: OrderCategory.PLAN_CREATION,
         objectType: ObjectType.APARTMENT,
         description: 'Проверка загрузки файлов',
-        address: 'Москва, ул. Тестовая, 2',
+        address: 'Баку, ул. Тестовая, 2',
         squareMeters: 42,
         offers: {
           create: [

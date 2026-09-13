@@ -64,7 +64,7 @@ describe('Сделка и приёмка (e2e)', () => {
         category: OrderCategory.PLAN_IMPLEMENTATION,
         objectType: ObjectType.APARTMENT,
         description: 'Описание работ для проверки полного цикла',
-        address: 'Москва, ул. Тестовая, 7',
+        address: 'Баку, ул. Тестовая, 7',
         squareMeters: 100,
         clientBudget: '150000.00',
         status: OrderStatus.AWAITING_CONFIRMATION,

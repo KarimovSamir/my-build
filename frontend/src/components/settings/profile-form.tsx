@@ -172,7 +172,7 @@ export function ProfileForm({ profile: fromServer }: { profile: UserProfile }) {
             type="tel"
             label="Телефон"
             autoComplete="tel"
-            placeholder="+7 900 000-00-00"
+            placeholder="+994 50 000-00-00"
             hint="По нему с вами свяжется вторая сторона заказа"
             maxLength={PROFILE_LIMITS.phone}
             value={values.phone}

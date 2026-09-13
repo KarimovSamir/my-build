@@ -39,7 +39,7 @@ describe("contractorsHref", () => {
   });
 
   it("собранный адрес читается обратно тем же фильтром", () => {
-    const filter: ContractorsFilter = { q: "Москва", page: 3 };
+    const filter: ContractorsFilter = { q: "Баку", page: 3 };
 
     expect(parseContractorsFilter(searchParams(contractorsHref(filter)))).toEqual(filter);
   });
@@ -54,13 +54,13 @@ describe("isEmptyContractorsFilter", () => {
 
 describe("contractorsFilterKey", () => {
   it("одинаковые фильтры дают один ключ, разные — разные", () => {
-    const filter: ContractorsFilter = { q: "Москва", page: 1 };
+    const filter: ContractorsFilter = { q: "Баку", page: 1 };
 
     expect(contractorsFilterKey(filter)).toBe(contractorsFilterKey({ ...filter }));
     expect(contractorsFilterKey({ ...filter, page: 2 })).not.toBe(
       contractorsFilterKey(filter),
     );
-    expect(contractorsFilterKey({ ...filter, q: "Казань" })).not.toBe(
+    expect(contractorsFilterKey({ ...filter, q: "Гянджа" })).not.toBe(
       contractorsFilterKey(filter),
     );
   });

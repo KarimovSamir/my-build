@@ -146,7 +146,7 @@ describe('WebSocket-шлюз (e2e)', () => {
         category: OrderCategory.PLAN_IMPLEMENTATION,
         objectType: ObjectType.APARTMENT,
         description: 'Описание работ для проверки real-time',
-        address: 'Москва, ул. Тестовая, 1',
+        address: 'Баку, ул. Тестовая, 1',
         squareMeters: 60,
         clientBudget: '90000.00',
         status: OrderStatus.WAITING,
@@ -278,7 +278,7 @@ describe('WebSocket-шлюз (e2e)', () => {
         .field('category', OrderCategory.PLAN_CREATION)
         .field('objectType', ObjectType.HOUSE)
         .field('description', 'Проект дома для проверки события order:created')
-        .field('address', 'Казань, ул. Проверочная, 2')
+        .field('address', 'Гянджа, ул. Проверочная, 2')
         .field('squareMeters', '80');
 
       expect(response.status).toBe(201);

@@ -16,28 +16,28 @@ const NBSP = " ";
 
 describe("formatMoney", () => {
   it("отбрасывает хвостовые нули", () => {
-    expect(formatMoney("150000.00")).toBe(`150${NBSP}000 USD`);
-    expect(formatMoney("45000.50")).toBe(`45${NBSP}000,5 USD`);
+    expect(formatMoney("150000.00")).toBe(`150${NBSP}000 AZN`);
+    expect(formatMoney("45000.50")).toBe(`45${NBSP}000,5 AZN`);
   });
 
   it("показывает копейки, когда они есть", () => {
-    expect(formatMoney("45000.55")).toBe(`45${NBSP}000,55 USD`);
+    expect(formatMoney("45000.55")).toBe(`45${NBSP}000,55 AZN`);
   });
 
   it("не группирует числа короче тысячи", () => {
-    expect(formatMoney("999")).toBe("999 USD");
-    expect(formatMoney("0")).toBe("0 USD");
+    expect(formatMoney("999")).toBe("999 AZN");
+    expect(formatMoney("0")).toBe("0 AZN");
   });
 
   it("группирует разряды неразрывным пробелом", () => {
-    expect(formatMoney("1234567.89")).toBe(`1${NBSP}234${NBSP}567,89 USD`);
+    expect(formatMoney("1234567.89")).toBe(`1${NBSP}234${NBSP}567,89 AZN`);
   });
 
   it("считает по строке, не теряя точности на длинных суммах", () => {
     // Через `Number` последние разряды разъехались бы: сумма приходит строкой
     // (`MoneyString`) именно затем, чтобы этого не случилось.
     expect(formatMoney("9007199254740993.99")).toBe(
-      `9${NBSP}007${NBSP}199${NBSP}254${NBSP}740${NBSP}993,99 USD`,
+      `9${NBSP}007${NBSP}199${NBSP}254${NBSP}740${NBSP}993,99 AZN`,
     );
   });
 
@@ -144,12 +144,12 @@ describe("personName", () => {
 
 describe("formatLocation", () => {
   it("собирает город и страну одной строкой", () => {
-    expect(formatLocation({ city: "Москва", country: "Россия" })).toBe("Москва, Россия");
+    expect(formatLocation({ city: "Баку", country: "Азербайджан" })).toBe("Баку, Азербайджан");
   });
 
   it("обходится тем, что заполнено", () => {
-    expect(formatLocation({ city: "Казань", country: null })).toBe("Казань");
-    expect(formatLocation({ city: null, country: "Россия" })).toBe("Россия");
+    expect(formatLocation({ city: "Гянджа", country: null })).toBe("Гянджа");
+    expect(formatLocation({ city: null, country: "Азербайджан" })).toBe("Азербайджан");
   });
 
   it("без города и страны даёт null: подпись выбирает экран", () => {

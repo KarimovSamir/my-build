@@ -21,10 +21,10 @@ const clientProfile: UserProfile = {
   role: Role.CLIENT,
   firstName: "Анна",
   lastName: "Клиентова",
-  phone: "+7 900 000-00-00",
+  phone: "+994 50 000-00-00",
   companyName: null,
-  city: "Москва",
-  country: "Россия",
+  city: "Баку",
+  country: "Азербайджан",
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
@@ -51,7 +51,7 @@ describe("toProfileForm", () => {
     ).toEqual({
       firstName: "Анна",
       lastName: "",
-      phone: "+7 900 000-00-00",
+      phone: "+994 50 000-00-00",
       city: "",
       country: "",
       companyName: "",
@@ -112,9 +112,9 @@ describe("toProfileBody", () => {
     ).toEqual({
       firstName: "Анна",
       lastName: "",
-      phone: "+7 900 000-00-00",
+      phone: "+994 50 000-00-00",
       city: "",
-      country: "Россия",
+      country: "Азербайджан",
     });
   });
 
@@ -138,7 +138,7 @@ describe("isProfileChanged", () => {
   });
 
   it("любое изменённое поле включает кнопку", () => {
-    expect(isProfileChanged(values({ city: "Казань" }), clientProfile)).toBe(true);
+    expect(isProfileChanged(values({ city: "Гянджа" }), clientProfile)).toBe(true);
     // Очистка необязательного поля — тоже изменение.
     expect(isProfileChanged(values({ lastName: "" }), clientProfile)).toBe(true);
     expect(

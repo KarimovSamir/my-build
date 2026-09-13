@@ -60,7 +60,7 @@ describe('Предложения (e2e)', () => {
         category: OrderCategory.PLAN_IMPLEMENTATION,
         objectType: ObjectType.APARTMENT,
         description: 'Описание работ для проверки предложений',
-        address: 'Москва, ул. Тестовая, 1',
+        address: 'Баку, ул. Тестовая, 1',
         squareMeters: 60,
         clientBudget: '90000.00',
         status,

@@ -205,9 +205,9 @@ export function NewOrderForm() {
           <CardContent className="flex flex-col gap-5">
             <Field
               id="clientBudget"
-              label="Бюджет, USD"
+              label="Бюджет, AZN"
               inputMode="decimal"
-              placeholder="45000"
+              placeholder="75000"
               value={values.clientBudget}
               onChange={(event) => update("clientBudget", event.target.value)}
               error={errors.clientBudget}
@@ -232,7 +232,7 @@ export function NewOrderForm() {
               id="address"
               label="Адрес объекта"
               autoComplete="street-address"
-              placeholder="Москва, ул. Ленина, 15"
+              placeholder="Баку, ул. Физули, 15"
               value={values.address}
               onChange={(event) => update("address", event.target.value)}
               error={errors.address}

@@ -66,20 +66,20 @@ describe('Подрядчики (e2e)', () => {
       users.createUser('catalog-client', {
         role: Role.CLIENT,
         firstName: 'Анна',
-        city: 'Москва',
+        city: 'Баку',
       }),
       users.createUser('catalog-alpha', {
         role: Role.COMPANY,
         // Названия начинаются с меток «А» и «Б»: порядок в каталоге алфавитный.
         companyName: `Альфастрой ${MARK}`,
-        city: 'Москва',
-        country: 'Россия',
+        city: 'Баку',
+        country: 'Азербайджан',
       }),
       users.createUser('catalog-beta', {
         role: Role.COMPANY,
         companyName: `Бетастрой ${MARK}`,
-        city: 'Казань',
-        country: 'Россия',
+        city: 'Гянджа',
+        country: 'Азербайджан',
       }),
     ]);
 
@@ -107,7 +107,7 @@ describe('Подрядчики (e2e)', () => {
         category: OrderCategory.PLAN_CREATION,
         objectType: ObjectType.APARTMENT,
         description: 'Заказ, доведённый до конца',
-        address: 'Москва, ул. Тестовая, 3',
+        address: 'Баку, ул. Тестовая, 3',
         squareMeters: 55,
         status: OrderStatus.COMPLETED,
         price: '70000.00',
@@ -147,8 +147,8 @@ describe('Подрядчики (e2e)', () => {
       expect(items[0]).toEqual({
         id: alpha.id,
         companyName: `Альфастрой ${MARK}`,
-        city: 'Москва',
-        country: 'Россия',
+        city: 'Баку',
+        country: 'Азербайджан',
         completedOrdersCount: 1,
       });
       // Предложение, которое не выбрали, завершённым заказом не считается.
@@ -176,7 +176,7 @@ describe('Подрядчики (e2e)', () => {
       const byName = await listContractors(clientToken, { q: `Бетастрой ${MARK}` });
       expect(byName.map((item) => item.id)).toEqual([beta.id]);
 
-      const byCity = await listContractors(clientToken, { q: 'Казань' });
+      const byCity = await listContractors(clientToken, { q: 'Гянджа' });
       expect(byCity.map((item) => item.id)).toContain(beta.id);
       expect(byCity.map((item) => item.id)).not.toContain(alpha.id);
     });
@@ -218,10 +218,10 @@ describe('Подрядчики (e2e)', () => {
       expect(response.body).toMatchObject({
         id: alpha.id,
         companyName: `Альфастрой ${MARK}`,
-        city: 'Москва',
+        city: 'Баку',
         // Ради контактов карточку и открывают (ТЗ §7) — в списке их нет.
         email: alpha.email,
-        phone: '+7 900 000-00-00',
+        phone: '+994 50 000-00-00',
         completedOrdersCount: 1,
       });
     });

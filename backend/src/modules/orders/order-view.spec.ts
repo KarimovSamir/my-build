@@ -65,7 +65,7 @@ function order(overrides: Partial<OrderDetailRow> = {}): OrderDetailRow {
     createdAt: new Date('2026-09-01T09:00:00.000Z'),
     updatedAt: new Date('2026-09-02T09:00:00.000Z'),
     description: 'Полный ремонт под ключ',
-    address: 'Москва, ул. Тестовая, 1',
+    address: 'Баку, ул. Тестовая, 1',
     squareMeters: 100,
     verifiedSquareMeters: 98,
     desiredStartDate: new Date('2026-10-01T00:00:00.000Z'),
@@ -75,10 +75,10 @@ function order(overrides: Partial<OrderDetailRow> = {}): OrderDetailRow {
       id: CLIENT_ID,
       firstName: 'Анна',
       lastName: 'Тестова',
-      city: 'Москва',
-      country: 'Россия',
+      city: 'Баку',
+      country: 'Азербайджан',
       email: 'anna@mybuild.test',
-      phone: '+7 900 000-00-00',
+      phone: '+994 50 000-00-00',
     },
     offers: [
       offer(EXECUTOR_ID, OfferStatus.ACCEPTED),
@@ -175,7 +175,7 @@ describe('toOrderDetail — компания-исполнитель', () => {
   it('видит контакты заказчика: договариваться по объекту больше негде', () => {
     expect(view.client).toMatchObject({
       email: 'anna@mybuild.test',
-      phone: '+7 900 000-00-00',
+      phone: '+994 50 000-00-00',
     });
   });
 });
@@ -332,7 +332,7 @@ describe('toOrderDetail — компания, которая в заказе н�
     const view = toOrderDetail(order(), { id: OUTSIDER_ID });
 
     expect(view.description).toBe('Полный ремонт под ключ');
-    expect(view.address).toBe('Москва, ул. Тестовая, 1');
+    expect(view.address).toBe('Баку, ул. Тестовая, 1');
     expect(view.clientBudget).toBe('120000');
     expect(view.squareMeters).toBe(100);
   });

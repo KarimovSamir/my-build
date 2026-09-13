@@ -154,9 +154,9 @@ export function OfferDialog({
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
           <Field
             id="proposedPrice"
-            label="Ваша цена, USD"
+            label="Ваша цена, AZN"
             inputMode="decimal"
-            placeholder="150000"
+            placeholder="250000"
             value={values.proposedPrice}
             onChange={(event) => update("proposedPrice", event.target.value)}
             error={errors.proposedPrice}

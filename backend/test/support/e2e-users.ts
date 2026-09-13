@@ -72,7 +72,7 @@ export function e2eSuite(name: string): E2eSuite {
         confirmEmail: options.confirmEmail,
         metadata: {
           firstName: 'Тест',
-          phone: '+7 900 000-00-00',
+          phone: '+994 50 000-00-00',
           // Название обязательно для роли COMPANY (ТЗ §3).
           ...(overrides.role === Role.COMPANY ? { companyName: 'ООО «Тест»' } : {}),
           ...overrides,

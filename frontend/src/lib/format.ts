@@ -27,7 +27,7 @@ const monthsShort = [
 const amountFormatter = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
 
 /**
- * Сумма в том виде, в каком её показывает интерфейс: «45 000 USD» (ТЗ §7).
+ * Сумма в том виде, в каком её показывает интерфейс: «45 000 AZN» (ТЗ §7).
  *
  * Считается по строке, а не через `Number`: суммы приходят строками именно
  * затем, чтобы не проходить через число с плавающей точкой (`MoneyString`).
@@ -45,7 +45,7 @@ export function formatMoney(value: MoneyString): string {
   const fraction = (match[2] ?? "").slice(0, 2).replaceAll(/0+$/g, "");
   const whole = match[1]!.replaceAll(/\B(?=(\d{3})+(?!\d))/g, " ");
 
-  return `${whole}${fraction ? `,${fraction}` : ""} USD`;
+  return `${whole}${fraction ? `,${fraction}` : ""} AZN`;
 }
 
 /** Площадь в виде «62,5 м²». */

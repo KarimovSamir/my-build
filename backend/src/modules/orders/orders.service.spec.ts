@@ -41,7 +41,7 @@ const dto: CreateOrderDto = {
   category: OrderCategory.PLAN_IMPLEMENTATION,
   objectType: ObjectType.APARTMENT,
   description: 'Описание работ',
-  address: 'Москва, ул. Тестовая, 1',
+  address: 'Баку, ул. Тестовая, 1',
   squareMeters: 60,
 };
 
@@ -79,10 +79,10 @@ function orderRow(overrides: Partial<{ status: OrderStatus }> = {}) {
       id: CLIENT_ID,
       firstName: 'Анна',
       lastName: 'Клиентова',
-      city: 'Москва',
-      country: 'Россия',
+      city: 'Баку',
+      country: 'Азербайджан',
       email: 'anna@mybuild.test',
-      phone: '+7 900 000-00-00',
+      phone: '+994 50 000-00-00',
     },
     offers: [],
     submissions: [],

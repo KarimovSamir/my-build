@@ -47,14 +47,14 @@ describe('Аутентификация и доступ (e2e)', () => {
       role: Role.CLIENT,
       firstName: 'Анна',
       lastName: 'Тестова',
-      phone: '+7 900 000-11-11',
-      city: 'Москва',
-      country: 'Россия',
+      phone: '+994 50 000-11-11',
+      city: 'Баку',
+      country: 'Азербайджан',
     });
     company = await users.createUser('auth-company', {
       role: Role.COMPANY,
       firstName: 'Иван',
-      phone: '+7 900 000-22-22',
+      phone: '+994 50 000-22-22',
       companyName: 'ООО «Тест»',
     });
 
@@ -94,9 +94,9 @@ describe('Аутентификация и доступ (e2e)', () => {
         role: Role.CLIENT,
         firstName: 'Анна',
         lastName: 'Тестова',
-        phone: '+7 900 000-11-11',
-        city: 'Москва',
-        country: 'Россия',
+        phone: '+994 50 000-11-11',
+        city: 'Баку',
+        country: 'Азербайджан',
         // Название компании у клиента пустое даже если что-то передали.
         companyName: null,
       });
@@ -169,12 +169,12 @@ describe('Аутентификация и доступ (e2e)', () => {
       const response = await request(app.getHttpServer())
         .patch('/profile')
         .set('Authorization', `Bearer ${clientToken}`)
-        .send({ firstName: '  Анна-Мария  ', city: 'Казань' });
+        .send({ firstName: '  Анна-Мария  ', city: 'Гянджа' });
 
       expect(response.status).toBe(200);
       expect(response.body).toMatchObject({
         firstName: 'Анна-Мария',
-        city: 'Казань',
+        city: 'Гянджа',
         lastName: 'Тестова',
         role: Role.CLIENT,
       });
@@ -217,7 +217,7 @@ describe('Аутентификация и доступ (e2e)', () => {
       expect(response.status).toBe(400);
     });
 
-    it.each(['без цифр', '12345', '+7 900 000-00-00-00-00-00', '+7(900)000$00$00'])(
+    it.each(['без цифр', '12345', '+994 50 000-00-00-00-00-00', '+994(50)000$00$00'])(
       'отклоняет телефон неверного формата: %s',
       async (phone) => {
         const response = await request(app.getHttpServer())
@@ -267,7 +267,7 @@ describe('Аутентификация и доступ (e2e)', () => {
     it('у неподтверждённого пользователя false', async () => {
       const pending = await users.createUser(
         'auth-unconfirmed',
-        { role: Role.CLIENT, firstName: 'Не', phone: '+7 900 000-33-33' },
+        { role: Role.CLIENT, firstName: 'Не', phone: '+994 50 000-33-33' },
         { confirmEmail: false },
       );
 

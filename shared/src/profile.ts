@@ -46,7 +46,7 @@ export const PHONE_PATTERN = /^(?=(?:\D*\d){10,15}\D*$)\+?[\d\s()-]+$/;
 
 /** Сообщение об ошибке общее для формы и API: пользователь видит одно и то же. */
 export const PHONE_ERROR_MESSAGE =
-  'Телефон указан неверно. Пример: +7 900 000-00-00';
+  'Телефон указан неверно. Пример: +994 50 000-00-00';
 
 export function isValidPhone(value: string): boolean {
   return value.length <= PHONE_MAX_LENGTH && PHONE_PATTERN.test(value);

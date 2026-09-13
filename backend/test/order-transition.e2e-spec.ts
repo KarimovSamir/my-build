@@ -96,7 +96,7 @@ describe('OrderTransitionService (e2e)', () => {
         category: OrderCategory.PLAN_IMPLEMENTATION,
         objectType: ObjectType.APARTMENT,
         description: 'Заказ для проверки переходов',
-        address: 'Москва, ул. Тестовая, 1',
+        address: 'Баку, ул. Тестовая, 1',
         squareMeters: 50,
         clientBudget: '10000.00',
         offers: {
