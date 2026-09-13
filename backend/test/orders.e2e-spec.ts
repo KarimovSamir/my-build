@@ -635,7 +635,7 @@ describe('Заказы (e2e)', () => {
       expect(response.body.client).toBeNull();
     });
 
-    it('стороны сделки заказчика видят', async () => {
+    it('стороны сделки заказчика видят — вместе с контактами', async () => {
       const [owner, executorView] = await Promise.all([
         request(app.getHttpServer())
           .get(`/orders/${inProgressId}`)
@@ -646,7 +646,13 @@ describe('Заказы (e2e)', () => {
       ]);
 
       expect(owner.body.client).toMatchObject({ id: lister.id, firstName: 'Борис' });
-      expect(executorView.body.client).toMatchObject({ id: lister.id });
+      // Исполнителю нужны почта и телефон: договариваться по объекту больше
+      // негде, чата в MVP нет (ТЗ §11).
+      expect(executorView.body.client).toMatchObject({
+        id: lister.id,
+        email: lister.email,
+        phone: expect.any(String),
+      });
     });
 
     it('чужому клиенту отдаёт 404, а не 403: чужой заказ для него не существует', async () => {

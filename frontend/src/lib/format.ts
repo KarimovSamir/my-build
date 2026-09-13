@@ -91,6 +91,20 @@ export function personInitial(name: string): string {
 }
 
 /**
+ * Имя человека одной строкой. Фамилия необязательна — в базе колонка
+ * `lastName` пустая у всех, кто её не указал.
+ */
+export function personName({
+  firstName,
+  lastName,
+}: {
+  firstName: string;
+  lastName: string | null;
+}): string {
+  return [firstName, lastName].filter(Boolean).join(" ");
+}
+
+/**
  * Буква для аватара компании — первая буква значащего слова названия:
  * правовая форма пропускается.
  *
@@ -107,6 +121,23 @@ export function companyInitial(name: string): string {
   // Название из одной правовой формы — случай надуманный, но буква нужна
   // и тогда: пусть будет её собственная.
   return firstLetter(words.find((word) => !legalForms.has(word.toUpperCase())) ?? words[0]);
+}
+
+/**
+ * Город и страна одной строкой. `null` — места не указано вовсе: подпись
+ * «Город не указан» выбирает уже компонент, у каталога и у карточки заказа
+ * они разные.
+ */
+export function formatLocation({
+  city,
+  country,
+}: {
+  city: string | null;
+  country: string | null;
+}): string | null {
+  const parts = [city, country].map((part) => part?.trim()).filter(Boolean);
+
+  return parts.length > 0 ? parts.join(", ") : null;
 }
 
 /** Дата в виде «25 дек 2025». */

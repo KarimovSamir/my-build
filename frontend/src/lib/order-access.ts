@@ -16,6 +16,9 @@ import {
   type OrderFileDto,
 } from "@/lib/types";
 
+import { contactLinks, type ContactLink } from "@/lib/contacts";
+import { formatLocation, personName } from "@/lib/format";
+
 export interface OrderDetailAccess {
   /** Смотрит клиент, создавший заказ. */
   isOwner: boolean;
@@ -73,4 +76,39 @@ export function emptyClientFilesMessage({
   return isOwner
     ? "Вы не приложили файлы к этому заказу."
     : "Клиент не приложил файлы к этому заказу.";
+}
+
+/** Заказчик так, как его показывает карточка заказа исполнителю. */
+export interface OrderClientCard {
+  name: string;
+  /** Город и страна одной строкой. `null` — место не указано. */
+  location: string | null;
+  contacts: ContactLink[];
+}
+
+/**
+ * Заказчик для блока «Заказчик» — или `null`, если показывать его незачем.
+ *
+ * Показывается он ровно одному зрителю: компании-исполнителю. Договориться
+ * по объекту ей больше негде — чата в MVP нет (ТЗ §11), — и backend отдаёт
+ * контакты клиента только сторонам сделки. Владельцу заказа блок не нужен:
+ * это его собственные почта и телефон, они в настройках.
+ *
+ * Обратный путь у клиента уже есть: подрядчик открывается карточкой каталога
+ * `/contractors/:id` с теми же контактами.
+ */
+export function resolveOrderClient(
+  order: OrderDetail,
+  { isOwner, isParty }: Pick<OrderDetailAccess, "isOwner" | "isParty">,
+): OrderClientCard | null {
+  // Проверяются оба условия, хотя `client` у постороннего и так `null`:
+  // приватность держит backend, а страница не должна зависеть от того,
+  // что он ничего лишнего не прислал.
+  if (isOwner || !isParty || !order.client) return null;
+
+  return {
+    name: personName(order.client),
+    location: formatLocation(order.client),
+    contacts: contactLinks(order.client),
+  };
 }

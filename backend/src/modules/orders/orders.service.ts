@@ -50,6 +50,17 @@ const ACTIVE_OFFER_STATUS_LIST = [...ACTIVE_OFFER_STATUSES];
 
 const ORDER_NOT_DELETABLE = 'Заказ уже в работе — его нельзя удалить. Дождитесь завершения';
 
+/**
+ * Новые заказы сверху. `id` вторым ключом обязателен: у постраничного списка
+ * без уникального ключа порядок строк с одинаковым `createdAt` остаётся на
+ * усмотрение Postgres, и строка способна пропасть со второй страницы, потому
+ * что при следующем запросе уехала на первую.
+ */
+const ORDER_BY: Prisma.OrderOrderByWithRelationInput[] = [
+  { createdAt: 'desc' },
+  { id: 'desc' },
+];
+
 /** Предложение исполнителя — из него берётся колонка «Подрядчик». */
 const EXECUTOR_OFFER_SELECT = {
   where: { status: { in: EXECUTOR_STATUSES } },
@@ -59,7 +70,18 @@ const EXECUTOR_OFFER_SELECT = {
 
 const DETAIL_INCLUDE = {
   client: {
-    select: { id: true, firstName: true, lastName: true, city: true, country: true },
+    // Контакты читаются всегда, а отдаются только стороне сделки — решает это
+    // `toOrderDetail`, одно место на всю приватность заказа. Второе условие
+    // здесь, в запросе, означало бы два источника правды и две ветки select.
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      city: true,
+      country: true,
+      email: true,
+      phone: true,
+    },
   },
   offers: {
     include: { company: { select: { companyName: true } } },
@@ -167,7 +189,7 @@ export class OrdersService {
       this.prisma.order.findMany({
         where,
         include: { offers: EXECUTOR_OFFER_SELECT },
-        orderBy: { createdAt: 'desc' },
+        orderBy: ORDER_BY,
         skip: request.skip,
         take: request.pageSize,
       }),

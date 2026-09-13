@@ -36,7 +36,7 @@ function notificationRow(
 
 interface ListArgs {
   where: { userId: string; isRead?: boolean };
-  orderBy?: { isRead?: string; createdAt?: string }[];
+  orderBy?: { isRead?: string; createdAt?: string; id?: string }[];
   skip?: number;
   take?: number;
 }
@@ -95,12 +95,15 @@ describe('NotificationsService.list', () => {
   it('ставит непрочитанные первыми, а внутри группы — новые', async () => {
     // Сортировка обязана быть в запросе, а не в интерфейсе: список
     // постраничный, и на фронте непрочитанное со второй страницы вверх
-    // уже не поднимется.
+    // уже не поднимется. Третий ключ — `id`: пачка уведомлений одного
+    // перехода создаётся с одним `createdAt`, и без него порядок внутри
+    // пачки Postgres волен менять от запроса к запросу.
     await createService(prisma).list(USER_ID, query());
 
     expect(prisma.notification.findMany.mock.calls[0]![0].orderBy).toEqual([
       { isRead: 'asc' },
       { createdAt: 'desc' },
+      { id: 'desc' },
     ]);
   });
 

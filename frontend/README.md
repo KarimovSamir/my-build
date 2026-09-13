@@ -4,8 +4,8 @@ Next.js 16 (App Router) + Tailwind 4 + shadcn/ui. Интерфейс на рус
 (клиент и компания) живут в одном кабинете. За данными фронт ходит в NestJS
 (`backend/`), напрямую в Supabase — только за авторизацией.
 
-Требования и макеты — в `MyBuild_NestJS_TZ.md` в корне репозитория и в
-`docs/design/`, правила работы над проектом — в `CLAUDE.md`.
+Обзор проекта целиком — в корневом [`README.md`](../README.md), исходные
+макеты — в [`docs/design/`](../docs/design/).
 
 ## Запуск
 
@@ -26,7 +26,7 @@ npm run dev:web                         # только frontend
 Шаблон — в `env.example`. Наружу (в браузер) уходит только то, что начинается с
 `NEXT_PUBLIC_`: адрес проекта Supabase, публичный anon-ключ и адрес API.
 Секретных ключей и строки подключения к базе здесь нет и быть не должно — они
-живут в `backend/.env` (ТЗ §6).
+живут в `backend/.env`.
 
 ## Авторизация и защита маршрутов
 
@@ -36,7 +36,7 @@ npm run dev:web                         # только frontend
 
 ## Тема оформления
 
-Светлая, тёмная и «как в системе» (ТЗ §7). Класс `dark` на `<html>` выставляет
+Светлая, тёмная и «как в системе». Класс `dark` на `<html>` выставляет
 `next-themes` (`components/theme-provider.tsx`), переключатель —
 `components/theme-toggle.tsx` в шапке кабинета, на лендинге и на экранах входа.
 Цвета берутся только из токенов `globals.css`: захардкоженный `bg-white`
@@ -52,19 +52,26 @@ src/
     (app)/                кабинет обеих ролей: меню + шапка + разделы
   components/ui/          компоненты дизайн-системы (shadcn)
   components/layout/      боковое меню, шапка, хлебные крошки
-  components/orders/      экраны заказов
+  components/orders/      карточка заказа, списки, формы
+  components/offers/      предложения компании
+  components/realtime/    провайдер сокета и отметка «Нет связи»
   components/brand/       логотип
   components/status-badge.tsx   badge статусов заказа и предложения
   lib/api.ts              транспорт к NestJS; api.server.ts / api.client.ts берут токен
   lib/supabase/           клиенты Supabase (browser / server / proxy)
+  lib/realtime-bindings.ts  подписка на события, обновление после обрыва
   lib/navigation.ts       состав бокового меню по ролям
   lib/types.ts            единственный вход к типам из `shared/`
   proxy.ts                сессия и защита маршрутов
 ```
 
+Вся логика экранов живёт в `lib/` и покрыта unit-тестами, компоненты только
+рисуют её результат: состав кнопок карточки заказа — `lib/order-actions.ts`,
+правила видимости — `lib/order-access.ts`, по модулю на каждую форму.
+
 Доменные типы, enum-ы и общие для формы и API правила лежат в пакете
-`shared/` и импортируются через `@/lib/types` — дублировать их здесь нельзя
-(`CLAUDE.md` §5). После правки `shared/` нужен `npm run build:shared` из корня,
+[`shared/`](../shared/) и импортируются через `@/lib/types` — дублировать их
+здесь нельзя. После правки `shared/` нужен `npm run build:shared` из корня,
 иначе фронт не увидит новых типов.
 
 ## Проверки
@@ -72,7 +79,9 @@ src/
 ```bash
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
+npm test            # vitest: логика из lib/
 npm run build       # production-сборка
 ```
 
-Своих автотестов у фронта пока нет — это отдельная задача Фазы 7.
+Спеки входят в `tsconfig`, а значит и в `next build`: ошибка типов в тесте
+ломает сборку. Это осознанно — иначе тесты жили бы без проверки типов.

@@ -77,6 +77,8 @@ function order(overrides: Partial<OrderDetailRow> = {}): OrderDetailRow {
       lastName: 'Тестова',
       city: 'Москва',
       country: 'Россия',
+      email: 'anna@mybuild.test',
+      phone: '+7 900 000-00-00',
     },
     offers: [
       offer(EXECUTOR_ID, OfferStatus.ACCEPTED),
@@ -169,6 +171,13 @@ describe('toOrderDetail — компания-исполнитель', () => {
   it('видит только своё предложение, не конкурентов', () => {
     expect(view.offers.map((item) => item.companyId)).toEqual([EXECUTOR_ID]);
   });
+
+  it('видит контакты заказчика: договариваться по объекту больше негде', () => {
+    expect(view.client).toMatchObject({
+      email: 'anna@mybuild.test',
+      phone: '+7 900 000-00-00',
+    });
+  });
 });
 
 describe('toOrderDetail — компания с активным предложением, но не выбранная', () => {
@@ -185,6 +194,12 @@ describe('toOrderDetail — компания с активным предлож�
 
   it('видит настоящий статус: её предложение на рассмотрении', () => {
     expect(view.status).toBe(OrderStatus.AWAITING_CONFIRMATION);
+  });
+
+  it('контактов заказчика не получает: стороной сделки она ещё не стала', () => {
+    // Право на контакты даёт принятое предложение, а не поданное: иначе
+    // почту и телефон клиента собирал бы любой, кто предложился.
+    expect(view.client).toBeNull();
   });
 
   it('видит задание клиента, но не сдачи: исполнителем её ещё не выбрали', () => {

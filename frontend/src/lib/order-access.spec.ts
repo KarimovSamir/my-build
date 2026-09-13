@@ -11,7 +11,11 @@ import {
   type OrderFileDto,
 } from "@/lib/types";
 
-import { emptyClientFilesMessage, resolveOrderDetailAccess } from "./order-access";
+import {
+  emptyClientFilesMessage,
+  resolveOrderClient,
+  resolveOrderDetailAccess,
+} from "./order-access";
 
 const CLIENT_ID = "6f1c7a0e-0000-4000-8000-000000000001";
 const EXECUTOR_ID = "6f1c7a0e-0000-4000-8000-000000000002";
@@ -67,7 +71,15 @@ function order(patch: Partial<OrderDetail> = {}): OrderDetail {
     desiredStartDate: null,
     clientCompletionComment: null,
     correctionComment: null,
-    client: { id: CLIENT_ID, firstName: "Иван", lastName: "Петров", city: null, country: null },
+    client: {
+      id: CLIENT_ID,
+      firstName: "Иван",
+      lastName: "Петров",
+      city: "Баку",
+      country: "Азербайджан",
+      email: "ivan@mybuild.test",
+      phone: "+994 50 123 45 67",
+    },
     offers: [],
     files: [],
     filesSizeBytes: 0,
@@ -208,6 +220,51 @@ describe("resolveOrderDetailAccess", () => {
 
     expect(access.clientFiles).toHaveLength(1);
     expect(access.clientFiles[0]?.ownerType).toBe(FileOwnerType.CLIENT);
+  });
+});
+
+describe("resolveOrderClient", () => {
+  const executorOrder = order({ offers: [offer(EXECUTOR_ID, OfferStatus.ACCEPTED)] });
+
+  it("исполнителю даёт имя, место и контакты заказчика ссылками", () => {
+    const access = resolveOrderDetailAccess(executorOrder, EXECUTOR_ID);
+
+    expect(resolveOrderClient(executorOrder, access)).toEqual({
+      name: "Иван Петров",
+      location: "Баку, Азербайджан",
+      contacts: [
+        {
+          label: "Email",
+          value: "ivan@mybuild.test",
+          href: "mailto:ivan@mybuild.test",
+        },
+        {
+          label: "Телефон",
+          value: "+994 50 123 45 67",
+          href: "tel:+994501234567",
+        },
+      ],
+    });
+  });
+
+  it("владельцу блок не нужен: это его собственные контакты", () => {
+    const access = resolveOrderDetailAccess(executorOrder, CLIENT_ID);
+
+    expect(resolveOrderClient(executorOrder, access)).toBeNull();
+  });
+
+  it("посторонней компании — ничего", () => {
+    // Контактов ей backend и не отдаёт (ТЗ §4.1), но страница обязана
+    // решать сама, а не полагаться на то, что лишнего не прислали.
+    const outsider = order({
+      client: null,
+      offers: [offer(OTHER_COMPANY_ID, OfferStatus.SENT)],
+    });
+    const access = resolveOrderDetailAccess(outsider, OTHER_COMPANY_ID);
+
+    expect(resolveOrderClient(outsider, access)).toBeNull();
+    // Даже если контакты всё же пришли — сторона сделки решает не их наличие.
+    expect(resolveOrderClient(order({ ...outsider, client: order().client }), access)).toBeNull();
   });
 });
 

@@ -1,6 +1,6 @@
 import { Role, roleLabels, type UserProfile } from "@/lib/types";
 
-import { companyInitial, personInitial } from "./format";
+import { companyInitial, personInitial, personName } from "./format";
 
 /**
  * Текущий пользователь в том виде, в каком его показывает интерфейс.
@@ -21,9 +21,7 @@ export interface CurrentUser extends UserProfile {
 export function toCurrentUser(profile: UserProfile): CurrentUser {
   const byCompanyName = profile.role === Role.COMPANY && Boolean(profile.companyName);
 
-  const displayName = byCompanyName
-    ? profile.companyName!
-    : [profile.firstName, profile.lastName].filter(Boolean).join(" ");
+  const displayName = byCompanyName ? profile.companyName! : personName(profile);
 
   return {
     ...profile,

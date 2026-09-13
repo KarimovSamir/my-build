@@ -93,6 +93,12 @@ export class OrdersController {
   /** Свои заказы: фильтр по статусу, поиск, пагинация (ТЗ §4.1). */
   @Get()
   @Roles(Role.CLIENT)
+  // Читающий маршрут, но не бесплатный: `COUNT` плюс выборка, а с `?q=` ещё
+  // и `LIKE '%…%'` по нескольким колонкам. Лимит с запасом на обычную
+  // работу — список перечитывается на каждое событие сокета и каждую
+  // страницу, — но поток «в цикле» упрётся сразу.
+  @UseGuards(ThrottleGuard)
+  @Throttle({ limit: 120, ttl: 60_000 })
   list(
     @CurrentUser() user: AuthUser,
     @Query() query: ListOrdersQueryDto,
@@ -102,8 +108,12 @@ export class OrdersController {
 
   /** Детали заказа. Ответ ролезависимый (ТЗ §4.1, «Приватность и видимость»). */
   @Get(':id')
-  @UseGuards(OwnershipGuard)
+  // Порядок тот же, что у `remove`: ограничитель дешевле похода в базу.
+  // Карточка тянет заказ со связями и список файлов — самый тяжёлый ответ
+  // из читающих, и открыт он любой компании по любому заказу.
+  @UseGuards(ThrottleGuard, OwnershipGuard)
   @OrderAccess(OrderAccessMode.VIEWER)
+  @Throttle({ limit: 120, ttl: 60_000 })
   getOne(
     @CurrentUser() user: AuthUser,
     @OrderAccessCtx() access: OrderAccessContext,

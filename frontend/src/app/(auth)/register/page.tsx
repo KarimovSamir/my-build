@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DemoInvite } from "@/components/auth/demo-invite";
 import { RegisterForm } from "@/components/auth/register-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -16,6 +17,8 @@ export default function RegisterPage() {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <RegisterForm />
+
+        <DemoInvite />
 
         <p className="text-muted-foreground text-sm">
           Уже есть аккаунт?{" "}

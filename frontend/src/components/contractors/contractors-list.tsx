@@ -8,10 +8,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { serverApi } from "@/lib/api.server";
-import { completedOrdersText, contractorLocation } from "@/lib/contractor-view";
+import { completedOrdersText } from "@/lib/contractor-view";
 import { contractorsHref, isEmptyContractorsFilter } from "@/lib/contractors-filter";
 import type { ContractorsFilter } from "@/lib/contractors-filter";
-import { companyInitial } from "@/lib/format";
+import { companyInitial, formatLocation } from "@/lib/format";
 
 /**
  * Каталог подрядчиков (ТЗ §5, §7).
@@ -77,7 +77,7 @@ export async function ContractorsList({ filter }: { filter: ContractorsFilter })
 }
 
 function ContractorRow({ contractor }: { contractor: ContractorListItem }) {
-  const location = contractorLocation(contractor);
+  const location = formatLocation(contractor);
 
   return (
     <li>

@@ -62,6 +62,8 @@ function order(patch: Partial<OrderDetail> = {}): OrderDetail {
       lastName: "Петров",
       city: null,
       country: null,
+      email: "ivan@mybuild.test",
+      phone: "+994 50 123 45 67",
     },
     offers: [],
     files: [],

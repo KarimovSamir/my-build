@@ -24,7 +24,7 @@ import 'dotenv/config';
 import { createHash } from 'node:crypto';
 
 import { PrismaPg } from '@prisma/adapter-pg';
-import { formatOrderNumber } from '@mybuild/shared';
+import { DEMO_EMAILS, DEMO_PASSWORD, formatOrderNumber } from '@mybuild/shared';
 
 import {
   FileOwnerType,
@@ -59,10 +59,14 @@ if (!connectionString) {
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
 /**
- * Пароль тестовых учётных записей. Годится только для локальной разработки;
- * на реальных данных seed не запускают.
+ * Пароль тестовых учётных записей. Годится только для локальной разработки
+ * и для демо; на реальных данных seed не запускают.
+ *
+ * Умолчание берётся из `shared/`: тот же пароль показывает экран входа.
+ * Заданный здесь свой `SEED_PASSWORD` до экрана не доедет — демо-доступ и
+ * собственный пароль вместе не живут.
  */
-const SEED_PASSWORD = process.env.SEED_PASSWORD ?? 'MyBuild-seed-2026';
+const SEED_PASSWORD = process.env.SEED_PASSWORD ?? DEMO_PASSWORD;
 
 type UserKey = 'client' | 'stroygrad' | 'remont' | 'arch';
 
@@ -74,10 +78,12 @@ interface SeedUser {
 
 // Постоянные адреса вместо постоянных id: id теперь выдаёт Supabase Auth,
 // а повторный запуск находит прежние учётные записи по email и удаляет их.
+// Сами адреса — из `shared/`: их же показывает экран входа (`DEMO_ACCOUNTS`),
+// и расхождение означало бы кнопку «Войти» без учётной записи за ней.
 const seedUsers: SeedUser[] = [
   {
     key: 'client',
-    email: 'anna.client@mybuild.test',
+    email: DEMO_EMAILS.client,
     metadata: {
       role: Role.CLIENT,
       firstName: 'Анна',
@@ -89,7 +95,7 @@ const seedUsers: SeedUser[] = [
   },
   {
     key: 'stroygrad',
-    email: 'info@stroygrad.mybuild.test',
+    email: DEMO_EMAILS.stroygrad,
     metadata: {
       role: Role.COMPANY,
       firstName: 'Иван',
@@ -102,7 +108,7 @@ const seedUsers: SeedUser[] = [
   },
   {
     key: 'remont',
-    email: 'info@remontplus.mybuild.test',
+    email: DEMO_EMAILS.remont,
     metadata: {
       role: Role.COMPANY,
       firstName: 'Пётр',
@@ -115,7 +121,7 @@ const seedUsers: SeedUser[] = [
   },
   {
     key: 'arch',
-    email: 'info@archproject.mybuild.test',
+    email: DEMO_EMAILS.arch,
     metadata: {
       role: Role.COMPANY,
       firstName: 'Ольга',

@@ -30,7 +30,9 @@ import { isImageMimeType } from "@/lib/file-kind";
 import { formatArea, formatDate, formatFileSize, formatMoney } from "@/lib/format";
 import {
   emptyClientFilesMessage,
+  resolveOrderClient,
   resolveOrderDetailAccess,
+  type OrderClientCard,
   type OrderDetailAccess,
 } from "@/lib/order-access";
 import { resolveClientActions, resolveCompanyActions } from "@/lib/order-actions";
@@ -63,6 +65,9 @@ export function OrderDetailView({
   const submissions = resolveSubmissions(order);
   const company = resolveCompanyActions(order, access, submissions, viewerId);
   const orderLabel = formatOrderNumber(order.orderNumber);
+  // `null` у всех, кроме исполнителя: заказчик с контактами нужен тому, кому
+  // с ним договариваться.
+  const client = resolveOrderClient(order, access);
 
   return (
     <>
@@ -127,6 +132,8 @@ export function OrderDetailView({
         </div>
 
         <div className="flex min-w-0 flex-col gap-6">
+          {client ? <ClientCard client={client} /> : null}
+
           <Card>
             <CardHeader>
               <CardTitle>Объект</CardTitle>
@@ -184,6 +191,44 @@ export function OrderDetailView({
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * Заказчик: имя, город и контакты (ТЗ §4.1, §7).
+ *
+ * Показывается только компании-исполнителю — кому именно, решает
+ * `resolveOrderClient`. Контакты ссылками, а не текстом: пока чата нет
+ * (ТЗ §11), это единственный способ договориться по объекту.
+ */
+function ClientCard({ client }: { client: OrderClientCard }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Заказчик</CardTitle>
+        <CardDescription>{client.location ?? "Город не указан"}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="flex flex-col gap-4">
+          <Row label="Имя">{client.name}</Row>
+
+          {client.contacts.map((contact) => (
+            <Row key={contact.label} label={contact.label}>
+              {contact.href ? (
+                <a
+                  href={contact.href}
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  {contact.value}
+                </a>
+              ) : (
+                contact.value
+              )}
+            </Row>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
   );
 }
 

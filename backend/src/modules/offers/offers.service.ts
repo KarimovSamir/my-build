@@ -40,6 +40,25 @@ const OFFER_INCLUDE = {
   company: { select: { companyName: true } },
 } as const;
 
+/**
+ * Порядок в обоих постраничных списках кабинета компании.
+ *
+ * `id` вторым ключом обязателен, и совпадение первого ключа здесь не
+ * гипотетическое: принятие предложения переводит всех проигравших одним
+ * `updateMany`, то есть с одинаковым `updatedAt`. Без уникального второго
+ * ключа порядок таких строк Postgres волен менять от запроса к запросу,
+ * и при листании строка либо задвоится, либо пропадёт.
+ */
+const AVAILABLE_ORDER_BY: Prisma.OrderOrderByWithRelationInput[] = [
+  { createdAt: 'desc' },
+  { id: 'desc' },
+];
+
+const OWN_OFFERS_ORDER_BY: Prisma.OfferOrderByWithRelationInput[] = [
+  { updatedAt: 'desc' },
+  { id: 'desc' },
+];
+
 /** Кто спрашивает про предложение и в каком качестве. */
 type OfferActor = { companyId: string } | { clientId: string };
 
@@ -228,7 +247,7 @@ export class OffersService {
         where,
         // Только своё предложение: чужие в ленте не нужны, и видеть их нельзя.
         include: { offers: { where: { companyId }, include: OFFER_INCLUDE } },
-        orderBy: { createdAt: 'desc' },
+        orderBy: AVAILABLE_ORDER_BY,
         skip: request.skip,
         take: request.pageSize,
       }),
@@ -260,7 +279,7 @@ export class OffersService {
             include: { offers: { where: { companyId }, include: OFFER_INCLUDE } },
           },
         },
-        orderBy: { updatedAt: 'desc' },
+        orderBy: OWN_OFFERS_ORDER_BY,
         skip: request.skip,
         take: request.pageSize,
       }),

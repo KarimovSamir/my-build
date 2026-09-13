@@ -81,6 +81,8 @@ function orderRow(overrides: Partial<{ status: OrderStatus }> = {}) {
       lastName: 'Клиентова',
       city: 'Москва',
       country: 'Россия',
+      email: 'anna@mybuild.test',
+      phone: '+7 900 000-00-00',
     },
     offers: [],
     submissions: [],

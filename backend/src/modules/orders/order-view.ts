@@ -100,6 +100,8 @@ export interface OrderDetailRow extends OrderRow {
     lastName: string | null;
     city: string | null;
     country: string | null;
+    email: string;
+    phone: string;
   };
   files: OrderFileDto[];
   submissions: SubmissionRow[];
@@ -203,8 +205,9 @@ export function toOrderDetail(
     clientCompletionComment: view.isParty ? order.clientCompletionComment : null,
     correctionComment: view.isParty ? order.correctionComment : null,
     updatedAt: order.updatedAt.toISOString(),
-    // Имя и город заказчика — только сторонам сделки. Компания, которая
-    // в заказе не участвует, получает его карточку по любому UUID.
+    // Имя, город и контакты заказчика — только сторонам сделки. Компания,
+    // которая в заказе не участвует, получает его карточку по любому UUID,
+    // и почта с телефоном клиента собирались бы одним циклом по ним.
     client: view.isParty ? order.client : null,
     offers: visibleOffers(order, view),
     files: visibleFiles(order, view),

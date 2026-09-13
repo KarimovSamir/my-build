@@ -8,13 +8,10 @@ import { PageHeader } from "@/components/page-shell";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  completedOrdersText,
-  contractorContacts,
-  contractorLocation,
-} from "@/lib/contractor-view";
+import { contactLinks } from "@/lib/contacts";
+import { completedOrdersText } from "@/lib/contractor-view";
 import { contractorsHref } from "@/lib/contractors-filter";
-import { companyInitial } from "@/lib/format";
+import { companyInitial, formatLocation } from "@/lib/format";
 
 /**
  * Карточка подрядчика (ТЗ §7): название, город, контакты, число завершённых
@@ -26,7 +23,7 @@ import { companyInitial } from "@/lib/format";
  * здесь — ссылки, а не текст.
  */
 export function ContractorProfile({ contractor }: { contractor: ContractorCard }) {
-  const location = contractorLocation(contractor);
+  const location = formatLocation(contractor);
 
   return (
     <>
@@ -50,7 +47,7 @@ export function ContractorProfile({ contractor }: { contractor: ContractorCard }
           </CardHeader>
           <CardContent>
             <dl className="grid gap-4 sm:grid-cols-2">
-              {contractorContacts(contractor).map((contact) => (
+              {contactLinks(contractor).map((contact) => (
                 <Field key={contact.label} label={contact.label}>
                   {contact.href ? (
                     <a

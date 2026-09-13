@@ -5,8 +5,10 @@ import {
   formatArea,
   formatDate,
   formatFileSize,
+  formatLocation,
   formatMoney,
   personInitial,
+  personName,
 } from "./format";
 
 /** Неразрывный пробел — тот же, что ставит `Intl` для русской локали. */
@@ -126,5 +128,33 @@ describe("personInitial", () => {
     // Имя, совпавшее с ОПФ, иначе показывало бы букву фамилии.
     expect(personInitial("Ао Мин")).toBe("А");
     expect(companyInitial("Ао Мин")).toBe("М");
+  });
+});
+
+describe("personName", () => {
+  it("собирает имя и фамилию одной строкой", () => {
+    expect(personName({ firstName: "Анна", lastName: "Клиентова" })).toBe("Анна Клиентова");
+  });
+
+  it("без фамилии обходится именем — лишнего пробела не остаётся", () => {
+    expect(personName({ firstName: "Анна", lastName: null })).toBe("Анна");
+    expect(personName({ firstName: "Анна", lastName: "" })).toBe("Анна");
+  });
+});
+
+describe("formatLocation", () => {
+  it("собирает город и страну одной строкой", () => {
+    expect(formatLocation({ city: "Москва", country: "Россия" })).toBe("Москва, Россия");
+  });
+
+  it("обходится тем, что заполнено", () => {
+    expect(formatLocation({ city: "Казань", country: null })).toBe("Казань");
+    expect(formatLocation({ city: null, country: "Россия" })).toBe("Россия");
+  });
+
+  it("без города и страны даёт null: подпись выбирает экран", () => {
+    expect(formatLocation({ city: null, country: null })).toBeNull();
+    // Пробелы в колонке — это тоже «не указано», а не город с именем из пробела.
+    expect(formatLocation({ city: "  ", country: "" })).toBeNull();
   });
 });

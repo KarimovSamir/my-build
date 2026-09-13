@@ -17,7 +17,16 @@ import { UsersService } from './users.service.js';
 export class UsersController {
   constructor(private readonly users: UsersService) {}
 
+  /**
+   * Читающий маршрут, но тоже под потолком: профиль запрашивает каркас
+   * кабинета на каждом серверном рендере, то есть и на каждый
+   * `router.refresh()` после события сокета. Отсюда лимит уровня
+   * `unread-count`, а не уровня мутаций — иначе он сработал бы на обычной
+   * работе.
+   */
   @Get()
+  @UseGuards(ThrottleGuard)
+  @Throttle({ limit: 240, ttl: 60_000 })
   getProfile(@CurrentUser() user: AuthUser): Promise<UserProfile> {
     return this.users.getProfile(user.id);
   }
