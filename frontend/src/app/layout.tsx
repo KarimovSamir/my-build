@@ -28,6 +28,10 @@ export const metadata: Metadata = {
   description:
     "MyBuild соединяет заказчиков строительных работ со строительными компаниями: заказ, предложения с ценой и сроком, контроль работ и приёмка результата.",
   icons: { icon: "/mybuild-logo.png" },
+  // Демо закрыто от индексации: данные внутри seed'овые и выдуманные, а живёт
+  // оно теперь на поддомене бренда. Вторая половина запрета (robots.txt) - в
+  // `src/app/robots.ts`, там же причина целиком. Снимать только вместе с ним.
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
