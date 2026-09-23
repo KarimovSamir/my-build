@@ -10,6 +10,8 @@
  * заказа, и обе живут там, где их видят оба экрана.
  */
 
+import { pluralRu } from "@/lib/plural";
+
 /**
  * «3 завершённых заказа» — с русской плюрализацией.
  *
@@ -19,25 +21,15 @@
 export function completedOrdersText(count: number): string {
   if (count === 0) return "Пока нет завершённых заказов";
 
-  return `${count} ${pluralizeOrders(count)}`;
+  return `${count} ${pluralRu(count, ORDER_FORMS)}`;
 }
 
-/**
- * Форма «завершённый заказ» по числу.
- *
- * Второй десяток — исключение из общего правила: 11–14 идут с «заказов»,
- * хотя оканчиваются на 1–4.
- */
-function pluralizeOrders(count: number): string {
-  const tail = Math.abs(count) % 100;
-  const last = tail % 10;
-
-  if (tail >= 11 && tail <= 14) return "завершённых заказов";
-  if (last === 1) return "завершённый заказ";
-  if (last >= 2 && last <= 4) return "завершённых заказа";
-
-  return "завершённых заказов";
-}
+/** Правило выбора формы — общее (`lib/plural.ts`), здесь только сами слова. */
+const ORDER_FORMS = [
+  "завершённый заказ",
+  "завершённых заказа",
+  "завершённых заказов",
+] as const;
 
 /**
  * Контакты компании со ссылками (ТЗ §7) живут в общем `lib/contacts.ts`:

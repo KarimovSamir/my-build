@@ -7,22 +7,37 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+
+  /*
+    Три семейства на весь продукт: Manrope — текст, Literata — заголовки
+    экранов и названия сущностей, IBM Plex Mono — служебное (номера заказов,
+    суммы, даты, подписи колонок, надзаголовки). Имена `sans` / `heading` /
+    `mono` — те же, что у пресета shadcn, поэтому `CardTitle` и соседи берут
+    антикву сами, без второго набора утилит.
+  */
+  --font-sans: var(--font-manrope);
+  --font-heading: var(--font-literata);
+  --font-mono: var(--font-plex-mono);
+
+  /* Цвета тёмных полос, которых нет у shadcn, — см. `:root` ниже. */
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-ink-foreground: var(--brand-ink-foreground);
+  --color-brand-ink-muted: var(--brand-ink-muted);
+  --color-brand-ink-accent: var(--brand-ink-accent);
+  --color-brand-ink-highlight: var(--brand-ink-highlight);
+  --color-brand-ink-raised: var(--brand-ink-raised);
+  --color-brand-ink-line: var(--brand-ink-line);
+  --color-brand-grid: var(--brand-grid);
+  --color-brand-surface: var(--brand-surface);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -61,47 +76,77 @@
 }
 
 /*
-  Светлая тема — основная (ТЗ §7): фон светло-серый, карточки белые,
-  акцент — синий blue-600.
+  Светлая тема — основная (ТЗ §7): бумага и терракота из логотипа.
+
+  Цвета заданы в hex, а не в oklch: они взяты пипеткой из утверждённого
+  макета, и перевод в другое пространство сдвинул бы ровно те оттенки,
+  которые согласовывали.
 */
 :root {
-  --background: oklch(0.984 0.003 247.858);
-  --foreground: oklch(0.208 0.042 265.755);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.208 0.042 265.755);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.208 0.042 265.755);
-  --primary: oklch(0.546 0.245 262.881);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.279 0.041 260.031);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.932 0.032 255.585);
-  --accent-foreground: oklch(0.424 0.199 265.638);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.546 0.245 262.881);
-  --chart-1: oklch(0.546 0.245 262.881);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --radius: 0.75rem;
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-primary: oklch(0.546 0.245 262.881);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.424 0.199 265.638);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.546 0.245 262.881);
+  --radius: 0.625rem;
+
+  --background: #faf7f1;
+  --foreground: #221c17;
+  --card: #ffffff;
+  --card-foreground: #221c17;
+  --popover: #ffffff;
+  --popover-foreground: #221c17;
+  --primary: #a94f26;
+  --primary-foreground: #fff7f2;
+  --secondary: #f0eae0;
+  --secondary-foreground: #3e362f;
+  --muted: #f0eae0;
+  /* Темнее макетного #8a7d70: тот давал 3.6–4.0 на бумаге и белом, а мелкий
+     текст по WCAG AA требует 4.5. Этот — около 5 на любой светлой подложке. */
+  --muted-foreground: #74685c;
+  --accent: #f5e6dc;
+  /* Чуть темнее `--primary`: сама терракота на `--accent` даёт 4.49 при норме 4.5. */
+  --accent-foreground: #a04a23;
+  --destructive: #b3261e;
+  --border: #e3dacd;
+  --input: #e3dacd;
+  --ring: #a94f26;
+
+  /* Тёмные полосы (боковое меню, призыв и подвал лендинга) одинаковы в обеих
+     темах — это фирменный цвет блока, а не «фон в тёмной теме». */
+  --brand-ink: #322b25;
+  --brand-ink-foreground: #faf7f1;
+  /* Светлее макетного #a2968a: тот не дотягивал до 4.5 на `--brand-ink-raised`. */
+  --brand-ink-muted: #aa9e92;
+  /* Акцент поверх тёмной полосы: основная терракота на ней почти не читается.
+     Светлее макетного #c4713f — тот давал 3.8 для капители в 11px, а нужно 4.5. */
+  --brand-ink-accent: #d4834f;
+  /* Выделенное слово в заголовке на тёмной полосе — светлее акцента. */
+  --brand-ink-highlight: #e2a077;
+  /* Карточка поверх тёмной полосы и её рамка (панель экранов входа). */
+  --brand-ink-raised: #3a322b;
+  --brand-ink-line: #4a4038;
+  /* Линия чертёжной сетки поверх тёмной полосы. */
+  --brand-ink-grid: #faf7f10d;
+  /* Линия чертёжной сетки в первом экране лендинга. */
+  --brand-grid: #ede5d8;
+  /* Подложка под шапками таблиц и боковыми колонками — чуть теплее карточки. */
+  --brand-surface: #fcfaf6;
+
+  /* Боковое меню тёмное в обеих темах — отсюда и отсутствие своих значений
+     в `.dark`: оно там ровно такое же. */
+  --sidebar: var(--brand-ink);
+  --sidebar-foreground: #c9bdb0;
+  /* Не макетный #8e8378 (3.75 на `--brand-ink`): подписи меню мелкие, им нужно 4.5. */
+  --sidebar-muted-foreground: var(--brand-ink-muted);
+  --sidebar-primary: var(--brand-ink-accent);
+  --sidebar-primary-foreground: #fff7f2;
+  --sidebar-accent: #453b33;
+  --sidebar-accent-foreground: var(--brand-ink-foreground);
+  --sidebar-border: #453b33;
+  --sidebar-ring: var(--brand-ink-accent);
 
   --tone-gray: oklch(0.968 0.007 247.896);
   --tone-gray-foreground: oklch(0.446 0.03 256.802);
   --tone-yellow: oklch(0.962 0.059 95.617);
-  --tone-yellow-foreground: oklch(0.554 0.135 66.442);
+  /* На тон темнее исходного `oklch(0.554 …)`: тот давал на `--tone-yellow`
+     4.42 при норме 4.5 для мелкого текста бейджа (решение пользователя). */
+  --tone-yellow-foreground: oklch(0.53 0.135 66.442);
   --tone-blue: oklch(0.932 0.032 255.585);
   --tone-blue-foreground: oklch(0.488 0.243 264.376);
   --tone-green: oklch(0.962 0.044 156.743);
@@ -111,37 +156,27 @@
 }
 
 .dark {
-  --background: oklch(0.208 0.042 265.755);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.279 0.041 260.031);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.279 0.041 260.031);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.623 0.214 259.815);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.372 0.044 257.287);
-  --accent-foreground: oklch(0.882 0.059 254.128);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.623 0.214 259.815);
-  --chart-1: oklch(0.623 0.214 259.815);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.279 0.041 260.031);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.623 0.214 259.815);
-  --sidebar-primary-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-accent: oklch(0.372 0.044 257.287);
-  --sidebar-accent-foreground: oklch(0.882 0.059 254.128);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  --background: #1a1613;
+  --foreground: #f4eee5;
+  --card: #241e19;
+  --card-foreground: #f4eee5;
+  --popover: #241e19;
+  --popover-foreground: #f4eee5;
+  --primary: #c9743f;
+  --primary-foreground: #1a1613;
+  --secondary: #2c2520;
+  --secondary-foreground: #f4eee5;
+  --muted: #2c2520;
+  --muted-foreground: #a2968a;
+  --accent: #3a2c22;
+  --accent-foreground: #e0a077;
+  --destructive: #e08a86;
+  --border: #ffffff1f;
+  --input: #ffffff2b;
+  --ring: #c9743f;
+
+  --brand-grid: #ffffff12;
+  --brand-surface: #201b17;
 
   --tone-gray: oklch(0.372 0.044 257.287);
   --tone-gray-foreground: oklch(0.869 0.022 252.894);
@@ -153,6 +188,27 @@
   --tone-green-foreground: oklch(0.925 0.084 155.995);
   --tone-red: oklch(0.396 0.141 25.723);
   --tone-red-foreground: oklch(0.885 0.062 18.334);
+}
+
+/*
+ * Чертёжная сетка первого экрана лендинга. Утилита, а не инлайновый стиль:
+ * цвет линии живёт токеном `--brand-grid` и меняется вместе с темой.
+ */
+@utility blueprint-grid {
+  background-image:
+    linear-gradient(var(--brand-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--brand-grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+}
+
+/* Та же сетка поверх тёмной полосы: бумажная линия на ней не видна вовсе. */
+@utility blueprint-grid-ink {
+  background-image:
+    linear-gradient(var(--brand-ink-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--brand-ink-grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
 }
 
 /*

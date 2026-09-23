@@ -1,13 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { AuthHeader } from "@/components/auth/auth-header";
 import { SignOutButton } from "@/components/layout/sign-out-button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { getSessionClaims } from "@/lib/session.server";
 
 export const metadata = { title: "Роль не определена" };
@@ -27,12 +21,10 @@ export default async function NoRolePage() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Роль не определена</CardTitle>
-        <CardDescription>Кабинет открыть не получится</CardDescription>
-      </CardHeader>
-      <CardContent className="text-muted-foreground flex flex-col gap-4 text-sm">
+    <div className="flex flex-col gap-8">
+      <AuthHeader title="Роль не определена" description="Кабинет открыть не получится" />
+
+      <div className="text-secondary-foreground flex flex-col gap-4 text-[0.95rem] leading-relaxed">
         <p>
           Вход выполнен, но в токене нет роли — клиент вы или строительная
           компания. Разделы кабинета у этих ролей разные, поэтому показать
@@ -42,12 +34,12 @@ export default async function NoRolePage() {
           Это ошибка настройки сервиса, а не вашей учётной записи. Если вы
           администратор проекта: включите{" "}
           <strong className="text-foreground">Custom Access Token Hook</strong>{" "}
-          (функция <code>public.custom_access_token_hook</code>) в панели
-          Supabase — Authentication → Hooks.
+          (функция <code className="font-mono text-[0.85rem] break-all">public.custom_access_token_hook</code>)
+          в панели Supabase — Authentication → Hooks.
         </p>
+      </div>
 
-        <SignOutButton label="Выйти" />
-      </CardContent>
-    </Card>
+      <SignOutButton label="Выйти" />
+    </div>
   );
 }

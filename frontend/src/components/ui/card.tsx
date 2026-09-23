@@ -38,7 +38,10 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-title"
       className={cn(
-        "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
+        // 20px антиквой — заголовок блока из утверждённого макета. Живёт здесь,
+        // а не в классах каждой карточки: блоков на карточке заказа десяток,
+        // и набирать их вручную значило бы развести кегли между экранами.
+        "font-heading text-xl leading-snug font-semibold group-data-[size=sm]/card:text-sm",
         className
       )}
       {...props}

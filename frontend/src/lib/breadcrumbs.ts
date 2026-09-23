@@ -63,15 +63,30 @@ export function buildBreadcrumbs(pathname: string, role: Role | null): Crumb[] {
   segments.forEach((segment, index) => {
     const href = `/${segments.slice(0, index + 1).join("/")}`;
     const current = index === segments.length - 1;
+    const section = companySection(href, role);
 
     crumbs.push({
-      label: crumbLabel(segment, segments[index - 1]),
-      href: current || !isReachable(href, role) ? null : href,
+      label: section?.label ?? crumbLabel(segment, segments[index - 1]),
+      href: current ? null : (section?.href ?? href),
       current,
     });
   });
 
   return crumbs;
+}
+
+/**
+ * Раздел «Все заказы» у компании.
+ *
+ * Компания попадает на `/orders/{id}` по своему предложению, но самого раздела
+ * у неё не существует — `proxy.ts` увёл бы её оттуда на ленту. Поэтому крошка
+ * ведёт туда же, что подсвечено в меню на этой странице (`isNavItemActive`):
+ * в «Мои предложения». Разойдись они — шапка и меню называли бы разные места.
+ */
+function companySection(href: string, role: Role | null): { label: string; href: string } | null {
+  if (role !== Role.COMPANY || href !== "/orders") return null;
+
+  return { label: segmentLabels.offers!, href: "/offers" };
 }
 
 function crumbLabel(segment: string, parent: string | undefined): string {
@@ -82,17 +97,6 @@ function crumbLabel(segment: string, parent: string | undefined): string {
   // Идентификатор в подпись не годится, но и назвать его можно только по
   // разделу: раздела нет в списке — показываем сегмент как есть.
   return entityLabels[parent ?? ""] ?? decodeSegment(segment);
-}
-
-/**
- * Разделы, которых у роли нет: их крошка остаётся текстом.
- *
- * Компания попадает на `/orders/{id}` по своему предложению, но самого раздела
- * «Все заказы» у неё не существует — `proxy.ts` увёл бы её оттуда на ленту.
- * Ссылка, которая перекидывает в другой раздел, хуже, чем её отсутствие.
- */
-function isReachable(href: string, role: Role | null): boolean {
-  return !(role === Role.COMPANY && href === "/orders");
 }
 
 /**

@@ -48,28 +48,39 @@ export function CompanyOfferCard({
   const link = hint?.link?.href === `/orders/${order.id}` ? undefined : hint?.link;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex flex-wrap items-center justify-between gap-3">
-          Ваше предложение
-          <OfferStatusBadge status={offer.status} />
-        </CardTitle>
+    // Своё предложение выделено тёплой подложкой: на карточке заказа это
+    // единственный блок про деньги компании, и он обязан находиться взглядом
+    // сразу.
+    <Card className="border-primary/25 bg-accent/30">
+      <CardHeader className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <CardTitle>Ваше предложение</CardTitle>
+        <OfferStatusBadge status={offer.status} />
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-4">
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+      <CardContent className="flex flex-col gap-5">
+        <dl className="flex flex-wrap items-end gap-x-10 gap-y-4">
           <div className="min-w-0">
-            <dt className="text-muted-foreground text-xs">Ваша цена</dt>
-            <dd className="mt-0.5 font-medium">{formatMoney(offer.proposedPrice)}</dd>
+            <dt className="text-muted-foreground font-mono text-[0.6875rem] tracking-[0.12em] uppercase">
+              {isExecutor ? "Цена сделки" : "Ваша цена"}
+            </dt>
+            <dd className="mt-1.5 font-mono text-2xl font-medium">
+              {formatMoney(offer.proposedPrice)}
+            </dd>
           </div>
           <div className="min-w-0">
-            <dt className="text-muted-foreground text-xs">Срок выполнения</dt>
-            <dd className="mt-0.5">{formatDate(offer.proposedDeadline)}</dd>
+            <dt className="text-muted-foreground font-mono text-[0.6875rem] tracking-[0.12em] uppercase">
+              Срок выполнения
+            </dt>
+            <dd className="font-heading mt-1.5 text-lg font-semibold">
+              {formatDate(offer.proposedDeadline)}
+            </dd>
           </div>
         </dl>
 
         {offer.comment ? (
-          <p className="text-sm whitespace-pre-line">{offer.comment}</p>
+          <p className="text-secondary-foreground text-sm leading-relaxed whitespace-pre-line">
+            {offer.comment}
+          </p>
         ) : null}
 
         {hint ? (
@@ -119,7 +130,7 @@ export function SubmitOfferCard({ order }: { order: OrderDetail }) {
       </CardHeader>
 
       <CardContent className="flex flex-col items-start gap-4">
-        <p className="text-muted-foreground text-sm">
+        <p className="text-secondary-foreground text-sm leading-relaxed">
           Вы ещё не предлагались по этому заказу. Укажите цену и срок — клиент
           увидит предложение вместе с остальными.
         </p>

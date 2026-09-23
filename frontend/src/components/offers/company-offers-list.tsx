@@ -1,5 +1,4 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
 
 import {
   DEFAULT_PAGE_SIZE,
@@ -10,7 +9,7 @@ import {
   type Paginated,
 } from "@/lib/types";
 
-import { EmptyCard, OutOfRange, PaginationBar } from "@/components/list-parts";
+import { EmptyCard, ListField, OutOfRange, PaginationBar } from "@/components/list-parts";
 import { OfferDialog } from "@/components/offers/offer-dialog";
 import { WithdrawOfferDialog } from "@/components/offers/withdraw-offer-dialog";
 import { OfferStatusBadge } from "@/components/status-badge";
@@ -93,16 +92,16 @@ function CompanyOfferRow({ offer }: { offer: CompanyOfferItem }) {
   const hint = offerHint(offer.status, order.id);
 
   return (
-    <li className="flex flex-col gap-4 px-4 py-4">
+    <li className="flex flex-col gap-4 px-5 py-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link
             href={`/orders/${order.id}`}
-            className="focus-visible:ring-ring/50 font-medium hover:underline focus-visible:ring-3 focus-visible:outline-none"
+            className="focus-visible:ring-ring/50 font-heading text-base font-semibold hover:underline focus-visible:ring-3 focus-visible:outline-none"
           >
             {order.title}
           </Link>
-          <p className="text-muted-foreground mt-0.5 text-xs">
+          <p className="text-muted-foreground font-mono mt-1 text-xs">
             {orderLabel} · обновлено {formatDate(offer.updatedAt)}
           </p>
         </div>
@@ -110,18 +109,26 @@ function CompanyOfferRow({ offer }: { offer: CompanyOfferItem }) {
         <OfferStatusBadge status={offer.status} />
       </div>
 
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
-        <Field label="Ваша цена">
-          <span className="font-medium">{formatMoney(offer.proposedPrice)}</span>
-        </Field>
-        <Field label="Ваш срок">{formatDate(offer.proposedDeadline)}</Field>
-        <Field label="Бюджет клиента">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+        <ListField label="Ваша цена">
+          <span className="font-mono text-[0.9375rem] font-medium">
+            {formatMoney(offer.proposedPrice)}
+          </span>
+        </ListField>
+        <ListField label="Ваш срок">
+          <span className="font-mono text-[0.9375rem]">
+            {formatDate(offer.proposedDeadline)}
+          </span>
+        </ListField>
+        <ListField label="Бюджет клиента">
           {order.clientBudget ? (
-            formatMoney(order.clientBudget)
+            <span className="font-mono text-[0.9375rem]">
+              {formatMoney(order.clientBudget)}
+            </span>
           ) : (
-            <span className="text-muted-foreground">Не указан</span>
+            <span className="text-muted-foreground text-sm">Не указан</span>
           )}
-        </Field>
+        </ListField>
       </dl>
 
       {offer.comment ? (
@@ -156,11 +163,3 @@ function CompanyOfferRow({ offer }: { offer: CompanyOfferItem }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="mt-0.5">{children}</dd>
-    </div>
-  );
-}

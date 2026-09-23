@@ -1,4 +1,3 @@
-import { FileText, ImageIcon } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -9,6 +8,7 @@ import {
   type Role,
 } from "@/lib/types";
 
+import { FileRow } from "@/components/file-row";
 import { EmptyCard, OutOfRange, PaginationBar } from "@/components/list-parts";
 import { DownloadFileButton } from "@/components/orders/download-file-button";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,6 @@ import {
   isEmptyDocumentsFilter,
   type DocumentsFilter,
 } from "@/lib/documents-filter";
-import { fileKindLabel, isImageMimeType } from "@/lib/file-kind";
-import { formatDate, formatFileSize } from "@/lib/format";
 
 /**
  * Все файлы пользователя одним списком (ТЗ §5, §7).
@@ -101,41 +99,37 @@ function DocumentRow({
   document: DocumentListItem;
   viewer: Role;
 }) {
-  const Icon = isImageMimeType(document.mimeType) ? ImageIcon : FileText;
-
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4">
-      <span className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-md">
-        <Icon className="text-muted-foreground size-4" aria-hidden />
-      </span>
-
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{document.originalName}</p>
-        {/*
-          Тип назван словом, а не только иконкой: иконка различает картинку
-          и документ, а PDF, DWG и DXF в списке выглядели бы одинаково —
-          хотя тип ТЗ §7 требует показывать.
-        */}
-        <p className="text-muted-foreground mt-0.5 text-xs">
-          {fileKindLabel(document.mimeType)} · {formatFileSize(document.sizeBytes)} ·{" "}
-          {formatDate(document.createdAt)} ·{" "}
-          {documentOwnerLabel(document.ownerType, viewer)}
-        </p>
-      </div>
-
+    // Тип файла словом, размер и дата — в общей строке `FileRow`: точно так же
+    // файлы показываются на карточке заказа. Здесь к ним добавляется чей файл:
+    // в разделе он лежит рядом с чужими.
+    <FileRow
+      file={document}
+      extra={documentOwnerLabel(document.ownerType, viewer)}
+      className="px-5 py-4"
+    >
       {/*
         Ссылка на заказ, а не вся строка ссылкой: рядом стоит кнопка
-        скачивания, и вложить её в ссылку нельзя. На узком экране заказ
-        уходит на свою строку — иначе название обрывается на полуслове.
+        скачивания, и вложить её в ссылку нельзя. На узком экране обе уходят
+        на свою строку — иначе имя файла и его свойства сжимаются в колонку
+        шириной в два слова.
       */}
-      <Link
-        href={`/orders/${document.orderId}`}
-        className="hover:text-foreground focus-visible:ring-ring/50 text-muted-foreground order-1 min-w-0 basis-full truncate rounded text-xs underline-offset-4 transition-colors hover:underline focus-visible:ring-3 focus-visible:outline-none sm:order-none sm:basis-auto sm:max-w-3xs"
-      >
-        {formatOrderNumber(document.orderNumber)} · {document.orderTitle}
-      </Link>
+      <span className="order-1 flex w-full items-center justify-between gap-3 sm:order-none sm:w-auto sm:justify-end">
+        <Link
+          href={`/orders/${document.orderId}`}
+          className="hover:text-foreground focus-visible:ring-ring/50 text-secondary-foreground min-w-0 truncate rounded text-sm underline-offset-4 transition-colors hover:underline focus-visible:ring-3 focus-visible:outline-none sm:max-w-3xs"
+        >
+          {/* Разделитель стоит внутри моноширинного куска: иначе он отрывался бы
+              от номера при переносе, а имя ссылки для читалки склеивалось
+              без пробела. */}
+          <span className="font-mono text-xs">
+            {`${formatOrderNumber(document.orderNumber)} · `}
+          </span>
+          {document.orderTitle}
+        </Link>
 
-      <DownloadFileButton fileId={document.id} fileName={document.originalName} />
-    </li>
+        <DownloadFileButton fileId={document.id} fileName={document.originalName} />
+      </span>
+    </FileRow>
   );
 }

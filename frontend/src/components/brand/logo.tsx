@@ -31,22 +31,38 @@ interface LogoProps {
   href?: string;
   className?: string;
   size?: LogoSize;
+  /**
+   * Вариант для тёмных полос (боковое меню, подвал лендинга): вместо картинки
+   * рисуется контурный знак. Файл логотипа наполовину чёрный и на `--brand-ink`
+   * превращается в пятно, поэтому там знак собирается линиями по цвету полосы.
+   */
+  tone?: "default" | "ink";
 }
 
-export function Logo({ href = "/", className, size = "md" }: LogoProps) {
+export function Logo({ href = "/", className, size = "md", tone = "default" }: LogoProps) {
   const { px, image, text } = sizes[size];
 
   const content = (
-    <span className={cn("flex items-center gap-2.5", className)}>
-      <Image
-        src="/mybuild-logo.png"
-        alt=""
-        width={Math.round(px * LOGO_RATIO)}
-        height={px}
-        className={cn("w-auto object-contain", image)}
-        priority
-      />
-      <span className={cn("font-semibold tracking-tight", text)}>MyBuild</span>
+    <span
+      className={cn(
+        "flex items-center gap-2.5",
+        tone === "ink" && "text-brand-ink-foreground",
+        className,
+      )}
+    >
+      {tone === "ink" ? (
+        <InkMark className={cn("w-auto", image)} />
+      ) : (
+        <Image
+          src="/mybuild-logo.png"
+          alt=""
+          width={Math.round(px * LOGO_RATIO)}
+          height={px}
+          className={cn("w-auto object-contain", image)}
+          priority
+        />
+      )}
+      <span className={cn("font-heading font-semibold tracking-tight", text)}>MyBuild</span>
     </span>
   );
 
@@ -56,5 +72,39 @@ export function Logo({ href = "/", className, size = "md" }: LogoProps) {
     <Link href={href} className="focus-visible:ring-ring rounded-md focus-visible:ring-2 focus-visible:outline-none">
       {content}
     </Link>
+  );
+}
+
+/** Кровля и кладка — тот же знак, что на картинке логотипа, но линиями. */
+function InkMark({ className }: { className?: string }) {
+  const bricks = [
+    { x: 9, y: 11.5 },
+    { x: 15, y: 11.5 },
+    { x: 6, y: 16.6 },
+    { x: 12, y: 16.6 },
+    { x: 18, y: 16.6 },
+  ];
+
+  return (
+    <svg viewBox="0 0 30 26" fill="none" className={className} aria-hidden>
+      <path
+        d="M2 24 L14 2 L26 24"
+        stroke="currentColor"
+        strokeWidth="2.3"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      {bricks.map(({ x, y }) => (
+        <rect
+          key={`${x}-${y}`}
+          x={x}
+          y={y}
+          width="5"
+          height="3.4"
+          rx="0.9"
+          className="fill-brand-ink-accent"
+        />
+      ))}
+    </svg>
   );
 }

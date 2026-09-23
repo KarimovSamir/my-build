@@ -1,15 +1,15 @@
 import { ChevronRight, Plus } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
 
 import {
   DEFAULT_PAGE_SIZE,
   formatOrderNumber,
+  objectTypeLabels,
   type OrderListItem,
   type Paginated,
 } from "@/lib/types";
 
-import { EmptyCard, OutOfRange, PaginationBar } from "@/components/list-parts";
+import { EmptyCard, ListField, OutOfRange, PaginationBar } from "@/components/list-parts";
 import { OrderStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -22,9 +22,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { serverApi } from "@/lib/api.server";
-import { formatDate, formatMoney } from "@/lib/format";
+import { companyInitial, formatDate, formatMoney } from "@/lib/format";
 import { isEmptyFilter, ordersHref, type OrdersFilter } from "@/lib/orders-filter";
-import { cn } from "@/lib/utils";
 
 /**
  * Список заказов клиента (ТЗ §7, раздел «Все заказы»).
@@ -35,6 +34,7 @@ import { cn } from "@/lib/utils";
  * остаётся на экране и не теряет фокус ввода.
  *
  * На десктопе — таблица, на мобильном — карточки (ТЗ §7, «Адаптивность»).
+ * Это эталон списка: остальные разделы строятся по нему.
  */
 export async function OrdersList({ filter }: { filter: OrdersFilter }) {
   const page = await serverApi.get<Paginated<OrderListItem>>("/orders", {
@@ -87,15 +87,18 @@ function OrdersTable({ items }: { items: OrderListItem[] }) {
   return (
     <Table>
       <TableHeader>
-        <TableRow className="bg-muted/40 hover:bg-muted/40">
-          <HeadCell>Заказ</HeadCell>
-          <HeadCell>Подрядчик</HeadCell>
-          <HeadCell>Статус</HeadCell>
-          <HeadCell>Бюджет</HeadCell>
-          <HeadCell>Срок</HeadCell>
-          <HeadCell className="w-10">
-            <span className="sr-only">Открыть</span>
-          </HeadCell>
+        {/*
+          Ширины колонок не заданы числами: `w-full` у первой отдаёт ей весь
+          остаток, а остальные сжимаются по содержимому. Фиксированные значения
+          из макета резали название заказа на две строки — самый длинный статус
+          («Ожидание подтверждения выполнения») сам занимает почти 300 px.
+        */}
+        <TableRow className="hover:bg-transparent">
+          <TableHead className="w-full px-5">Заказ</TableHead>
+          <TableHead className="px-5">Подрядчик</TableHead>
+          <TableHead className="px-5">Статус</TableHead>
+          <TableHead className="px-5 text-right">Бюджет</TableHead>
+          <TableHead className="px-5 text-right">Срок</TableHead>
         </TableRow>
       </TableHeader>
 
@@ -104,31 +107,28 @@ function OrdersTable({ items }: { items: OrderListItem[] }) {
           // relative + растянутая ссылка в первой ячейке: по ТЗ §7 кликается
           // вся строка, а вкладывать <a> вокруг <tr> нельзя.
           <TableRow key={order.id} className="relative">
-            <TableCell className="px-4 py-3">
+            <TableCell className="px-5 py-4 whitespace-normal">
               <Link
                 href={`/orders/${order.id}`}
-                className="focus-visible:ring-ring/50 font-medium after:absolute after:inset-0 focus-visible:ring-3 focus-visible:outline-none"
+                className="focus-visible:ring-ring/50 font-heading text-base font-semibold after:absolute after:inset-0 focus-visible:ring-3 focus-visible:outline-none"
               >
                 {order.title}
               </Link>
-              <p className="text-muted-foreground mt-0.5 text-xs">
-                {formatOrderNumber(order.orderNumber)}
+              <p className="text-muted-foreground font-mono mt-1 text-xs">
+                {formatOrderNumber(order.orderNumber)} · {objectTypeLabels[order.objectType]}
               </p>
             </TableCell>
-            <TableCell className="px-4 py-3">
+            <TableCell className="px-5 py-4">
               <Contractor name={order.contractorName} />
             </TableCell>
-            <TableCell className="px-4 py-3">
+            <TableCell className="px-5 py-4">
               <OrderStatusBadge status={order.status} />
             </TableCell>
-            <TableCell className="px-4 py-3">
+            <TableCell className="px-5 py-4 text-right">
               <Money order={order} />
             </TableCell>
-            <TableCell className="text-muted-foreground px-4 py-3">
+            <TableCell className="text-secondary-foreground font-mono px-5 py-4 text-right text-sm">
               {order.deadline ? formatDate(order.deadline) : "—"}
-            </TableCell>
-            <TableCell className="px-4 py-3">
-              <ChevronRight className="text-muted-foreground size-4" aria-hidden />
             </TableCell>
           </TableRow>
         ))}
@@ -142,13 +142,15 @@ function OrderCard({ order }: { order: OrderListItem }) {
     <li>
       <Link
         href={`/orders/${order.id}`}
-        className="hover:bg-muted/50 focus-visible:ring-ring/50 flex flex-col gap-3 px-4 py-4 transition-colors focus-visible:ring-3 focus-visible:outline-none"
+        className="hover:bg-brand-surface focus-visible:ring-ring/50 flex flex-col gap-3.5 px-5 py-5 transition-colors focus-visible:ring-3 focus-visible:outline-none"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate font-medium">{order.title}</p>
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              {formatOrderNumber(order.orderNumber)}
+            {/* Название переносится: обрезанное «Проект перепланировки кварти…»
+                на узком экране теряло ровно то, чем заказы различаются. */}
+            <p className="font-heading text-base font-semibold text-pretty">{order.title}</p>
+            <p className="text-muted-foreground font-mono mt-1 text-xs">
+              {formatOrderNumber(order.orderNumber)} · {objectTypeLabels[order.objectType]}
             </p>
           </div>
           <ChevronRight className="text-muted-foreground mt-1 size-4 shrink-0" aria-hidden />
@@ -156,61 +158,46 @@ function OrderCard({ order }: { order: OrderListItem }) {
 
         <OrderStatusBadge status={order.status} className="self-start" />
 
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-          <Field label="Подрядчик">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          <ListField label="Подрядчик">
             <Contractor name={order.contractorName} />
-          </Field>
-          <Field label="Срок">
-            <span className={order.deadline ? undefined : "text-muted-foreground"}>
+          </ListField>
+          <ListField label="Срок">
+            <span
+              className={
+                order.deadline ? "font-mono text-sm" : "text-muted-foreground"
+              }
+            >
               {order.deadline ? formatDate(order.deadline) : "—"}
             </span>
-          </Field>
-          <Field label="Бюджет">
+          </ListField>
+          <ListField label="Бюджет">
             <Money order={order} />
-          </Field>
+          </ListField>
         </dl>
       </Link>
     </li>
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="mt-0.5">{children}</dd>
-    </div>
-  );
-}
-
-function HeadCell({ className, children }: { className?: string; children: ReactNode }) {
-  return (
-    <TableHead
-      className={cn(
-        "text-muted-foreground px-4 py-2.5 text-xs font-medium tracking-wide uppercase",
-        className,
-      )}
-    >
-      {children}
-    </TableHead>
-  );
-}
-
 /** Подрядчик — компания принятого предложения; до этого его нет. */
 function Contractor({ name }: { name: string | null }) {
   if (!name) {
-    return <span className="text-muted-foreground">Не назначен</span>;
+    return <span className="text-muted-foreground text-sm">Не назначен</span>;
   }
 
   return (
-    <span className="flex min-w-0 items-center gap-2">
+    <span className="flex min-w-0 items-center gap-2.5">
       <span
-        className="bg-accent text-accent-foreground flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium"
+        className="bg-secondary text-secondary-foreground flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
         aria-hidden
       >
-        {name.trim().charAt(0).toUpperCase()}
+        {companyInitial(name)}
       </span>
-      <span className="truncate">{name}</span>
+      {/* В таблице ячейка и так не переносит строк, а в мобильной карточке
+          название обязано переноситься: у всех подрядчиков оно начинается
+          с «ООО «…», и обрезка оставляла от него одну правовую форму. */}
+      <span className="min-w-0 text-sm">{name}</span>
     </span>
   );
 }
@@ -228,13 +215,15 @@ function Money({ order }: { order: OrderListItem }) {
     : [order.clientBudget, "бюджет клиента"];
 
   if (!value) {
-    return <span className="text-muted-foreground">Не указан</span>;
+    return <span className="text-muted-foreground text-sm">Не указан</span>;
   }
 
   return (
     <span className="flex flex-col">
-      <span className="font-medium">{formatMoney(value)}</span>
-      <span className="text-muted-foreground text-xs">{caption}</span>
+      <span className="font-mono text-[0.9375rem] font-medium whitespace-nowrap">
+        {formatMoney(value)}
+      </span>
+      <span className="text-muted-foreground mt-0.5 text-xs">{caption}</span>
     </span>
   );
 }
@@ -268,4 +257,3 @@ function EmptyState({ filter }: { filter: OrdersFilter }) {
     </EmptyCard>
   );
 }
-

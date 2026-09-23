@@ -19,7 +19,15 @@ export function MobileSidebar({ user }: { user: CurrentUser }) {
           <Menu className="size-5" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="bg-sidebar w-64 p-0">
+      {/*
+        Кнопка закрытия у Sheet своя и нарисована светлой темой, а панель
+        здесь тёмная — перекрашиваем её по слоту, иначе на `--brand-ink`
+        получается светлое пятно с тёмным крестиком.
+      */}
+      <SheetContent
+        side="left"
+        className="bg-sidebar w-66 gap-0 p-0 [&_[data-slot=sheet-close]]:text-sidebar-foreground [&_[data-slot=sheet-close]]:hover:bg-sidebar-accent [&_[data-slot=sheet-close]]:hover:text-sidebar-accent-foreground"
+      >
         <SheetTitle className="sr-only">Навигация</SheetTitle>
         <SidebarContent user={user} onNavigate={() => setOpen(false)} />
       </SheetContent>

@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 
 /**
  * Выход из аккаунта.
@@ -17,7 +18,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
  * с подписью: там она единственное осмысленное действие, и прятать её
  * под иконку нельзя.
  */
-export function SignOutButton({ label }: { label?: string }) {
+export function SignOutButton({ label, className }: { label?: string; className?: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
 
@@ -30,7 +31,13 @@ export function SignOutButton({ label }: { label?: string }) {
 
   if (label) {
     return (
-      <Button variant="outline" onClick={signOut} disabled={pending} className="w-full">
+      <Button
+        variant="outline"
+        size="xl"
+        onClick={signOut}
+        disabled={pending}
+        className={cn("w-full", className)}
+      >
         <LogOut className="size-4" />
         {label}
       </Button>
@@ -45,6 +52,7 @@ export function SignOutButton({ label }: { label?: string }) {
       disabled={pending}
       aria-label="Выйти"
       title="Выйти"
+      className={className}
     >
       <LogOut className="size-4" />
     </Button>

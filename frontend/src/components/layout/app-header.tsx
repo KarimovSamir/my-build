@@ -18,7 +18,7 @@ export function AppHeader({ user }: { user: CurrentUser }) {
   const location = [user.city, user.country].filter(Boolean).join(", ");
 
   return (
-    <header className="bg-background/80 border-border sticky top-0 z-10 flex h-16 shrink-0 items-center gap-3 border-b px-4 backdrop-blur lg:px-8">
+    <header className="bg-background/85 border-border sticky top-0 z-10 flex h-18 shrink-0 items-center gap-3 border-b px-4 backdrop-blur lg:px-10">
       <MobileSidebar user={user} />
 
       <div className="min-w-0 flex-1">

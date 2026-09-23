@@ -94,47 +94,66 @@ export function NotificationRow({ notification }: { notification: NotificationDt
   return (
     <li
       className={cn(
-        "flex gap-3 px-4 py-4",
-        // Непрочитанное выделено фоном, а не только жирным заголовком: строку
-        // видно боковым зрением, не вчитываясь.
-        !isRead && "bg-muted/50",
+        "relative flex gap-4 px-5 py-5",
+        // Непрочитанное выделено подложкой и терракотовой полосой слева — той
+        // же, что помечает выбранный пункт бокового меню: строку видно боковым
+        // зрением, не вчитываясь.
+        !isRead && "bg-brand-surface",
       )}
     >
-      <Icon className="text-muted-foreground mt-0.5 size-5 shrink-0" aria-hidden />
+      {!isRead ? (
+        <span aria-hidden className="bg-primary absolute inset-y-0 left-0 w-[3px]" />
+      ) : null}
+
+      <span
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-lg border",
+          isRead
+            ? "bg-brand-surface text-muted-foreground"
+            : "bg-accent text-accent-foreground border-transparent",
+        )}
+      >
+        <Icon className="size-[1.125rem]" aria-hidden />
+      </span>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
+        {/* Пометка идёт сразу за заголовком, а не прижата к правому краю:
+            на широком экране она оказывалась в метре от того, к чему
+            относится. */}
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           {href ? (
             <Link
               href={href}
               onClick={() => void markRead(false)}
-              className={cn(
-                "focus-visible:ring-ring/50 hover:underline focus-visible:ring-3 focus-visible:outline-none",
-                !isRead && "font-medium",
-              )}
+              className="focus-visible:ring-ring/50 font-heading text-base font-semibold hover:underline focus-visible:ring-3 focus-visible:outline-none"
             >
               {notification.title}
             </Link>
           ) : (
             // Заказа больше нет — вести некуда, но сама запись остаётся
             // в истории (ТЗ §8).
-            <span className={cn(!isRead && "font-medium")}>{notification.title}</span>
+            <span className="font-heading text-base font-semibold">
+              {notification.title}
+            </span>
           )}
 
+          {/*
+            Пометка словом, а не точкой: точка была `aria-hidden`, то есть
+            читалке о непрочитанном не говорило вообще ничто.
+          */}
           {!isRead ? (
-            <span
-              aria-hidden
-              className="bg-primary mt-2 size-2 shrink-0 rounded-full"
-            />
+            <span className="text-primary font-mono text-[0.6875rem] tracking-[0.12em] uppercase">
+              Новое
+            </span>
           ) : null}
         </div>
 
         {notification.body ? (
-          <p className="text-muted-foreground mt-1 text-sm">{notification.body}</p>
+          <p className="text-muted-foreground mt-1.5 text-sm">{notification.body}</p>
         ) : null}
 
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-          <p className="text-muted-foreground text-xs">
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="text-muted-foreground font-mono text-xs">
             {formatDate(notification.createdAt)}
           </p>
 

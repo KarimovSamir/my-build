@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Field, FormError, FormSuccess } from "@/components/form-parts";
+import { PasswordInput } from "@/components/password-input";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -116,7 +117,7 @@ export function RegisterForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       <Field id="role" label="Кто вы" required>
         <Select value={role} onValueChange={(value) => setRole(value as Role)}>
           <SelectTrigger id="role" className="w-full">
@@ -145,7 +146,7 @@ export function RegisterForm() {
         />
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2">
         <Field
           id="firstName"
           name="firstName"
@@ -174,7 +175,7 @@ export function RegisterForm() {
         required
       />
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2">
         <Field
           id="city"
           name="city"
@@ -201,12 +202,12 @@ export function RegisterForm() {
         required
       />
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2">
         <Field
           id="password"
           name="password"
-          type="password"
           label="Пароль"
+          inputAs={PasswordInput}
           autoComplete="new-password"
           hint={`Минимум ${MIN_PASSWORD_LENGTH} символов`}
           required
@@ -214,8 +215,8 @@ export function RegisterForm() {
         <Field
           id="passwordConfirm"
           name="passwordConfirm"
-          type="password"
           label="Пароль ещё раз"
+          inputAs={PasswordInput}
           autoComplete="new-password"
           required
         />
@@ -223,7 +224,7 @@ export function RegisterForm() {
 
       {error ? <FormError>{error}</FormError> : null}
 
-      <Button type="submit" disabled={pending} className="w-full">
+      <Button type="submit" size="xl" disabled={pending} className="mt-1 w-full">
         {pending ? "Создаём аккаунт…" : "Зарегистрироваться"}
       </Button>
     </form>

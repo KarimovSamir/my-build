@@ -57,7 +57,14 @@ export function OrderSelect({
 
   return (
     <div className="flex w-full flex-col gap-2 sm:max-w-sm">
-      <Label htmlFor="documents-order">Заказ</Label>
+      {/* Подпись — той же моноширинной капителью, что подписи колонок и полей
+          в строках списков: это служебная разметка, а не текст экрана. */}
+      <Label
+        htmlFor="documents-order"
+        className="text-muted-foreground font-mono text-[0.6875rem] font-normal tracking-[0.12em] uppercase"
+      >
+        Заказ
+      </Label>
 
       {/* `name` нужен скрытому полю, которое рендерит Radix: без имени
           браузер помечает его как ошибку разметки. */}

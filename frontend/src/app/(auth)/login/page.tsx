@@ -1,8 +1,6 @@
-import Link from "next/link";
-
-import { FormError } from "@/components/form-parts";
+import { AuthHeader } from "@/components/auth/auth-header";
 import { LoginForm } from "@/components/auth/login-form";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FormError } from "@/components/form-parts";
 import { safeNextPath } from "@/lib/redirects";
 
 export const metadata = { title: "Вход" };
@@ -11,32 +9,14 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const { next, error } = await searchParams;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Вход</CardTitle>
-        <CardDescription>Войдите, чтобы продолжить работу с заказами</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {error === "link" ? (
-          <FormError>
-            Ссылка из письма не сработала: она уже использована или устарела.
-          </FormError>
-        ) : null}
+    <div className="flex flex-col gap-8">
+      <AuthHeader title="С возвращением" description="Войдите, чтобы вернуться к своим заказам" />
 
-        <LoginForm next={safeNextPath(next)} />
+      {error === "link" ? (
+        <FormError>Ссылка из письма не сработала: она уже использована или устарела.</FormError>
+      ) : null}
 
-        <div className="text-muted-foreground flex flex-col gap-1 text-sm">
-          <Link href="/forgot-password" className="text-primary hover:underline">
-            Забыли пароль?
-          </Link>
-          <p>
-            Нет аккаунта?{" "}
-            <Link href="/register" className="text-primary font-medium hover:underline">
-              Зарегистрироваться
-            </Link>
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+      <LoginForm next={safeNextPath(next)} />
+    </div>
   );
 }

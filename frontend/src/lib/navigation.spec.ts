@@ -47,26 +47,40 @@ describe("getNavigation", () => {
 });
 
 describe("isNavItemActive", () => {
+  const ORDER = "/orders/6f1c7a0e-0000-4000-8000-000000000001";
+
   it("«Все заказы» подсвечиваются на списке и на странице заказа", () => {
-    expect(isNavItemActive("/orders", "/orders")).toBe(true);
-    expect(isNavItemActive("/orders", "/orders/6f1c7a0e-0000-4000-8000-000000000001")).toBe(true);
+    expect(isNavItemActive("/orders", "/orders", Role.CLIENT)).toBe(true);
+    expect(isNavItemActive("/orders", ORDER, Role.CLIENT)).toBe(true);
   });
 
   it("«Все заказы» не подсвечиваются на создании заказа", () => {
     // Иначе подсвечены сразу два пункта меню.
-    expect(isNavItemActive("/orders", "/orders/new")).toBe(false);
-    expect(isNavItemActive("/orders/new", "/orders/new")).toBe(true);
-    expect(isNavItemActive("/orders/new", "/orders")).toBe(false);
+    expect(isNavItemActive("/orders", "/orders/new", Role.CLIENT)).toBe(false);
+    expect(isNavItemActive("/orders/new", "/orders/new", Role.CLIENT)).toBe(true);
+    expect(isNavItemActive("/orders/new", "/orders", Role.CLIENT)).toBe(false);
+  });
+
+  it("у компании на карточке заказа подсвечиваются «Мои предложения»", () => {
+    // Раздела `/orders` в её меню нет, и без этой ветки на карточке заказа
+    // не подсвечено вообще ничего.
+    expect(isNavItemActive("/offers", ORDER, Role.COMPANY)).toBe(true);
+    expect(isNavItemActive("/available", ORDER, Role.COMPANY)).toBe(false);
+  });
+
+  it("у клиента «Мои предложения» не подсвечиваются нигде", () => {
+    // Раздел чужой: правило про карточку заказа действует только для компании.
+    expect(isNavItemActive("/offers", ORDER, Role.CLIENT)).toBe(false);
   });
 
   it("обычный раздел подсвечивается на себе и на вложенных путях", () => {
-    expect(isNavItemActive("/documents", "/documents")).toBe(true);
-    expect(isNavItemActive("/documents", "/documents/123")).toBe(true);
+    expect(isNavItemActive("/documents", "/documents", Role.CLIENT)).toBe(true);
+    expect(isNavItemActive("/documents", "/documents/123", Role.CLIENT)).toBe(true);
   });
 
   it("чужой раздел не подсвечивается", () => {
-    expect(isNavItemActive("/documents", "/notifications")).toBe(false);
+    expect(isNavItemActive("/documents", "/notifications", Role.CLIENT)).toBe(false);
     // Совпадение по началу строки не считается: `/offers` ≠ `/offers-archive`.
-    expect(isNavItemActive("/offers", "/offers-archive")).toBe(false);
+    expect(isNavItemActive("/offers", "/offers-archive", Role.COMPANY)).toBe(false);
   });
 });

@@ -70,8 +70,8 @@ export async function OrderFilter({
 export function OrderFilterSkeleton() {
   return (
     <div className="flex w-full flex-col gap-2 sm:max-w-sm">
-      <Skeleton className="h-4 w-12" />
-      <Skeleton className="h-9 w-full" />
+      <Skeleton className="h-3 w-12" />
+      <Skeleton className="h-11 w-full" />
     </div>
   );
 }

@@ -1,6 +1,3 @@
-import { Building2 } from "lucide-react";
-import type { ReactNode } from "react";
-
 import type { OfferDto } from "@/lib/types";
 
 import {
@@ -9,9 +6,12 @@ import {
 } from "@/components/orders/offer-decision-dialogs";
 import { OfferStatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDate, formatMoney } from "@/lib/format";
+import { companyInitial, formatDate, formatMoney } from "@/lib/format";
 import { offerDate } from "@/lib/offer-view";
 import type { OrderClientActions } from "@/lib/order-actions";
+import { pluralRu } from "@/lib/plural";
+
+const COMPANY_FORMS = ["компания", "компании", "компаний"] as const;
 
 /**
  * Предложения компаний глазами клиента (ТЗ §4.1).
@@ -35,44 +35,44 @@ export function OrderOffersCard({
     return <ExecutorCard offer={actions.executorOffer} />;
   }
 
+  const count = actions.decisions.length;
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>
-          Предложения компаний
-          {actions.decisions.length > 0 ? (
-            <span className="text-muted-foreground font-normal">
-              {" "}
-              · {actions.decisions.length}
-            </span>
-          ) : null}
-        </CardTitle>
+      <CardHeader className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <CardTitle>Предложения</CardTitle>
+        {count > 0 ? (
+          <span className="text-muted-foreground text-sm">
+            {count} {pluralRu(count, COMPANY_FORMS)} · выбрать можно одну
+          </span>
+        ) : null}
       </CardHeader>
 
       <CardContent>
-        {actions.decisions.length === 0 ? (
+        {count === 0 ? (
           <p className="text-muted-foreground text-sm">
             Предложений пока нет. Компании видят заказ в ленте и присылают свою
             цену и срок — вы получите уведомление.
           </p>
         ) : (
-          <ul className="divide-border divide-y">
+          <ul className="flex flex-col gap-3.5">
             {actions.decisions.map(({ offer, canAccept, canReject }) => (
-              <li key={offer.id} className="flex flex-col gap-4 py-4 first:pt-0 last:pb-0">
+              <li key={offer.id} className="rounded-xl border px-5 py-5">
                 <OfferHead offer={offer} />
-                <OfferTerms offer={offer} />
 
                 {offer.comment ? (
-                  <p className="text-sm whitespace-pre-line">{offer.comment}</p>
+                  <p className="text-secondary-foreground mt-3.5 text-sm leading-relaxed whitespace-pre-line">
+                    {offer.comment}
+                  </p>
                 ) : null}
 
                 {canAccept || canReject ? (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="mt-4 flex flex-wrap items-center gap-2.5">
                     {canAccept ? (
                       <AcceptOfferDialog
                         orderId={orderId}
                         offer={offer}
-                        rivals={actions.decisions.length - 1}
+                        rivals={count - 1}
                       />
                     ) : null}
                     {canReject ? <RejectOfferDialog offer={offer} /> : null}
@@ -91,69 +91,63 @@ export function OrderOffersCard({
 function ExecutorCard({ offer }: { offer: OfferDto }) {
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <CardTitle>Принятое предложение</CardTitle>
+        <OfferStatusBadge status={offer.status} />
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-4">
-        <OfferHead offer={offer} withStatus />
-        <OfferTerms offer={offer} />
+      <CardContent>
+        <OfferHead offer={offer} />
 
         {offer.comment ? (
-          <p className="text-sm whitespace-pre-line">{offer.comment}</p>
+          <p className="text-secondary-foreground mt-3.5 text-sm leading-relaxed whitespace-pre-line">
+            {offer.comment}
+          </p>
         ) : null}
       </CardContent>
     </Card>
   );
 }
 
-function OfferHead({
-  offer,
-  withStatus = false,
-}: {
-  offer: OfferDto;
-  /** Статус нужен только у принятого: у ждущих выбора он у всех одинаковый. */
-  withStatus?: boolean;
-}) {
+/**
+ * Шапка предложения: кто предложил — слева, за сколько и к какому сроку —
+ * справа. Цена крупная и моноширинная: по ней предложения и сравнивают.
+ */
+function OfferHead({ offer }: { offer: OfferDto }) {
   // Изменённое предложение подписывается датой изменения: цена и срок
   // в строке уже новые, а `createdAt` относился бы к прежним условиям.
   const date = offerDate(offer);
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="bg-muted flex size-9 shrink-0 items-center justify-center rounded-md">
-          <Building2 className="text-muted-foreground size-4" aria-hidden />
+    <div className="flex flex-wrap items-start justify-between gap-x-5 gap-y-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          className="bg-secondary text-secondary-foreground font-heading flex size-11 shrink-0 items-center justify-center rounded-full text-base font-semibold"
+          aria-hidden
+        >
+          {companyInitial(offer.companyName)}
         </span>
-        <span className="min-w-0">
-          <span className="block font-medium">{offer.companyName}</span>
-          <span className="text-muted-foreground text-xs">
+        <div className="min-w-0">
+          <p className="font-heading text-[1.0625rem] font-semibold">
+            {offer.companyName}
+          </p>
+          <p className="text-muted-foreground mt-0.5 font-mono text-xs">
             {date.label} {formatDate(date.iso)}
-          </span>
-        </span>
+          </p>
+        </div>
       </div>
 
-      {withStatus ? <OfferStatusBadge status={offer.status} /> : null}
-    </div>
-  );
-}
-
-function OfferTerms({ offer }: { offer: OfferDto }) {
-  return (
-    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-      <Term label="Цена">
-        <span className="font-medium">{formatMoney(offer.proposedPrice)}</span>
-      </Term>
-      <Term label="Срок выполнения">{formatDate(offer.proposedDeadline)}</Term>
-    </dl>
-  );
-}
-
-function Term({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="mt-0.5">{children}</dd>
+      {/* Вправо — только когда цена стоит в одной строке с компанией. На узком
+          экране блок уходит на свою строку, и выравнивание вправо внутри него
+          сдвигало цену относительно более длинной строки срока. */}
+      <div className="sm:text-right">
+        <p className="font-mono text-xl font-medium whitespace-nowrap">
+          {formatMoney(offer.proposedPrice)}
+        </p>
+        <p className="text-muted-foreground mt-0.5 font-mono text-xs whitespace-nowrap">
+          срок до {formatDate(offer.proposedDeadline)}
+        </p>
+      </div>
     </div>
   );
 }

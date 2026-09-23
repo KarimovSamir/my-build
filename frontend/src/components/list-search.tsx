@@ -70,9 +70,9 @@ export function ListSearch({
   }
 
   return (
-    <div className="relative w-full sm:max-w-sm">
+    <div className="relative w-full sm:max-w-md">
       <Search
-        className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+        className="text-muted-foreground pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2"
         aria-hidden
       />
       <Input
@@ -86,7 +86,9 @@ export function ListSearch({
         onChange={(event) => handleChange(event.target.value)}
         aria-label={label}
         placeholder={placeholder}
-        className="h-10 pl-9"
+        // Высота и подложка приходят из `ui/input`: здесь только место
+        // под значок лупы слева.
+        className="pl-10"
       />
     </div>
   );

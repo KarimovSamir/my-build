@@ -24,13 +24,17 @@ export default async function SettingsPage() {
     <>
       <PageHeader title="Настройки" description="Профиль и безопасность" />
 
-      <ProfileForm profile={user} />
-      <AccountCard profile={user} />
-      <PasswordForm email={user.email} />
+      {/* Ширина ограничена: поле ввода во весь экран читается хуже, чем
+          строка в 700 px, — колонка формы на макете ровно такая. */}
+      <div className="flex max-w-3xl flex-col gap-6">
+        <ProfileForm profile={user} />
+        <AccountCard profile={user} />
+        <PasswordForm email={user.email} />
 
-      <ComingSoon title="Платежи" phase="одном из следующих релизов">
-        Карты и оплата заказов онлайн
-      </ComingSoon>
+        <ComingSoon title="Платежи" phase="одном из следующих релизов">
+          Карты и оплата заказов онлайн
+        </ComingSoon>
+      </div>
     </>
   );
 }

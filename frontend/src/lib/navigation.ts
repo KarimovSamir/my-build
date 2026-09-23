@@ -100,13 +100,25 @@ export function getHomeHref(role: Role | null): string {
   return SESSION_ISSUE_PAGES.missingRole;
 }
 
+/** Карточка заказа: `/orders/<id>`, но не `/orders/new`. */
+const ORDER_DETAIL = /^\/orders\/(?!new$)[^/]+$/;
+
 /**
  * Активен ли пункт меню для текущего пути.
- * `/orders` не должен подсвечиваться, когда открыт `/orders/new`.
+ *
+ * Два случая, которые не сводятся к сравнению строк:
+ * - `/orders` не подсвечивается на `/orders/new` — иначе подсвечены два пункта;
+ * - карточка заказа `/orders/<id>` общая для обеих ролей, но в меню компании
+ *   раздела `/orders` нет. Подсвечиваем ей «Мои предложения»: заказ она видит
+ *   именно оттуда, и без этого на карточке не подсвечено вообще ничего.
  */
-export function isNavItemActive(href: string, pathname: string): boolean {
+export function isNavItemActive(href: string, pathname: string, role: Role): boolean {
   if (href === "/orders") {
-    return pathname === "/orders" || /^\/orders\/(?!new$)[^/]+$/.test(pathname);
+    return pathname === "/orders" || ORDER_DETAIL.test(pathname);
+  }
+
+  if (href === "/offers" && role === Role.COMPANY && ORDER_DETAIL.test(pathname)) {
+    return true;
   }
 
   return pathname === href || pathname.startsWith(`${href}/`);

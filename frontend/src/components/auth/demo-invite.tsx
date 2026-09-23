@@ -1,7 +1,5 @@
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-
-import { Button } from "@/components/ui/button";
 
 /**
  * Приглашение в демо на экране регистрации.
@@ -13,24 +11,29 @@ import { Button } from "@/components/ui/button";
  */
 export function DemoInvite() {
   return (
-    <section className="border-border bg-muted/40 flex flex-col gap-2 rounded-xl border p-4">
-      <h2 className="flex items-center gap-2 text-sm font-medium">
-        <Sparkles className="text-primary size-4 shrink-0" aria-hidden />
+    <section
+      aria-labelledby="demo-invite"
+      className="border-border bg-brand-surface flex flex-col gap-2 rounded-xl border border-l-[3px] border-l-primary px-4.5 py-4"
+    >
+      <h2
+        id="demo-invite"
+        className="text-primary font-mono text-[11px] font-normal tracking-[0.12em] uppercase"
+      >
         Просто посмотреть?
       </h2>
 
-      <p className="text-muted-foreground text-xs">
-        На странице входа есть готовые демо-аккаунты клиента и компаний —
-        с заказами, предложениями и уведомлениями. Новая же учётная запись
-        открывается пустой: заказы в ней придётся создавать самому.
+      <p className="text-secondary-foreground text-[0.9rem] leading-relaxed">
+        На странице входа есть готовые аккаунты клиента и компаний — с заказами,
+        предложениями и уведомлениями. Новая учётная запись открывается пустой.
       </p>
 
-      <Button asChild variant="outline" size="sm" className="w-fit">
-        <Link href="/login">
-          Войти в демо-аккаунт
-          <ArrowRight className="size-4" aria-hidden />
-        </Link>
-      </Button>
+      <Link
+        href="/login"
+        className="text-primary focus-visible:ring-ring inline-flex w-fit items-center gap-1.5 rounded-sm text-[0.9rem] font-semibold hover:underline focus-visible:ring-2 focus-visible:outline-none"
+      >
+        Войти в демо-аккаунт
+        <ArrowRight className="size-4" aria-hidden />
+      </Link>
     </section>
   );
 }

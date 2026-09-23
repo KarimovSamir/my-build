@@ -1,13 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { AuthHeader } from "@/components/auth/auth-header";
 import { SignOutButton } from "@/components/layout/sign-out-button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { getSessionClaims } from "@/lib/session.server";
 
 export const metadata = { title: "Подтвердите email" };
@@ -27,20 +21,19 @@ export default async function VerifyEmailPage() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Подтвердите email</CardTitle>
-        <CardDescription>
-          Кабинет откроется после подтверждения адреса
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="text-muted-foreground flex flex-col gap-4 text-sm">
+    <div className="flex flex-col gap-8">
+      <AuthHeader
+        title="Подтвердите email"
+        description="Кабинет откроется после подтверждения адреса"
+      />
+
+      <div className="text-secondary-foreground flex flex-col gap-4 text-[0.95rem] leading-relaxed">
         <p>
           Мы отправили письмо со ссылкой
           {claims.email ? (
             <>
               {" "}
-              на <strong className="text-foreground">{claims.email}</strong>
+              на <strong className="text-foreground font-mono text-[0.9rem] font-medium">{claims.email}</strong>
             </>
           ) : null}
           . Перейдите по ней — и вернитесь сюда.
@@ -49,9 +42,9 @@ export default async function VerifyEmailPage() {
           Письма нет? Проверьте папку «Спам». Если письмо не приходит,
           зарегистрируйтесь заново или обратитесь в поддержку.
         </p>
+      </div>
 
-        <SignOutButton label="Выйти" />
-      </CardContent>
-    </Card>
+      <SignOutButton label="Выйти" />
+    </div>
   );
 }

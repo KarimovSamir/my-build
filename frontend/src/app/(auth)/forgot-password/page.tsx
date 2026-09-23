@@ -1,29 +1,23 @@
-import Link from "next/link";
-
+import { AuthHeader, AuthLink, AuthSwitch } from "@/components/auth/auth-header";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = { title: "Восстановление пароля" };
 
 export default function ForgotPasswordPage() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Восстановление пароля</CardTitle>
-        <CardDescription>
-          Укажите email, и мы пришлём ссылку для установки нового пароля
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+    <div className="flex flex-col gap-8">
+      <AuthHeader
+        title="Восстановление пароля"
+        description="Укажите email, и мы пришлём ссылку для установки нового пароля"
+      />
+
+      <div className="flex flex-col gap-5">
         <ForgotPasswordForm />
 
-        <p className="text-muted-foreground text-sm">
-          Вспомнили пароль?{" "}
-          <Link href="/login" className="text-primary font-medium hover:underline">
-            Войти
-          </Link>
-        </p>
-      </CardContent>
-    </Card>
+        <AuthSwitch>
+          Вспомнили пароль? <AuthLink href="/login">Войти</AuthLink>
+        </AuthSwitch>
+      </div>
+    </div>
   );
 }

@@ -8,7 +8,7 @@ export default function NewOrderPage() {
     <>
       <PageHeader
         title="Создать заказ"
-        description="Опишите проект — компании пришлют предложения с ценой и сроком"
+        description="Опишите работы один раз — дальше компании присылают цену и срок"
       />
       <NewOrderForm />
     </>

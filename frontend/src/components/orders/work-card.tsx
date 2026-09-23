@@ -46,15 +46,29 @@ export function WorkCard({
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <CardTitle>Ваша работа по заказу</CardTitle>
+        {/* Номер сдачи служебный, поэтому моноширинным: он нужен, чтобы
+            сверяться с историей сдач ниже. */}
+        <span className="text-muted-foreground font-mono text-xs">
+          сдача №{nextRound} · {submissions.open ? "открыта" : "новая"}
+        </span>
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-4">
-        {hint ? <p className="text-sm">{hint}</p> : null}
+      <CardContent className="flex flex-col gap-5">
+        {hint ? (
+          // В тёмной теме `--tone-yellow` — насыщенный янтарь: на бейдже
+          // статуса он читается, а плашкой во всю ширину перекрикивает
+          // и заголовок, и кнопку. Отсюда приглушение только в тёмной.
+          // Текст — основным цветом, а не жёлтым тона: в светлой теме тот
+          // на своей плашке даёт 4.4 при норме 4.5 для обычного текста.
+          <p className="bg-tone-yellow text-foreground rounded-lg px-4 py-3.5 text-sm leading-relaxed dark:bg-tone-yellow/25">
+            {hint}
+          </p>
+        ) : null}
 
         {hasActions ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2.5">
             {actions.canAddFiles ? (
               <AddWorkFilesDialog
                 orderId={order.id}

@@ -5,8 +5,10 @@ import { useState, type FormEvent } from "react";
 
 import { DEMO_PASSWORD, type DemoAccount } from "@/lib/types";
 
+import { AuthLink, AuthSwitch } from "@/components/auth/auth-header";
 import { DemoAccounts } from "@/components/auth/demo-accounts";
 import { Field, FormError } from "@/components/form-parts";
+import { PasswordInput } from "@/components/password-input";
 import { Button } from "@/components/ui/button";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { resolveAfterAuthHref } from "@/lib/auth-redirect";
@@ -65,38 +67,45 @@ export function LoginForm({ next }: { next: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <Field
-          id="email"
-          name="email"
-          type="email"
-          label="Email"
-          autoComplete="email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          disabled={pending}
-          required
-        />
-        <Field
-          id="password"
-          name="password"
-          type="password"
-          label="Пароль"
-          autoComplete="current-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          disabled={pending}
-          required
-        />
+    <div className="flex flex-col gap-9">
+      <div className="flex flex-col gap-5">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          <Field
+            id="email"
+            name="email"
+            type="email"
+            label="Email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            disabled={pending}
+            required
+          />
+          <Field
+            id="password"
+            name="password"
+            label="Пароль"
+            labelAside={<AuthLink href="/forgot-password">Забыли пароль?</AuthLink>}
+            inputAs={PasswordInput}
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            disabled={pending}
+            required
+          />
 
-        {error ? <FormError>{error}</FormError> : null}
+          {error ? <FormError>{error}</FormError> : null}
 
-        <Button type="submit" disabled={pending} className="w-full">
-          {pending ? "Входим…" : "Войти"}
-        </Button>
-      </form>
+          <Button type="submit" size="xl" disabled={pending} className="mt-1 w-full">
+            {pending ? "Входим…" : "Войти"}
+          </Button>
+        </form>
+
+        <AuthSwitch>
+          Нет аккаунта? <AuthLink href="/register">Зарегистрироваться</AuthLink>
+        </AuthSwitch>
+      </div>
 
       <DemoAccounts onPick={handleDemo} pending={pending} />
     </div>

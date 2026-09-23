@@ -17,8 +17,8 @@ export default function ContractorNotFound() {
     <Card>
       <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
         <div>
-          <p className="font-medium">Подрядчик не найден</p>
-          <p className="text-muted-foreground mt-1 text-sm">
+          <p className="font-heading text-base font-semibold">Подрядчик не найден</p>
+          <p className="text-muted-foreground mt-1.5 text-sm">
             Возможно, компания удалила профиль или ссылка ведёт не туда.
           </p>
         </div>

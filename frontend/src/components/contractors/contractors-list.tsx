@@ -87,17 +87,22 @@ function ContractorRow({ contractor }: { contractor: ContractorListItem }) {
       */}
       <Link
         href={`/contractors/${contractor.id}`}
-        className="hover:bg-muted/50 focus-visible:ring-ring/50 flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-4 transition-colors focus-visible:ring-3 focus-visible:outline-none"
+        className="hover:bg-brand-surface focus-visible:ring-ring/50 flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-4.5 transition-colors focus-visible:ring-3 focus-visible:outline-none"
       >
-        <Avatar className="size-10 shrink-0">
-          <AvatarFallback className="bg-primary text-primary-foreground font-medium">
+        <Avatar className="size-11 shrink-0">
+          <AvatarFallback className="bg-secondary text-secondary-foreground font-heading text-base font-semibold">
             {companyInitial(contractor.companyName)}
           </AvatarFallback>
         </Avatar>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{contractor.companyName}</p>
-          <p className="text-muted-foreground mt-0.5 truncate text-xs">
+          {/* Название и город переносятся, а не обрезаются: у всех названий
+              одно начало «ООО «…», и многоточие съедало ту часть, по которой
+              компании и различаются. */}
+          <p className="font-heading text-base font-semibold text-pretty">
+            {contractor.companyName}
+          </p>
+          <p className="text-muted-foreground mt-1 font-mono text-xs">
             {location ?? "Город не указан"}
           </p>
         </div>
@@ -106,7 +111,7 @@ function ContractorRow({ contractor }: { contractor: ContractorListItem }) {
           На узком экране счётчик уходит на свою строку целиком: в одну строку
           с городом он не помещался и обрывался многоточием на полуслове.
         */}
-        <span className="text-muted-foreground order-1 basis-full text-xs sm:order-none sm:basis-auto">
+        <span className="text-secondary-foreground order-1 basis-full text-sm sm:order-none sm:basis-auto">
           {completedOrdersText(contractor.completedOrdersCount)}
         </span>
 

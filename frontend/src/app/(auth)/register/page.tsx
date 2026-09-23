@@ -1,32 +1,28 @@
-import Link from "next/link";
-
+import { AuthHeader, AuthLink, AuthSwitch } from "@/components/auth/auth-header";
 import { DemoInvite } from "@/components/auth/demo-invite";
 import { RegisterForm } from "@/components/auth/register-form";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = { title: "Регистрация" };
 
 export default function RegisterPage() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Регистрация</CardTitle>
-        <CardDescription>
-          Выберите роль: клиент размещает заказы, компания на них отвечает
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+    <div className="flex flex-col gap-8">
+      <AuthHeader
+        title="Регистрация"
+        description="Клиент размещает заказы, строительная компания на них отвечает"
+      />
+
+      {/* Приглашение в демо — до формы: посетителю, который пришёл только
+          посмотреть, незачем пролистывать десять полей, чтобы узнать об этом. */}
+      <DemoInvite />
+
+      <div className="flex flex-col gap-5">
         <RegisterForm />
 
-        <DemoInvite />
-
-        <p className="text-muted-foreground text-sm">
-          Уже есть аккаунт?{" "}
-          <Link href="/login" className="text-primary font-medium hover:underline">
-            Войти
-          </Link>
-        </p>
-      </CardContent>
-    </Card>
+        <AuthSwitch>
+          Уже есть аккаунт? <AuthLink href="/login">Войти</AuthLink>
+        </AuthSwitch>
+      </div>
+    </div>
   );
 }

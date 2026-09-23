@@ -44,7 +44,9 @@ export function CompletionCard({
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4">
-        {hint ? <p className="text-sm">{hint}</p> : null}
+        {hint ? (
+          <p className="text-secondary-foreground text-sm leading-relaxed">{hint}</p>
+        ) : null}
 
         {order.correctionComment ? (
           <Note label="Отправлено на доработку">{order.correctionComment}</Note>
@@ -73,9 +75,11 @@ export function CompletionCard({
 
 function Note({ label, children }: { label: string; children: string }) {
   return (
-    <div className="border-border bg-muted/40 rounded-lg border p-3">
-      <p className="text-muted-foreground text-xs">{label}</p>
-      <p className="mt-1 text-sm whitespace-pre-line">{children}</p>
+    <div className="bg-brand-surface rounded-xl border px-4 py-3.5">
+      <p className="text-muted-foreground font-mono text-[0.6875rem] tracking-[0.12em] uppercase">
+        {label}
+      </p>
+      <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-line">{children}</p>
     </div>
   );
 }

@@ -45,15 +45,21 @@ export function DatePicker({
           id={id}
           type="button"
           variant="outline"
+          size="xl"
           disabled={disabled}
           aria-invalid={invalid ? true : undefined}
+          /*
+            Выглядит полем, а не кнопкой: в сетке формы это такая же ячейка,
+            что и `Input` рядом. Тёмная тема прописана отдельно — вариант
+            `outline` там ставит свою подложку и перебил бы `bg-brand-surface`.
+          */
           className={cn(
-            "w-full justify-start font-normal",
-            !selected && "text-muted-foreground",
+            "bg-brand-surface hover:bg-brand-surface dark:bg-brand-surface dark:hover:bg-brand-surface w-full justify-between px-3.5 font-normal",
+            selected ? "font-mono" : "text-muted-foreground",
           )}
         >
-          <CalendarIcon className="size-4" aria-hidden />
           {selected ? formatDate(value) : placeholder}
+          <CalendarIcon className="text-muted-foreground size-4" aria-hidden />
         </Button>
       </PopoverTrigger>
 

@@ -1,5 +1,4 @@
 import { CompleteCallback } from "@/components/auth/complete-callback";
-import { Card, CardContent } from "@/components/ui/card";
 import { safeNextPath } from "@/lib/redirects";
 
 export const metadata = { title: "Подтверждение" };
@@ -14,11 +13,5 @@ export default async function CallbackCompletePage({
 }: PageProps<"/callback/complete">) {
   const { next } = await searchParams;
 
-  return (
-    <Card>
-      <CardContent className="py-10">
-        <CompleteCallback next={safeNextPath(next)} />
-      </CardContent>
-    </Card>
-  );
+  return <CompleteCallback next={safeNextPath(next)} />;
 }

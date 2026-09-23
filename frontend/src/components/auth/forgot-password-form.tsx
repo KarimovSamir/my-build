@@ -50,7 +50,7 @@ export function ForgotPasswordForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       <Field
         id="email"
         name="email"
@@ -63,7 +63,7 @@ export function ForgotPasswordForm() {
 
       {error ? <FormError>{error}</FormError> : null}
 
-      <Button type="submit" disabled={pending} className="w-full">
+      <Button type="submit" size="xl" disabled={pending} className="mt-1 w-full">
         {pending ? "Отправляем…" : "Отправить ссылку"}
       </Button>
     </form>

@@ -45,7 +45,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
       />
 
       <Card>
-        <CardContent className="flex flex-col gap-3">
+        <CardContent className="flex flex-col gap-4">
           <ListSearch
             id="orders-search"
             basePath="/orders"

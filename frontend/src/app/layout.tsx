@@ -1,21 +1,32 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { IBM_Plex_Mono, Literata, Manrope } from "next/font/google";
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
 
-// Интерфейс на русском, поэтому шрифт обязан содержать кириллицу —
+// Интерфейс на русском, поэтому каждый шрифт обязан содержать кириллицу —
 // иначе браузер подставит системный и вёрстка «поедет».
-const inter = Inter({
-  variable: "--font-sans",
+//
+// Три семейства на весь продукт, лендинг и кабинет вместе: антиква —
+// заголовкам, гротеск — тексту, моноширинный — номерам, суммам и датам.
+// Утилиты `font-heading` / `font-sans` / `font-mono` объявлены в `globals.css`.
+const literata = Literata({
+  variable: "--font-literata",
   subsets: ["latin", "cyrillic"],
   display: "swap",
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-geist-mono",
+const manrope = Manrope({
+  variable: "--font-manrope",
+  subsets: ["latin", "cyrillic"],
+  display: "swap",
+});
+
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
+  weight: ["400", "500"],
   subsets: ["latin", "cyrillic"],
   display: "swap",
 });
@@ -41,7 +52,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="ru"
       suppressHydrationWarning
-      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${literata.variable} ${manrope.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         <ThemeProvider>

@@ -1,8 +1,10 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { AuthHeader } from "@/components/auth/auth-header";
 import { resolveAfterAuthHref } from "@/lib/auth-redirect";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -56,8 +58,13 @@ export function CompleteCallback({ next }: { next: string }) {
   }, [next, router]);
 
   return (
-    <p className="text-muted-foreground text-center text-sm">
-      {failed ? "Ссылка не сработала, открываем вход…" : "Подтверждаем вход…"}
-    </p>
+    <div className="flex flex-col gap-8" aria-live="polite">
+      {failed ? (
+        <AuthHeader title="Ссылка не сработала" description="Открываем страницу входа…" />
+      ) : (
+        <AuthHeader title="Подтверждаем вход" description="Это займёт пару секунд." />
+      )}
+      {failed ? null : <Loader2 className="text-primary size-6 animate-spin" aria-hidden />}
+    </div>
   );
 }

@@ -1,0 +1,294 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; font-family: "Onest", system-ui, sans-serif; }
+    a { color: #F0864F; text-decoration: none; }
+    a:hover { color: #FFA877; }
+    .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; background: #0A0C10; color: #E9EDF2; font-size: 16px; line-height: 1.5;">
+
+  <!-- ШАПКА -->
+  <div style="display: flex; align-items: center; justify-content: space-between; height: 78px; padding: 0 64px; border-bottom: 1px solid rgba(255, 255, 255, 0.07);">
+    <div style="display: flex; align-items: center; gap: 11px;">
+      <svg width="30" height="26" viewBox="0 0 30 26" fill="none" aria-hidden="true">
+        <path d="M2 24 L14 2 L26 24" stroke="#E9EDF2" stroke-width="2.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <rect x="9" y="11.5" width="5" height="3.4" rx="1" fill="#E2703A"/>
+        <rect x="15" y="11.5" width="5" height="3.4" rx="1" fill="#E2703A"/>
+        <rect x="6" y="16.6" width="5" height="3.4" rx="1" fill="#E2703A"/>
+        <rect x="12" y="16.6" width="5" height="3.4" rx="1" fill="#E2703A"/>
+        <rect x="18" y="16.6" width="5" height="3.4" rx="1" fill="#E2703A"/>
+      </svg>
+      <span style="font-size: 21px; font-weight: 700; letter-spacing: -0.02em;">MyBuild</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 36px;">
+      <div style="display: flex; align-items: center; gap: 28px; font-size: 15px; color: #8892A0;">
+        <span>Возможности</span>
+        <span>Клиенту</span>
+        <span>Компаниям</span>
+        <span>Демо</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="display: flex; align-items: center; height: 42px; padding: 0 18px; border-radius: 10px; font-size: 14.5px; font-weight: 500; color: #C3CBD6;">Войти</div>
+        <div style="display: flex; align-items: center; height: 42px; padding: 0 20px; border-radius: 10px; background: #E2703A; color: #140A05; font-size: 14.5px; font-weight: 600;">Начать бесплатно</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ГЕРОЙ -->
+  <div style="position: relative; padding: 84px 64px 0; overflow: hidden;">
+    <div style="position: absolute; top: -160px; left: 50%; width: 900px; height: 520px; margin-left: -450px; border-radius: 50%; background: radial-gradient(closest-side, rgba(226, 112, 58, 0.28), rgba(226, 112, 58, 0));"></div>
+    <div style="position: absolute; top: 120px; left: 50%; width: 1100px; height: 420px; margin-left: -550px; border-radius: 50%; background: radial-gradient(closest-side, rgba(91, 141, 239, 0.14), rgba(91, 141, 239, 0));"></div>
+
+    <div style="position: relative; display: flex; flex-direction: column; align-items: center; text-align: center;">
+      <div class="mono" style="display: flex; align-items: center; gap: 9px; height: 34px; padding: 0 15px; border-radius: 999px; border: 1px solid rgba(226, 112, 58, 0.35); background: rgba(226, 112, 58, 0.09); font-size: 12.5px; letter-spacing: 0.04em; color: #F0864F;">
+        <span style="display: block; width: 7px; height: 7px; border-radius: 50%; background: #E2703A; box-shadow: 0 0 0 4px rgba(226, 112, 58, 0.22);"></span>
+        Статус меняется у обеих сторон в ту же секунду
+      </div>
+
+      <h1 style="margin: 30px 0 0; max-width: 940px; font-size: 68px; line-height: 1.06; font-weight: 700; letter-spacing: -0.035em;">
+        Сделка со строительной компанией<br>в <span style="background: linear-gradient(90deg, #E2703A, #F5B182); -webkit-background-clip: text; background-clip: text; color: transparent;">одном рабочем окне</span>
+      </h1>
+
+      <p style="margin: 26px 0 0; max-width: 700px; font-size: 18.5px; line-height: 1.6; color: #98A2B0;">
+        Заказ, предложения с ценой и сроком, файлы, сдача работы и приёмка.
+        Клиент выбирает исполнителя, компания ведёт работу — и оба видят один
+        и тот же статус, без звонков «а что там сейчас».
+      </p>
+
+      <div style="display: flex; gap: 14px; margin-top: 38px;">
+        <div style="display: flex; align-items: center; gap: 11px; height: 56px; padding: 0 28px; border-radius: 12px; background: #E2703A; color: #140A05; font-size: 16px; font-weight: 600;">
+          Разместить заказ
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#140A05" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </div>
+        <div style="display: flex; align-items: center; height: 56px; padding: 0 26px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.04); font-size: 16px; font-weight: 500; color: #E9EDF2;">
+          Открыть демо без регистрации
+        </div>
+      </div>
+    </div>
+
+    <!-- МАКЕТ ПРОДУКТА -->
+    <div style="position: relative; margin: 58px auto 0; width: 1180px; border-radius: 18px 18px 0 0; border: 1px solid rgba(255, 255, 255, 0.1); border-bottom: none; background: #12161D; box-shadow: 0 -2px 80px rgba(226, 112, 58, 0.12);">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.07);">
+        <span style="display: block; width: 10px; height: 10px; border-radius: 50%; background: #333B47;"></span>
+        <span style="display: block; width: 10px; height: 10px; border-radius: 50%; background: #333B47;"></span>
+        <span style="display: block; width: 10px; height: 10px; border-radius: 50%; background: #333B47;"></span>
+        <span class="mono" style="margin-left: 14px; font-size: 12px; color: #6B7684;">mybuild.app / orders</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 236px minmax(0, 1fr);">
+        <div style="padding: 22px 16px; border-right: 1px solid rgba(255, 255, 255, 0.07);">
+          <div style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 12px; border-radius: 9px; background: rgba(226, 112, 58, 0.14); color: #F0864F; font-size: 14px; font-weight: 600;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F0864F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+            Все заказы
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 3px; margin-top: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 12px; font-size: 14px; color: #8892A0;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8892A0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+              Создать заказ
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 12px; font-size: 14px; color: #8892A0;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8892A0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/></svg>
+              Подрядчики
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 12px; font-size: 14px; color: #8892A0;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8892A0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+              Документы
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 12px; font-size: 14px; color: #8892A0;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8892A0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+              Уведомления
+              <span class="mono" style="margin-left: auto; display: flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 6px; background: #E2703A; color: #140A05; font-size: 11px; font-weight: 500;">3</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 24px 26px 30px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-size: 22px; font-weight: 600; letter-spacing: -0.02em;">Все заказы</div>
+              <div style="margin-top: 4px; font-size: 13.5px; color: #6B7684;">Текущие и завершённые проекты</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 9px; background: #E2703A; color: #140A05; font-size: 13.5px; font-weight: 600;">+ Создать заказ</div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 1px; margin-top: 22px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.08); overflow: hidden; background: rgba(255, 255, 255, 0.06);">
+            <div class="mono" style="display: grid; grid-template-columns: 268px 172px 214px minmax(0, 1fr); gap: 16px; padding: 12px 18px; background: #161B23; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6B7684;">
+              <span>Заказ</span><span>Подрядчик</span><span>Статус</span><span style="text-align: right;">Бюджет</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 268px 172px 214px minmax(0, 1fr); gap: 16px; align-items: center; padding: 15px 18px; background: #12161D;">
+              <span>
+                <span style="display: block; font-size: 14.5px; font-weight: 500;">Строительство частного дома</span>
+                <span class="mono" style="display: block; margin-top: 3px; font-size: 11.5px; color: #6B7684;">ORD-2450</span>
+              </span>
+              <span style="font-size: 14px; color: #C3CBD6;">ООО «СтройГрад»</span>
+              <span style="display: inline-flex; align-items: center; gap: 7px; width: fit-content; height: 26px; padding: 0 11px; border-radius: 7px; background: rgba(91, 141, 239, 0.16); color: #8AB0F5; font-size: 12.5px; font-weight: 500;">
+                <span style="display: block; width: 6px; height: 6px; border-radius: 50%; background: #5B8DEF;"></span>В работе
+              </span>
+              <span style="text-align: right;">
+                <span class="mono" style="display: block; font-size: 14.5px; font-weight: 500; white-space: nowrap;">346 800 AZN</span>
+                <span style="display: block; margin-top: 3px; font-size: 11.5px; color: #6B7684; white-space: nowrap;">цена сделки</span>
+              </span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 268px 172px 214px minmax(0, 1fr); gap: 16px; align-items: center; padding: 15px 18px; background: #12161D;">
+              <span>
+                <span style="display: block; font-size: 14.5px; font-weight: 500;">Проект перепланировки квартиры</span>
+                <span class="mono" style="display: block; margin-top: 3px; font-size: 11.5px; color: #6B7684;">ORD-2451</span>
+              </span>
+              <span style="font-size: 14px; color: #C3CBD6;">ООО «АрхПроект»</span>
+              <span style="display: inline-flex; align-items: center; gap: 7px; width: fit-content; height: 26px; padding: 0 11px; border-radius: 7px; background: rgba(226, 165, 58, 0.16); color: #E9B75C; font-size: 12.5px; font-weight: 500;">
+                <span style="display: block; width: 6px; height: 6px; border-radius: 50%; background: #E2A53A;"></span>Ожидание подтверждения
+              </span>
+              <span style="text-align: right;">
+                <span class="mono" style="display: block; font-size: 14.5px; font-weight: 500; white-space: nowrap;">4 800 AZN</span>
+                <span style="display: block; margin-top: 3px; font-size: 11.5px; color: #6B7684; white-space: nowrap;">цена сделки</span>
+              </span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 268px 172px 214px minmax(0, 1fr); gap: 16px; align-items: center; padding: 15px 18px; background: #12161D;">
+              <span>
+                <span style="display: block; font-size: 14.5px; font-weight: 500;">Ремонт квартиры 100 м²</span>
+                <span class="mono" style="display: block; margin-top: 3px; font-size: 11.5px; color: #6B7684;">ORD-2448</span>
+              </span>
+              <span style="font-size: 14px; color: #6B7684;">Не назначен</span>
+              <span style="display: inline-flex; align-items: center; gap: 7px; width: fit-content; height: 26px; padding: 0 11px; border-radius: 7px; background: rgba(255, 255, 255, 0.07); color: #A5AEBB; font-size: 12.5px; font-weight: 500;">
+                <span style="display: block; width: 6px; height: 6px; border-radius: 50%; background: #7C8695;"></span>Поиск исполнителя
+              </span>
+              <span style="text-align: right;">
+                <span class="mono" style="display: block; font-size: 14.5px; font-weight: 500; white-space: nowrap;">30 600 AZN</span>
+                <span style="display: block; margin-top: 3px; font-size: 11.5px; color: #6B7684; white-space: nowrap;">бюджет клиента</span>
+              </span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 268px 172px 214px minmax(0, 1fr); gap: 16px; align-items: center; padding: 15px 18px; background: #12161D;">
+              <span>
+                <span style="display: block; font-size: 14.5px; font-weight: 500;">Дизайн-проект кухни</span>
+                <span class="mono" style="display: block; margin-top: 3px; font-size: 11.5px; color: #6B7684;">ORD-2453</span>
+              </span>
+              <span style="font-size: 14px; color: #C3CBD6;">ООО «СтройГрад»</span>
+              <span style="display: inline-flex; align-items: center; gap: 7px; width: fit-content; height: 26px; padding: 0 11px; border-radius: 7px; background: rgba(61, 200, 140, 0.15); color: #61D3A2; font-size: 12.5px; font-weight: 500;">
+                <span style="display: block; width: 6px; height: 6px; border-radius: 50%; background: #3DC88C;"></span>Завершён
+              </span>
+              <span style="text-align: right;">
+                <span class="mono" style="display: block; font-size: 14.5px; font-weight: 500; white-space: nowrap;">2 400 AZN</span>
+                <span style="display: block; margin-top: 3px; font-size: 11.5px; color: #6B7684; white-space: nowrap;">цена сделки</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ВОЗМОЖНОСТИ -->
+  <div style="padding: 84px 64px 0;">
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+      <div style="padding: 28px 26px 30px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08); background: linear-gradient(180deg, #141920, #10141A);">
+        <div style="display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 11px; background: rgba(226, 112, 58, 0.14);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F0864F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+        </div>
+        <h3 style="margin: 18px 0 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em;">Шесть понятных статусов</h3>
+        <p style="margin: 9px 0 0; font-size: 15px; line-height: 1.6; color: #8892A0;">
+          У заказа всегда ровно один статус, и следующий шаг разрешён не всякий.
+          Ни клиент, ни компания не могут «перепрыгнуть» приёмку.
+        </p>
+      </div>
+      <div style="padding: 28px 26px 30px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08); background: linear-gradient(180deg, #141920, #10141A);">
+        <div style="display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 11px; background: rgba(91, 141, 239, 0.14);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8AB0F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 14h6M9 17h4"/></svg>
+        </div>
+        <h3 style="margin: 18px 0 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em;">Файлы живут у заказа</h3>
+        <p style="margin: 9px 0 0; font-size: 15px; line-height: 1.6; color: #8892A0;">
+          Чертежи PDF и DWG, фотографии, акты сдачи. Каждый раунд работы —
+          со своим комментарием, и вся история остаётся доступной.
+        </p>
+      </div>
+      <div style="padding: 28px 26px 30px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08); background: linear-gradient(180deg, #141920, #10141A);">
+        <div style="display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 11px; background: rgba(61, 200, 140, 0.14);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#61D3A2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+        </div>
+        <h3 style="margin: 18px 0 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em;">Обновления без перезагрузки</h3>
+        <p style="margin: 9px 0 0; font-size: 15px; line-height: 1.6; color: #8892A0;">
+          Пришло предложение, сменился статус, загружены файлы — экран второй
+          стороны меняется сам, и в колокольчике появляется уведомление.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ДВЕ РОЛИ -->
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 20px 64px 0;">
+    <div style="padding: 30px 28px 32px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08); background: #12161D;">
+      <div class="mono" style="font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #F0864F;">Клиенту</div>
+      <h3 style="margin: 14px 0 0; font-size: 26px; font-weight: 600; letter-spacing: -0.02em;">Заказать работы</h3>
+      <p style="margin: 10px 0 0; font-size: 15.5px; line-height: 1.6; color: #8892A0;">
+        Опубликуйте заказ с чертежами и бюджетом, сравните предложения по цене
+        и сроку, выберите исполнителя и примите работу по файлам.
+      </p>
+      <div style="display: inline-flex; align-items: center; gap: 9px; margin-top: 22px; height: 46px; padding: 0 20px; border-radius: 11px; border: 1px solid rgba(255, 255, 255, 0.16); font-size: 15px; font-weight: 500;">
+        Разместить заказ
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E9EDF2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+    <div style="padding: 30px 28px 32px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08); background: #12161D;">
+      <div class="mono" style="font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #F0864F;">Компаниям</div>
+      <h3 style="margin: 14px 0 0; font-size: 26px; font-weight: 600; letter-spacing: -0.02em;">Получать заказы</h3>
+      <p style="margin: 10px 0 0; font-size: 15.5px; line-height: 1.6; color: #8892A0;">
+        Лента заказов с бюджетом клиента, одно предложение на заказ с правом
+        изменить или отозвать, сдача работы раундами с комментарием.
+      </p>
+      <div style="display: inline-flex; align-items: center; gap: 9px; margin-top: 22px; height: 46px; padding: 0 20px; border-radius: 11px; border: 1px solid rgba(255, 255, 255, 0.16); font-size: 15px; font-weight: 500;">
+        Смотреть заказы
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E9EDF2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ФИНАЛЬНЫЙ ПРИЗЫВ -->
+  <div style="position: relative; margin: 76px 64px 0; padding: 58px 48px 62px; border-radius: 22px; border: 1px solid rgba(226, 112, 58, 0.25); background: linear-gradient(135deg, rgba(226, 112, 58, 0.14), rgba(226, 112, 58, 0.03)); text-align: center; overflow: hidden;">
+    <h2 style="margin: 0; font-size: 42px; line-height: 1.1; font-weight: 700; letter-spacing: -0.03em;">Пройдите сделку целиком — прямо сейчас</h2>
+    <p style="margin: 16px auto 0; max-width: 640px; font-size: 17px; line-height: 1.6; color: #98A2B0;">
+      В демо готовы аккаунты клиента и трёх компаний: опубликуйте заказ, примите
+      предложение, сдайте работу и подтвердите приёмку. Без регистрации.
+    </p>
+    <div style="display: flex; justify-content: center; gap: 12px; margin-top: 30px;">
+      <div style="display: flex; align-items: center; gap: 10px; height: 54px; padding: 0 28px; border-radius: 12px; background: #E2703A; color: #140A05; font-size: 16px; font-weight: 600;">
+        Открыть демо
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#140A05" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div style="display: flex; align-items: center; height: 54px; padding: 0 26px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); font-size: 16px; font-weight: 500;">Зарегистрироваться</div>
+    </div>
+  </div>
+
+  <!-- ПОДВАЛ -->
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 64px; padding: 28px 64px 40px; border-top: 1px solid rgba(255, 255, 255, 0.07);">
+    <div style="display: flex; align-items: center; gap: 11px;">
+      <svg width="24" height="21" viewBox="0 0 30 26" fill="none" aria-hidden="true">
+        <path d="M2 24 L14 2 L26 24" stroke="#E9EDF2" stroke-width="2.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <rect x="9" y="11.5" width="5" height="3.4" rx="1" fill="#E2703A"/>
+        <rect x="15" y="11.5" width="5" height="3.4" rx="1" fill="#E2703A"/>
+        <rect x="6" y="16.6" width="5" height="3.4" rx="1" fill="#E2703A"/>
+        <rect x="12" y="16.6" width="5" height="3.4" rx="1" fill="#E2703A"/>
+        <rect x="18" y="16.6" width="5" height="3.4" rx="1" fill="#E2703A"/>
+      </svg>
+      <span style="font-size: 17px; font-weight: 700;">MyBuild</span>
+    </div>
+    <span class="mono" style="font-size: 12.5px; color: #6B7684;">© 2026 MyBuild · Баку, Азербайджан</span>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

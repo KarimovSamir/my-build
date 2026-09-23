@@ -1,11 +1,12 @@
 "use client";
 
+import { KeyRound } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-import { Field, FormErrors } from "@/components/form-parts";
+import { Field, FormErrors, FormSection } from "@/components/form-parts";
+import { PasswordInput } from "@/components/password-input";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { authErrorMessage } from "@/lib/auth-errors";
 import {
   MIN_PASSWORD_LENGTH,
@@ -103,83 +104,76 @@ export function PasswordForm({ email }: { email: string }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Пароль</CardTitle>
-        <CardDescription>
-          Пароль хранит Supabase Auth — наш сервер его не видит. Эта вкладка
-          после смены остаётся в аккаунте, остальные устройства выходят —
-          ради этого пароль обычно и меняют.
-        </CardDescription>
-      </CardHeader>
+    <FormSection
+      icon={<KeyRound className="size-[1.0625rem]" />}
+      title="Пароль"
+      description="Пароль хранит Supabase Auth — наш сервер его не видит. Эта вкладка после смены остаётся в аккаунте, остальные устройства выходят — ради этого пароль обычно и меняют."
+    >
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+        {/* Поле с адресом: без него менеджер паролей не понимает, для какой
+            учётной записи сохранять новый пароль. Убрано с глаз классом
+            `sr-only`, а не `type="hidden"`: настоящие скрытые поля браузеры
+            при сопоставлении учётной записи не учитывают. */}
+        <input
+          type="text"
+          name="username"
+          autoComplete="username"
+          value={email}
+          readOnly
+          tabIndex={-1}
+          aria-hidden
+          className="sr-only"
+        />
 
-      <CardContent>
-        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
-          {/* Поле с адресом: без него менеджер паролей не понимает, для какой
-              учётной записи сохранять новый пароль. Убрано с глаз классом
-              `sr-only`, а не `type="hidden"`: настоящие скрытые поля браузеры
-              при сопоставлении учётной записи не учитывают. */}
-          <input
-            type="text"
-            name="username"
-            autoComplete="username"
-            value={email}
-            readOnly
-            tabIndex={-1}
-            aria-hidden
-            className="sr-only"
-          />
+        <Field
+          id="currentPassword"
+          name="currentPassword"
+          label="Текущий пароль"
+          inputAs={PasswordInput}
+          autoComplete="current-password"
+          value={values.currentPassword}
+          onChange={(event) => setField("currentPassword", event.target.value)}
+          error={errors.currentPassword}
+          disabled={pending}
+          required
+        />
 
+        <div className="grid gap-5 sm:grid-cols-2">
           <Field
-            id="currentPassword"
-            name="currentPassword"
-            type="password"
-            label="Текущий пароль"
-            autoComplete="current-password"
-            value={values.currentPassword}
-            onChange={(event) => setField("currentPassword", event.target.value)}
-            error={errors.currentPassword}
+            id="newPassword"
+            name="newPassword"
+            label="Новый пароль"
+            inputAs={PasswordInput}
+            autoComplete="new-password"
+            hint={`Минимум ${MIN_PASSWORD_LENGTH} символов`}
+            value={values.password}
+            onChange={(event) => setField("password", event.target.value)}
+            error={errors.password}
             disabled={pending}
             required
           />
+          <Field
+            id="newPasswordConfirm"
+            name="newPasswordConfirm"
+            label="Новый пароль ещё раз"
+            inputAs={PasswordInput}
+            autoComplete="new-password"
+            value={values.passwordConfirm}
+            onChange={(event) => setField("passwordConfirm", event.target.value)}
+            error={errors.passwordConfirm}
+            disabled={pending}
+            required
+          />
+        </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field
-              id="newPassword"
-              name="newPassword"
-              type="password"
-              label="Новый пароль"
-              autoComplete="new-password"
-              hint={`Минимум ${MIN_PASSWORD_LENGTH} символов`}
-              value={values.password}
-              onChange={(event) => setField("password", event.target.value)}
-              error={errors.password}
-              disabled={pending}
-              required
-            />
-            <Field
-              id="newPasswordConfirm"
-              name="newPasswordConfirm"
-              type="password"
-              label="Новый пароль ещё раз"
-              autoComplete="new-password"
-              value={values.passwordConfirm}
-              onChange={(event) => setField("passwordConfirm", event.target.value)}
-              error={errors.passwordConfirm}
-              disabled={pending}
-              required
-            />
-          </div>
+        {formError ? <FormErrors messages={formError} /> : null}
 
-          {formError ? <FormErrors messages={formError} /> : null}
-
-          <div className="flex justify-end">
-            <Button type="submit" disabled={pending}>
-              {pending ? "Меняем…" : "Изменить пароль"}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+        <div className="flex justify-end">
+          <Button type="submit" size="xl" className="w-full sm:w-auto" disabled={pending}>
+            {pending ? "Меняем…" : "Изменить пароль"}
+          </Button>
+        </div>
+      </form>
+    </FormSection>
   );
 }

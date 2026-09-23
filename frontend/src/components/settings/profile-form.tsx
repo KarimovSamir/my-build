@@ -1,14 +1,14 @@
 "use client";
 
+import { UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { PROFILE_LIMITS, Role, type UserProfile } from "@/lib/types";
 
-import { Field, FormErrors } from "@/components/form-parts";
+import { Field, FormErrors, FormSection } from "@/components/form-parts";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiErrorMessages } from "@/lib/api-errors";
 import { browserApi } from "@/lib/api.client";
 import {
@@ -112,118 +112,124 @@ export function ProfileForm({ profile: fromServer }: { profile: UserProfile }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Профиль</CardTitle>
-        <CardDescription>
-          {saved.role === Role.COMPANY
-            ? "Название компании и контакты видит клиент в каталоге подрядчиков и в предложениях"
-            : "Имя и контакты видит компания, с которой вы работаете по заказу"}
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent>
-        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
-          {saved.role === Role.COMPANY ? (
-            <Field
-              id="companyName"
-              name="companyName"
-              label="Название компании"
-              placeholder="ООО «СтройГрад»"
-              hint="Под этим названием вас видят клиенты"
-              maxLength={PROFILE_LIMITS.companyName}
-              value={values.companyName}
-              onChange={(event) => setField("companyName", event.target.value)}
-              error={errors.companyName}
-              disabled={pending}
-              required
-            />
-          ) : null}
-
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field
-              id="firstName"
-              name="firstName"
-              label="Имя"
-              autoComplete="given-name"
-              maxLength={PROFILE_LIMITS.firstName}
-              value={values.firstName}
-              onChange={(event) => setField("firstName", event.target.value)}
-              error={errors.firstName}
-              disabled={pending}
-              required
-            />
-            <Field
-              id="lastName"
-              name="lastName"
-              label="Фамилия"
-              autoComplete="family-name"
-              maxLength={PROFILE_LIMITS.lastName}
-              value={values.lastName}
-              onChange={(event) => setField("lastName", event.target.value)}
-              error={errors.lastName}
-              disabled={pending}
-            />
-          </div>
-
+    <FormSection
+      icon={<UserRound className="size-[1.0625rem]" />}
+      title="Профиль"
+      description={
+        saved.role === Role.COMPANY
+          ? "Название компании и контакты видит клиент в каталоге подрядчиков и в предложениях"
+          : "Имя и контакты видит компания, с которой вы работаете по заказу"
+      }
+    >
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+        {saved.role === Role.COMPANY ? (
           <Field
-            id="phone"
-            name="phone"
-            type="tel"
-            label="Телефон"
-            autoComplete="tel"
-            placeholder="+994 50 000-00-00"
-            hint="По нему с вами свяжется вторая сторона заказа"
-            maxLength={PROFILE_LIMITS.phone}
-            value={values.phone}
-            onChange={(event) => setField("phone", event.target.value)}
-            error={errors.phone}
+            id="companyName"
+            name="companyName"
+            label="Название компании"
+            placeholder="ООО «СтройГрад»"
+            hint="Под этим названием вас видят клиенты"
+            maxLength={PROFILE_LIMITS.companyName}
+            value={values.companyName}
+            onChange={(event) => setField("companyName", event.target.value)}
+            error={errors.companyName}
             disabled={pending}
             required
           />
+        ) : null}
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field
-              id="city"
-              name="city"
-              label="Город"
-              autoComplete="address-level2"
-              maxLength={PROFILE_LIMITS.city}
-              value={values.city}
-              onChange={(event) => setField("city", event.target.value)}
-              error={errors.city}
-              disabled={pending}
-            />
-            <Field
-              id="country"
-              name="country"
-              label="Страна"
-              autoComplete="country-name"
-              maxLength={PROFILE_LIMITS.country}
-              value={values.country}
-              onChange={(event) => setField("country", event.target.value)}
-              error={errors.country}
-              disabled={pending}
-            />
-          </div>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field
+            id="firstName"
+            name="firstName"
+            label="Имя"
+            autoComplete="given-name"
+            maxLength={PROFILE_LIMITS.firstName}
+            value={values.firstName}
+            onChange={(event) => setField("firstName", event.target.value)}
+            error={errors.firstName}
+            disabled={pending}
+            required
+          />
+          <Field
+            id="lastName"
+            name="lastName"
+            label="Фамилия"
+            autoComplete="family-name"
+            maxLength={PROFILE_LIMITS.lastName}
+            value={values.lastName}
+            onChange={(event) => setField("lastName", event.target.value)}
+            error={errors.lastName}
+            disabled={pending}
+          />
+        </div>
 
-          {formError ? <FormErrors messages={formError} /> : null}
+        <Field
+          id="phone"
+          name="phone"
+          type="tel"
+          label="Телефон"
+          autoComplete="tel"
+          placeholder="+994 50 000-00-00"
+          hint="По нему с вами свяжется вторая сторона заказа"
+          maxLength={PROFILE_LIMITS.phone}
+          value={values.phone}
+          onChange={(event) => setField("phone", event.target.value)}
+          error={errors.phone}
+          disabled={pending}
+          required
+        />
 
-          <div className="flex flex-wrap justify-end gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleReset}
-              disabled={pending || !changed}
-            >
-              Отменить
-            </Button>
-            <Button type="submit" disabled={pending || !changed}>
-              {pending ? "Сохраняем…" : "Сохранить изменения"}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field
+            id="city"
+            name="city"
+            label="Город"
+            autoComplete="address-level2"
+            maxLength={PROFILE_LIMITS.city}
+            value={values.city}
+            onChange={(event) => setField("city", event.target.value)}
+            error={errors.city}
+            disabled={pending}
+          />
+          <Field
+            id="country"
+            name="country"
+            label="Страна"
+            autoComplete="country-name"
+            maxLength={PROFILE_LIMITS.country}
+            value={values.country}
+            onChange={(event) => setField("country", event.target.value)}
+            error={errors.country}
+            disabled={pending}
+          />
+        </div>
+
+        {formError ? <FormErrors messages={formError} /> : null}
+
+        {/* На узком экране кнопки во всю ширину: в строку они не помещаются
+            вдвоём и вставали ступенькой. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="xl"
+            className="w-full sm:w-auto"
+            onClick={handleReset}
+            disabled={pending || !changed}
+          >
+            Отменить
+          </Button>
+          <Button
+            type="submit"
+            size="xl"
+            className="w-full sm:w-auto"
+            disabled={pending || !changed}
+          >
+            {pending ? "Сохраняем…" : "Сохранить изменения"}
+          </Button>
+        </div>
+      </form>
+    </FormSection>
   );
 }

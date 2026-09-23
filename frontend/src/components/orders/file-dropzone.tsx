@@ -93,20 +93,21 @@ export function FileDropzone({
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
         className={cn(
-          "border-border hover:border-primary/50 hover:bg-accent/50 focus-visible:ring-ring/50 flex flex-col items-center gap-1.5 rounded-xl border border-dashed px-4 py-8 text-center transition-colors focus-visible:ring-3 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60",
+          "border-border bg-brand-surface hover:border-primary/60 hover:bg-accent/40 focus-visible:ring-ring/50 flex flex-col items-center gap-2 rounded-xl border-[1.5px] border-dashed px-5 py-8 text-center transition-colors focus-visible:ring-3 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60",
           dragging && "border-primary bg-accent",
         )}
       >
-        <Upload className="text-muted-foreground size-5" aria-hidden />
-        <span className="text-sm font-medium">
-          Перетащите файлы сюда или нажмите, чтобы выбрать
+        <Upload className="text-primary size-7" strokeWidth={1.7} aria-hidden />
+        <span className="text-[0.9375rem]">
+          <span className="text-primary font-semibold">Выберите файлы</span>
+          <span className="text-secondary-foreground"> или перетащите сюда</span>
         </span>
-        <span className="text-muted-foreground text-xs">
+        <span className="text-muted-foreground font-mono text-xs">
           {ALLOWED_FILE_EXTENSIONS_HINT} · до {MAX_FILE_SIZE_BYTES / 1024 / 1024} МБ ·
-          не больше {MAX_FILES_PER_REQUEST} файлов
+          не больше {MAX_FILES_PER_REQUEST} за раз
         </span>
-        <span className="text-muted-foreground text-xs">
-          Файлы заказа: {formatFileSize(occupied)} из{" "}
+        <span className="text-muted-foreground font-mono text-xs">
+          файлы заказа: {formatFileSize(occupied)} из{" "}
           {formatFileSize(MAX_ORDER_FILES_BYTES)}
         </span>
       </button>
@@ -129,7 +130,7 @@ export function FileDropzone({
       />
 
       {rejected.length > 0 ? (
-        <ul className="text-destructive flex flex-col gap-1 text-xs" role="alert">
+        <ul className="text-destructive flex flex-col gap-1 text-[0.8125rem]" role="alert">
           {rejected.map((reason) => (
             <li key={reason}>{reason}</li>
           ))}
@@ -164,8 +165,8 @@ function SelectedFile({
   const preview = useImagePreview(file);
 
   return (
-    <li className="border-border flex items-center gap-3 rounded-lg border p-2">
-      <span className="bg-muted flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md">
+    <li className="border-border flex items-center gap-3.5 rounded-xl border px-4 py-3">
+      <span className="bg-accent text-primary flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg">
         {preview ? (
           // Обычный <img>: файл лежит в памяти браузера, next/image здесь
           // нечего оптимизировать.
@@ -177,8 +178,12 @@ function SelectedFile({
       </span>
 
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{file.name}</span>
-        <span className="text-muted-foreground text-xs">{formatFileSize(file.size)}</span>
+        {/* Имя переносится, а не обрезается — как в строке файла заказа
+            (`FileRow`): на узком экране обрезка съедала расширение. */}
+        <span className="block text-[0.9375rem] font-semibold break-words">{file.name}</span>
+        <span className="text-muted-foreground mt-0.5 block font-mono text-xs">
+          {formatFileSize(file.size)}
+        </span>
       </span>
 
       <Button
@@ -198,7 +203,7 @@ function SelectedFile({
 function FileIcon({ name }: { name: string }) {
   const Icon = isImageFileName(name) ? ImageIcon : FileText;
 
-  return <Icon className="text-muted-foreground size-4" aria-hidden />;
+  return <Icon className="size-[1.0625rem]" aria-hidden />;
 }
 
 /** Превью картинки из памяти браузера. Ссылка освобождается вместе со строкой. */

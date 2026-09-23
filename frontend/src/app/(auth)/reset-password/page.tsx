@@ -1,7 +1,9 @@
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 
+import { AuthHeader } from "@/components/auth/auth-header";
 import { ResetPasswordForm } from "@/components/auth/reset-password-form";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { getSessionClaims } from "@/lib/session.server";
 
 export const metadata = { title: "Новый пароль" };
@@ -15,31 +17,26 @@ export default async function ResetPasswordPage() {
 
   if (!claims) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Ссылка не сработала</CardTitle>
-          <CardDescription>
-            Ссылка для смены пароля действует ограниченное время и только один раз.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-sm">
-          <Link href="/forgot-password" className="text-primary font-medium hover:underline">
+      <div className="flex flex-col gap-8">
+        <AuthHeader
+          title="Ссылка не сработала"
+          description="Ссылка для смены пароля действует ограниченное время и только один раз."
+        />
+
+        <Button asChild size="xl" className="w-full">
+          <Link href="/forgot-password">
             Запросить новую ссылку
+            <ArrowRight aria-hidden />
           </Link>
-        </CardContent>
-      </Card>
+        </Button>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Новый пароль</CardTitle>
-        <CardDescription>Придумайте пароль, которым будете входить</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ResetPasswordForm />
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-8">
+      <AuthHeader title="Новый пароль" description="Придумайте пароль, которым будете входить" />
+      <ResetPasswordForm />
+    </div>
   );
 }

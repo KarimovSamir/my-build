@@ -1,17 +1,16 @@
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Info } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
 
 import type { ContractorCard } from "@/lib/types";
 
+import { ListField } from "@/components/list-parts";
 import { PageHeader } from "@/components/page-shell";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { contactLinks } from "@/lib/contacts";
 import { completedOrdersText } from "@/lib/contractor-view";
 import { contractorsHref } from "@/lib/contractors-filter";
-import { companyInitial, formatLocation } from "@/lib/format";
+import { formatLocation } from "@/lib/format";
 
 /**
  * Карточка подрядчика (ТЗ §7): название, город, контакты, число завершённых
@@ -21,6 +20,11 @@ import { companyInitial, formatLocation } from "@/lib/format";
  * (ТЗ §11), а заказы компании — чужие данные, и в каталог они не попадают.
  * Каталог существует, чтобы связаться с компанией напрямую, поэтому контакты
  * здесь — ссылки, а не текст.
+ *
+ * Собрана по образцу правой колонки карточки заказа: тёмная панель с главным
+ * о компании и светлая подсказка под ней. Подписи полей — общий `ListField`,
+ * тот же, что в строках списков: на всех экранах кабинета «подпись — значение»
+ * выглядит одинаково.
  */
 export function ContractorProfile({ contractor }: { contractor: ContractorCard }) {
   const location = formatLocation(contractor);
@@ -46,58 +50,63 @@ export function ContractorProfile({ contractor }: { contractor: ContractorCard }
             <CardTitle>Контакты</CardTitle>
           </CardHeader>
           <CardContent>
-            <dl className="grid gap-4 sm:grid-cols-2">
+            <dl className="grid gap-5 sm:grid-cols-2">
               {contactLinks(contractor).map((contact) => (
-                <Field key={contact.label} label={contact.label}>
+                <ListField key={contact.label} label={contact.label}>
                   {contact.href ? (
                     <a
                       href={contact.href}
-                      className="text-primary underline-offset-4 hover:underline"
+                      className="text-primary font-mono text-[0.9375rem] underline-offset-4 hover:underline"
                     >
                       {contact.value}
                     </a>
                   ) : (
-                    contact.value
+                    <span className="font-mono text-[0.9375rem]">{contact.value}</span>
                   )}
-                </Field>
+                </ListField>
               ))}
             </dl>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Опыт на площадке</CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center gap-3">
-            <Avatar className="size-12 shrink-0">
-              <AvatarFallback className="bg-primary text-primary-foreground text-lg font-medium">
-                {companyInitial(contractor.companyName)}
-              </AvatarFallback>
-            </Avatar>
+        <div className="flex min-w-0 flex-col gap-6">
+          {/*
+            Тёмная панель — та же, что «Что сейчас» на карточке заказа: главное
+            о компании крупно, объяснение под ним.
+          */}
+          <Card className="gap-0 overflow-hidden p-0">
+            <div className="bg-brand-ink text-brand-ink-foreground px-6 py-6">
+              <p className="text-brand-ink-accent font-mono text-[0.6875rem] tracking-[0.12em] uppercase">
+                Опыт на площадке
+              </p>
 
-            <div className="min-w-0">
-              <p className="flex items-center gap-2 font-medium">
-                <CheckCircle2 className="text-muted-foreground size-4 shrink-0" aria-hidden />
+              {/* Буквы-аватара здесь нет намеренно: название компании стоит
+                  в заголовке экрана, и в узкой колонке кружок отнимал бы
+                  ширину у самой длинной строки блока. */}
+              <p className="font-heading mt-2.5 text-[1.375rem] leading-snug font-semibold">
                 {completedOrdersText(contractor.completedOrdersCount)}
               </p>
-              <p className="text-muted-foreground mt-0.5 text-xs">
+
+              <p className="text-brand-ink-muted mt-3 text-sm leading-relaxed">
                 Считаются заказы, которые вы или другие клиенты подтвердили как
                 выполненные.
               </p>
             </div>
-          </CardContent>
-        </Card>
+          </Card>
+
+          <div className="bg-brand-surface rounded-xl border px-5 py-5">
+            <p className="font-heading flex items-center gap-2.5 text-base font-semibold">
+              <Info className="text-primary size-4.5 shrink-0" aria-hidden />
+              Договариваетесь напрямую
+            </p>
+            <p className="text-secondary-foreground mt-2.5 text-sm leading-relaxed">
+              Чата на площадке нет — напишите или позвоните компании сами.
+              Предложение по заказу она присылает здесь: адресовать заказ
+              конкретной компании нельзя, его видят все.
+            </p>
+          </div>
+        </div>
       </div>
     </>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="mt-0.5 text-sm break-words">{children}</dd>
-    </div>
   );
 }

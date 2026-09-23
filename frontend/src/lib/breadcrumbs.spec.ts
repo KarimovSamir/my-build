@@ -63,11 +63,18 @@ describe("buildBreadcrumbs", () => {
     expect(trail(`/settings/${COMPANY_ID}`, Role.CLIENT).at(-1)).toEqual([COMPANY_ID, null]);
   });
 
-  it("у компании «Все заказы» остаются текстом: такого раздела у неё нет", () => {
-    // Ссылка, с которой proxy сразу уводит на ленту, хуже, чем её отсутствие.
+  it("у компании заказ стоит в «Моих предложениях»: раздела «Все заказы» у неё нет", () => {
+    // Та же ссылка подсвечена в меню на этой странице (`isNavItemActive`).
     expect(trail(`/orders/${ORDER_ID}`, Role.COMPANY)).toEqual([
       ["Главная", "/available"],
-      ["Все заказы", null],
+      ["Мои предложения", "/offers"],
+      ["Заказ", null],
+    ]);
+  });
+
+  it("у клиента заказ по-прежнему стоит во «Всех заказах»", () => {
+    expect(trail(`/orders/${ORDER_ID}`, Role.CLIENT)).toEqual([
+      ["Все заказы", "/orders"],
       ["Заказ", null],
     ]);
   });

@@ -94,16 +94,16 @@ export async function AvailableOrdersList({ filter }: { filter: AvailableFilter 
 
 function AvailableOrderRow({ order }: { order: AvailableOrderItem }) {
   return (
-    <li className="flex flex-col gap-4 px-4 py-4">
+    <li className="flex flex-col gap-4 px-5 py-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link
             href={`/orders/${order.id}`}
-            className="focus-visible:ring-ring/50 font-medium hover:underline focus-visible:ring-3 focus-visible:outline-none"
+            className="focus-visible:ring-ring/50 font-heading text-base font-semibold hover:underline focus-visible:ring-3 focus-visible:outline-none"
           >
             {order.title}
           </Link>
-          <p className="text-muted-foreground mt-0.5 text-xs">
+          <p className="text-muted-foreground font-mono mt-1 text-xs">
             {formatOrderNumber(order.orderNumber)} · опубликован{" "}
             {formatDate(order.createdAt)}
           </p>
@@ -117,12 +117,16 @@ function AvailableOrderRow({ order }: { order: AvailableOrderItem }) {
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-muted-foreground text-xs">Бюджет клиента</p>
-          <p className="mt-0.5 font-medium">
+          <p className="text-muted-foreground font-mono text-[0.6875rem] tracking-[0.12em] uppercase">
+            Бюджет клиента
+          </p>
+          <p className="mt-1">
             {order.clientBudget ? (
-              formatMoney(order.clientBudget)
+              <span className="font-mono text-[0.9375rem] font-medium">
+                {formatMoney(order.clientBudget)}
+              </span>
             ) : (
-              <span className="text-muted-foreground font-normal">Не указан</span>
+              <span className="text-muted-foreground text-sm">Не указан</span>
             )}
           </p>
         </div>

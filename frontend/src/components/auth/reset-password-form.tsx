@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Field, FormError } from "@/components/form-parts";
+import { PasswordInput } from "@/components/password-input";
 import { Button } from "@/components/ui/button";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { resolveAfterAuthHref } from "@/lib/auth-redirect";
@@ -57,12 +58,12 @@ export function ResetPasswordForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       <Field
         id="password"
         name="password"
-        type="password"
         label="Новый пароль"
+        inputAs={PasswordInput}
         autoComplete="new-password"
         hint={`Минимум ${MIN_PASSWORD_LENGTH} символов`}
         required
@@ -70,15 +71,15 @@ export function ResetPasswordForm() {
       <Field
         id="passwordConfirm"
         name="passwordConfirm"
-        type="password"
         label="Пароль ещё раз"
+        inputAs={PasswordInput}
         autoComplete="new-password"
         required
       />
 
       {error ? <FormError>{error}</FormError> : null}
 
-      <Button type="submit" disabled={pending} className="w-full">
+      <Button type="submit" size="xl" disabled={pending} className="mt-1 w-full">
         {pending ? "Сохраняем…" : "Сохранить пароль"}
       </Button>
     </form>

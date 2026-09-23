@@ -1,12 +1,13 @@
-import { ChevronDown, FileText, Image as ImageIcon } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
-import type { OrderFileDto } from "@/lib/types";
-
+import { FileRow } from "@/components/file-row";
 import { DownloadFileButton } from "@/components/orders/download-file-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { isImageMimeType } from "@/lib/file-kind";
-import { formatDate, formatFileSize } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import { pluralRu } from "@/lib/plural";
 import type { SubmissionsView, SubmissionView } from "@/lib/submissions";
+
+const ROUND_FORMS = ["раунд", "раунда", "раундов"] as const;
 
 /**
  * Сдачи работы (ТЗ §4.1).
@@ -38,13 +39,13 @@ export function SubmissionsCard({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>
-          Сдачи работ
-          {total > 0 ? (
-            <span className="text-muted-foreground font-normal"> · {total}</span>
-          ) : null}
-        </CardTitle>
+      <CardHeader className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <CardTitle>Сдачи работ</CardTitle>
+        {total > 0 ? (
+          <span className="text-muted-foreground text-sm">
+            {total} {pluralRu(total, ROUND_FORMS)}
+          </span>
+        ) : null}
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4">
@@ -100,52 +101,49 @@ function Submission({
   isOwner: boolean;
 }) {
   return (
-    <section className="border-border rounded-lg border p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h3 className="text-sm font-medium">Сдача №{submission.round}</h3>
-        <p className="text-muted-foreground text-xs">
+    <section className="overflow-hidden rounded-xl border">
+      {/* Шапка раунда на подложке — та же, что у шапки таблицы: номер сдачи
+          отделён от её содержимого. */}
+      <div className="bg-brand-surface flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b px-4 py-3.5">
+        <h3 className="flex items-center gap-3">
+          <span
+            className="bg-accent text-primary flex size-7 shrink-0 items-center justify-center rounded-lg font-mono text-xs"
+            aria-hidden
+          >
+            {submission.round}
+          </span>
+          <span className="font-heading text-base font-semibold">
+            Сдача №{submission.round}
+          </span>
+        </h3>
+        <p className="text-muted-foreground font-mono text-xs">
           {submission.submittedAt
-            ? `Сдана ${formatDate(submission.submittedAt)}`
+            ? `сдана ${formatDate(submission.submittedAt)}`
             : isOwner
-              ? "Исполнитель ещё готовит эту сдачу"
-              : "Готовится — вы ещё не сдали её клиенту"}
+              ? "исполнитель ещё готовит эту сдачу"
+              : "готовится — вы ещё не сдали её клиенту"}
         </p>
       </div>
 
       {submission.comment ? (
-        <p className="mt-3 text-sm whitespace-pre-line">{submission.comment}</p>
+        <p className="text-secondary-foreground border-b px-4 py-3.5 text-sm leading-relaxed whitespace-pre-line">
+          {submission.comment}
+        </p>
       ) : null}
 
       {submission.files.length > 0 ? (
-        <ul className="mt-3 flex flex-col gap-2">
+        <ul className="divide-border divide-y">
           {submission.files.map((file) => (
-            <SubmissionFile key={file.id} file={file} />
+            <FileRow key={file.id} file={file}>
+              <DownloadFileButton fileId={file.id} fileName={file.originalName} />
+            </FileRow>
           ))}
         </ul>
       ) : (
-        <p className="text-muted-foreground mt-3 text-sm">Файлов в этой сдаче нет.</p>
+        <p className="text-muted-foreground px-4 py-3.5 text-sm">
+          Файлов в этой сдаче нет.
+        </p>
       )}
     </section>
-  );
-}
-
-function SubmissionFile({ file }: { file: OrderFileDto }) {
-  const Icon = isImageMimeType(file.mimeType) ? ImageIcon : FileText;
-
-  return (
-    <li className="border-border flex items-center gap-3 rounded-lg border p-2">
-      <span className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-md">
-        <Icon className="text-muted-foreground size-4" aria-hidden />
-      </span>
-
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{file.originalName}</span>
-        <span className="text-muted-foreground text-xs">
-          {formatFileSize(file.sizeBytes)} · {formatDate(file.createdAt)}
-        </span>
-      </span>
-
-      <DownloadFileButton fileId={file.id} fileName={file.originalName} />
-    </li>
   );
 }

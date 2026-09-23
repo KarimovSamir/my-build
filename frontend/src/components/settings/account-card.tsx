@@ -1,9 +1,9 @@
-import { AtSign, CalendarDays, ShieldCheck } from "lucide-react";
-import type { ReactNode } from "react";
+import { ShieldCheck } from "lucide-react";
 
 import { roleLabels, type UserProfile } from "@/lib/types";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FormSection } from "@/components/form-parts";
+import { ListField } from "@/components/list-parts";
 import { formatDate } from "@/lib/format";
 
 /**
@@ -13,48 +13,29 @@ import { formatDate } from "@/lib/format";
  * у раздела нет — здесь он только показан, чтобы человек видел, под какой
  * учётной записью вошёл. Роль не меняется никогда: на ней держится вся модель
  * доступа, и смена превратила бы заказы клиента в чужие.
+ *
+ * Блок выглядит как остальные блоки настроек, но полей ввода в нём нет:
+ * подписи набраны той же моноширинной капителью, что и в карточках кабинета
+ * (`ListField`), — так видно, что это показ, а не форма.
  */
 export function AccountCard({ profile }: { profile: UserProfile }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Учётная запись</CardTitle>
-        <CardDescription>Эти данные менять нельзя</CardDescription>
-      </CardHeader>
-
-      <CardContent>
-        <dl className="grid gap-4 sm:grid-cols-3">
-          <Row icon={<AtSign className="size-4" aria-hidden />} label="Email">
-            {profile.email}
-          </Row>
-          <Row icon={<ShieldCheck className="size-4" aria-hidden />} label="Роль">
-            {roleLabels[profile.role]}
-          </Row>
-          <Row icon={<CalendarDays className="size-4" aria-hidden />} label="На площадке с">
-            {formatDate(profile.createdAt)}
-          </Row>
-        </dl>
-      </CardContent>
-    </Card>
-  );
-}
-
-function Row({
-  icon,
-  label,
-  children,
-}: {
-  icon: ReactNode;
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-muted-foreground flex items-center gap-1.5 text-xs">
-        {icon}
-        {label}
-      </dt>
-      <dd className="mt-0.5 text-sm break-words">{children}</dd>
-    </div>
+    <FormSection
+      icon={<ShieldCheck className="size-[1.0625rem]" />}
+      title="Учётная запись"
+      description="Эти данные менять нельзя"
+    >
+      <dl className="grid gap-5 sm:grid-cols-3">
+        <ListField label="Email">
+          <span className="font-mono text-sm break-words">{profile.email}</span>
+        </ListField>
+        <ListField label="Роль">
+          <span className="text-[0.9375rem] font-semibold">{roleLabels[profile.role]}</span>
+        </ListField>
+        <ListField label="На площадке с">
+          <span className="font-mono text-sm">{formatDate(profile.createdAt)}</span>
+        </ListField>
+      </dl>
+    </FormSection>
   );
 }

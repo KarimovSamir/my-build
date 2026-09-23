@@ -33,7 +33,7 @@ export function PaginationBar({
   hrefFor: (page: number) => string;
 }) {
   return (
-    <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm">
+    <div className="text-muted-foreground bg-brand-surface flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3.5 text-sm">
       <span>
         Показано {shown} из {total}
       </span>
@@ -78,6 +78,25 @@ function PageLink({
   );
 }
 
+/**
+ * Поле «подпись — значение»: в строке списка и в карточках кабинета.
+ *
+ * Подпись набрана той же моноширинной капителью, что и заголовки колонок
+ * таблицы: на мобильном строка складывается в карточку, и подписи полей там
+ * занимают место шапки таблицы — выглядеть они обязаны так же. По этой же
+ * причине поля карточки подрядчика берут его, а не свою разметку.
+ */
+export function ListField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-muted-foreground font-mono text-[0.6875rem] tracking-[0.12em] uppercase">
+        {label}
+      </dt>
+      <dd className="mt-1">{children}</dd>
+    </div>
+  );
+}
+
 /** Список пуст: объяснение и действие, которым это исправить. */
 export function EmptyCard({
   title,
@@ -92,8 +111,8 @@ export function EmptyCard({
     <Card>
       <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
         <div>
-          <p className="font-medium">{title}</p>
-          <p className="text-muted-foreground mt-1 text-sm">{description}</p>
+          <p className="font-heading text-base font-semibold">{title}</p>
+          <p className="text-muted-foreground mt-1.5 text-sm">{description}</p>
         </div>
         {children}
       </CardContent>
@@ -107,8 +126,8 @@ export function EmptyCard({
  */
 export function OutOfRange({ href, label }: { href: string; label: string }) {
   return (
-    <div className="flex flex-col items-center gap-3 px-4 py-14 text-center">
-      <p className="text-sm font-medium">{label}</p>
+    <div className="flex flex-col items-center gap-3 px-5 py-14 text-center">
+      <p className="font-heading text-base font-semibold">{label}</p>
       <Button variant="outline" size="sm" asChild>
         <Link href={href}>К первой странице</Link>
       </Button>
@@ -126,23 +145,23 @@ export function CardListSkeleton({ rows = 4 }: { rows?: number }) {
     <Card className="gap-0 p-0">
       <ul className="divide-border divide-y">
         {Array.from({ length: rows }, (_, index) => (
-          <li key={index} className="flex flex-col gap-3 px-4 py-4">
+          <li key={index} className="flex flex-col gap-4 px-5 py-5">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-2">
-                <Skeleton className="h-4 w-56 max-w-full" />
-                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-5 w-56 max-w-full" />
+                <Skeleton className="h-3 w-32" />
               </div>
-              <Skeleton className="h-6 w-32 rounded-full" />
+              <Skeleton className="h-7 w-36 rounded-full" />
             </div>
-            <div className="flex gap-3">
-              <Skeleton className="h-4 w-28" />
-              <Skeleton className="h-4 w-28" />
+            <div className="flex gap-6">
+              <Skeleton className="h-9 w-28" />
+              <Skeleton className="h-9 w-28" />
             </div>
           </li>
         ))}
       </ul>
 
-      <div className="flex items-center justify-between gap-3 border-t px-4 py-3">
+      <div className="bg-brand-surface flex items-center justify-between gap-3 border-t px-5 py-3.5">
         <Skeleton className="h-4 w-32" />
         <div className="flex gap-2">
           <Skeleton className="h-7 w-20" />
