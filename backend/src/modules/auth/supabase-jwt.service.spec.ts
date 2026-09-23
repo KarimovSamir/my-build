@@ -109,7 +109,21 @@ describe('SupabaseJwtService', () => {
       email: 'anna@example.test',
       emailVerified: true,
       role: Role.CLIENT,
+      isDemo: false,
     });
+  });
+
+  it('узнаёт демо-учётку только по app_metadata.demo === true', async () => {
+    const { service } = createService();
+    const isDemo = async (payload: JWTPayload): Promise<boolean> =>
+      (await service.verify(await sign({ payload }))).isDemo;
+
+    expect(await isDemo({ app_metadata: { provider: 'email', demo: true } })).toBe(true);
+    // user_metadata пользователь пишет сам через updateUser — ему не верим.
+    expect(await isDemo({ user_metadata: { demo: true } })).toBe(false);
+    expect(await isDemo({ app_metadata: { demo: 'true' } })).toBe(false);
+    expect(await isDemo({ app_metadata: null })).toBe(false);
+    expect(await isDemo({})).toBe(false);
   });
 
   it('ходит за ключами один раз: они кэшируются в памяти', async () => {

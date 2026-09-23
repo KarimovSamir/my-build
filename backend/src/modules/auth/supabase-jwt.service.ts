@@ -92,6 +92,7 @@ export class SupabaseJwtService implements OnModuleInit {
         email: typeof payload.email === 'string' ? payload.email : null,
         emailVerified: readEmailVerified(payload),
         role: this.readRole(payload),
+        isDemo: readIsDemo(payload),
       },
       expiresAt: typeof payload.exp === 'number' ? payload.exp * 1000 : null,
     };
@@ -132,4 +133,20 @@ export class SupabaseJwtService implements OnModuleInit {
  */
 function readEmailVerified(payload: JWTPayload): boolean {
   return payload.email_verified !== false;
+}
+
+/**
+ * Демо-учётка ли это (`app_metadata.demo`, его ставит seed).
+ *
+ * Здесь, в отличие от `email_verified`, отсутствие claim'а означает «нет»:
+ * флаг только сужает права, и промах в эту сторону ничего не открывает.
+ */
+function readIsDemo(payload: JWTPayload): boolean {
+  const appMetadata: unknown = payload.app_metadata;
+
+  return (
+    typeof appMetadata === 'object' &&
+    appMetadata !== null &&
+    (appMetadata as { demo?: unknown }).demo === true
+  );
 }

@@ -55,3 +55,18 @@ export function readRoleClaim(claim: unknown): Role | null {
 export function readEmailVerifiedClaim(claim: unknown): boolean {
   return claim !== false;
 }
+
+/**
+ * Общая демо-учётка с экрана входа — `app_metadata.demo` в токене.
+ *
+ * Флаг ставит seed ключом сервера; сам пользователь `app_metadata` не меняет.
+ * Интерфейсу он нужен, чтобы не предлагать того, что демо запрещено: пароль
+ * и email запрещает менять база, профиль — backend.
+ */
+export function readDemoClaim(appMetadata: unknown): boolean {
+  return (
+    typeof appMetadata === "object" &&
+    appMetadata !== null &&
+    (appMetadata as { demo?: unknown }).demo === true
+  );
+}

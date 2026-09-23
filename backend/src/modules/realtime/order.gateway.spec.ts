@@ -29,6 +29,7 @@ const client: AuthUser = {
   email: 'client@mybuild.test',
   emailVerified: true,
   role: Role.CLIENT,
+  isDemo: false,
 };
 
 /** Час жизни токена — столько же, сколько отводит Supabase. */

@@ -1,51 +1,31 @@
 /**
- * Тестовые данные для разработки: один клиент, три компании и по заказу
+ * Тестовые данные для разработки и демо: один клиент, три компании и по заказу
  * в каждом статусе state-машины (ТЗ §10, Фаза 1).
  *
  * Запуск: `npm run db:seed`.
  *
- * Пользователи заводятся как настоящие учётные записи Supabase Auth: профиль
- * в public.User создаёт триггер, напрямую в таблицу писать нельзя — на ней
- * внешний ключ на auth.users (Фаза 2).
+ * Это тот же сброс демо, что сервер выполняет по расписанию
+ * (`src/modules/demo/demo-reset.ts`), только без проверки «не пора ли»:
+ * данные и порядок действий у них общие. Учётки не пересоздаются, если уже
+ * помечены флагом `demo`, — вошедшие посетители сессию не теряют.
  *
- * Скрипт идемпотентен: сначала удаляет учётные записи со своими адресами,
- * а вместе с ними каскадом уходят профили, заказы, предложения, файлы и
- * уведомления. Чужие данные не трогает.
+ * Скрипт идемпотентен: удаляет заказы, предложения и уведомления демо-учёток,
+ * возвращает их профили и заводит данные заново. Чужие данные не трогает,
+ * кроме предложений демо-компаний по чужим заказам.
  *
- * Все тестовые пользователи входят с паролем SEED_PASSWORD и подтверждённым
- * email — письма при seed не отправляются.
- *
- * Ограничение, о котором стоит помнить: файлы существуют только строками
- * в БД; в бакете Supabase Storage их нет, поэтому скачивание по signed URL
- * на seed-данных не сработает.
+ * Файлы существуют только строками в БД; в бакете Supabase Storage их нет,
+ * поэтому скачивание по signed URL на seed-данных не сработает. Зато объекты,
+ * которые посетители загрузили в демо-заказы, удаляются вместе с заказами.
  */
 
 import 'dotenv/config';
-import { createHash } from 'node:crypto';
 
 import { PrismaPg } from '@prisma/adapter-pg';
-import { DEMO_EMAILS, DEMO_PASSWORD, formatOrderNumber } from '@mybuild/shared';
+import { DEMO_EMAILS, DEMO_PASSWORD } from '@mybuild/shared';
 
-import {
-  FileOwnerType,
-  NotificationType,
-  ObjectType,
-  OfferStatus,
-  OrderCategory,
-  OrderStatus,
-  PrismaClient,
-  Role,
-} from '../src/generated/prisma/client.js';
-import {
-  buildStorageKey,
-  sanitizeFileName,
-} from '../src/modules/files/file-validation.js';
-import {
-  createAuthUser,
-  createSupabaseAdminClient,
-  deleteAuthUsersByEmail,
-  type AuthUserMetadata,
-} from '../src/supabase/supabase-admin.js';
+import { PrismaClient } from '../src/generated/prisma/client.js';
+import { resetDemo } from '../src/modules/demo/demo-reset.js';
+import { createSupabaseAdminClient } from '../src/supabase/supabase-admin.js';
 
 const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 
@@ -64,562 +44,47 @@ const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) })
  *
  * Умолчание берётся из `shared/`: тот же пароль показывает экран входа.
  * Заданный здесь свой `SEED_PASSWORD` до экрана не доедет — демо-доступ и
- * собственный пароль вместе не живут.
+ * собственный пароль вместе не живут. Действует он только на учётки, которые
+ * создаются заново: у помеченных флагом `demo` пароль менять запрещает база.
  */
 const SEED_PASSWORD = process.env.SEED_PASSWORD ?? DEMO_PASSWORD;
 
-type UserKey = 'client' | 'stroygrad' | 'remont' | 'arch';
-
-interface SeedUser {
-  key: UserKey;
-  email: string;
-  metadata: AuthUserMetadata;
-}
-
-// Постоянные адреса вместо постоянных id: id теперь выдаёт Supabase Auth,
-// а повторный запуск находит прежние учётные записи по email и удаляет их.
-// Сами адреса — из `shared/`: их же показывает экран входа (`DEMO_ACCOUNTS`),
-// и расхождение означало бы кнопку «Войти» без учётной записи за ней.
-const seedUsers: SeedUser[] = [
-  {
-    key: 'client',
-    email: DEMO_EMAILS.client,
-    metadata: {
-      role: Role.CLIENT,
-      firstName: 'Анна',
-      lastName: 'Смирнова',
-      phone: '+994 50 100-10-01',
-      city: 'Баку',
-      country: 'Азербайджан',
-    },
-  },
-  {
-    key: 'stroygrad',
-    email: DEMO_EMAILS.stroygrad,
-    metadata: {
-      role: Role.COMPANY,
-      firstName: 'Иван',
-      lastName: 'Петров',
-      phone: '+994 51 200-20-02',
-      companyName: 'ООО «СтройГрад»',
-      city: 'Баку',
-      country: 'Азербайджан',
-    },
-  },
-  {
-    key: 'remont',
-    email: DEMO_EMAILS.remont,
-    metadata: {
-      role: Role.COMPANY,
-      firstName: 'Пётр',
-      lastName: 'Козлов',
-      phone: '+994 55 300-30-03',
-      companyName: 'ООО «Ремонт Плюс»',
-      city: 'Сумгаит',
-      country: 'Азербайджан',
-    },
-  },
-  {
-    key: 'arch',
-    email: DEMO_EMAILS.arch,
-    metadata: {
-      role: Role.COMPANY,
-      firstName: 'Ольга',
-      lastName: 'Новикова',
-      phone: '+994 70 400-40-04',
-      companyName: 'ООО «АрхПроект»',
-      city: 'Гянджа',
-      country: 'Азербайджан',
-    },
-  },
-];
-
-const userIds = new Map<UserKey, string>();
-
-/** id созданной учётной записи. Доступен только после `seedUsers()`. */
-function userId(key: UserKey): string {
-  const id = userIds.get(key);
-  if (!id) throw new Error(`Пользователь «${key}» ещё не создан`);
-  return id;
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Дата со сдвигом в днях от текущего момента: сроки должны выглядеть живыми. */
-function daysFromNow(days: number): Date {
-  return new Date(Date.now() + days * DAY_MS);
-}
-
-/** Хеш содержимого файла. Настоящих файлов нет — считаем от имени. */
-function fakeHash(name: string): string {
-  return createHash('sha256').update(name).digest('hex');
-}
-
-interface SeedFile {
-  name: string;
-  mimeType: string;
-  sizeBytes: number;
-  ownerType: FileOwnerType;
-  submissionRound: number;
-}
-
-function clientFile(name: string, mimeType: string, sizeBytes: number): SeedFile {
-  return {
-    name,
-    mimeType,
-    sizeBytes,
-    ownerType: FileOwnerType.CLIENT,
-    submissionRound: 0,
-  };
-}
-
-function companyFile(
-  name: string,
-  mimeType: string,
-  sizeBytes: number,
-  submissionRound: number,
-): SeedFile {
-  return {
-    name,
-    mimeType,
-    sizeBytes,
-    ownerType: FileOwnerType.COMPANY,
-    submissionRound,
-  };
-}
-
-/** Сдача работы: комментарий компании к файлам того же раунда (ТЗ §4.1). */
-interface SeedSubmission {
-  round: number;
-  comment: string;
-  /** Все сдачи в seed уже отправлены клиенту: открытых раундов нет. */
-  submittedAt: Date;
-}
-
-/**
- * Создаёт учётные записи. Профили в public.User пишет триггер — здесь
- * остаётся только запомнить выданные Supabase идентификаторы.
- */
-async function createSeedUsers(): Promise<void> {
-  const admin = createSupabaseAdminClient();
-
-  const removed = await deleteAuthUsersByEmail(
-    admin,
-    seedUsers.map((user) => user.email),
-  );
-  if (removed > 0) {
-    console.log(`Удалены прежние тестовые учётные записи: ${removed}`);
-  }
-
-  for (const user of seedUsers) {
-    const created = await createAuthUser(admin, {
-      email: user.email,
-      password: SEED_PASSWORD,
-      metadata: user.metadata,
-    });
-    userIds.set(user.key, created.id);
-  }
-}
-
-interface SeedOrder {
-  title: string;
-  category: OrderCategory;
-  objectType: ObjectType;
-  description: string;
-  address: string;
-  squareMeters: number;
-  verifiedSquareMeters?: number;
-  clientBudget?: string;
-  desiredStartDate?: Date;
-  price?: string;
-  deadline?: Date;
-  status: OrderStatus;
-  clientCompletionComment?: string;
-  correctionComment?: string;
-  files: SeedFile[];
-  /** По одной записи на каждый раунд файлов компании. */
-  submissions?: SeedSubmission[];
-  offers: {
-    companyId: string;
-    status: OfferStatus;
-    proposedPrice: string;
-    proposedDeadline: Date;
-    comment?: string;
-  }[];
-}
-
-/**
- * По одному заказу на каждый статус — чтобы экраны было чем наполнить.
- * Функция, а не константа: идентификаторы компаний известны только после
- * создания учётных записей.
- */
-const buildOrders = (): SeedOrder[] => [
-  {
-    title: 'Ремонт квартиры 100 м²',
-    category: OrderCategory.PLAN_IMPLEMENTATION,
-    objectType: ObjectType.APARTMENT,
-    description:
-      'Полный ремонт двухкомнатной квартиры: демонтаж, электрика, ' +
-      'выравнивание стен, чистовая отделка. Материалы за счёт заказчика.',
-    address: 'Баку, ул. Низами, 45, кв. 12',
-    squareMeters: 100,
-    clientBudget: '30600.00',
-    desiredStartDate: daysFromNow(14),
-    status: OrderStatus.WAITING,
-    files: [clientFile('Планировка квартиры.pdf', 'application/pdf', 842_113)],
-    offers: [],
-  },
-  {
-    title: 'Отделка офиса открытого типа',
-    category: OrderCategory.PLAN_IMPLEMENTATION,
-    objectType: ObjectType.COMMERCIAL,
-    description:
-      'Отделка офисного помещения на 40 рабочих мест: перегородки, ' +
-      'подвесной потолок, освещение, напольное покрытие.',
-    address: 'Баку, Приморский бул., 12, этаж 8',
-    squareMeters: 320,
-    clientBudget: '88400.00',
-    desiredStartDate: daysFromNow(30),
-    status: OrderStatus.AWAITING_CONFIRMATION,
-    files: [
-      clientFile('Обмерный план офиса.pdf', 'application/pdf', 1_204_882),
-      clientFile('Референсы интерьера.png', 'image/png', 2_931_004),
-    ],
-    offers: [
-      {
-        companyId: userId('stroygrad'),
-        status: OfferStatus.SENT,
-        proposedPrice: '84200.00',
-        proposedDeadline: daysFromNow(75),
-        comment: 'Своя бригада, работаем без выходных. Гарантия 2 года.',
-      },
-      {
-        companyId: userId('remont'),
-        status: OfferStatus.SENT,
-        proposedPrice: '95200.00',
-        proposedDeadline: daysFromNow(60),
-        comment: 'Срок короче за счёт двух смен. Материалы закупаем сами.',
-      },
-      {
-        // Отозванное предложение: заказ должен снова быть виден этой компании
-        // в ленте доступных (ТЗ §4.1).
-        companyId: userId('arch'),
-        status: OfferStatus.WITHDRAWN,
-        proposedPrice: '103700.00',
-        proposedDeadline: daysFromNow(90),
-      },
-    ],
-  },
-  {
-    title: 'Строительство частного дома',
-    category: OrderCategory.PLAN_IMPLEMENTATION,
-    objectType: ObjectType.HOUSE,
-    description:
-      'Дом 180 м² в два этажа: фундамент, коробка, кровля, окна. ' +
-      'Внутренняя отделка отдельным заказом.',
-    address: 'Абшеронский р-н, пос. Мардакян, уч. 18',
-    squareMeters: 180,
-    // Исполнитель обмерил объект и уточнил площадь (ТЗ §4.1).
-    verifiedSquareMeters: 186.5,
-    clientBudget: '357000.00',
-    desiredStartDate: daysFromNow(-20),
-    price: '346800.00',
-    deadline: daysFromNow(150),
-    status: OrderStatus.IN_PROGRESS,
-    files: [clientFile('Проект дома.pdf', 'application/pdf', 5_112_774)],
-    offers: [
-      {
-        companyId: userId('stroygrad'),
-        status: OfferStatus.ACCEPTED,
-        proposedPrice: '346800.00',
-        proposedDeadline: daysFromNow(150),
-        comment: 'Начинаем с фундамента, поэтапная приёмка.',
-      },
-      {
-        companyId: userId('remont'),
-        status: OfferStatus.NOT_ACCEPTED,
-        proposedPrice: '387600.00',
-        proposedDeadline: daysFromNow(130),
-      },
-    ],
-  },
-  {
-    title: 'Проект перепланировки квартиры',
-    category: OrderCategory.PLAN_CREATION,
-    objectType: ObjectType.APARTMENT,
-    description:
-      'Нужен проект перепланировки с объединением кухни и гостиной, ' +
-      'пригодный для согласования.',
-    address: 'Гянджа, ул. Джавадхана, 7, кв. 44',
-    squareMeters: 72,
-    clientBudget: '5100.00',
-    price: '4800.00',
-    deadline: daysFromNow(5),
-    status: OrderStatus.AWAITING_COMPLETION_CONFIRMATION,
-    files: [
-      clientFile('Текущий план БТИ.pdf', 'application/pdf', 640_221),
-      companyFile('Проект перепланировки.dwg', 'image/vnd.dwg', 3_882_010, 1),
-      companyFile('Пояснительная записка.pdf', 'application/pdf', 918_443, 1),
-    ],
-    submissions: [
-      {
-        round: 1,
-        comment: 'Проект готов, приложила пояснительную записку для согласования.',
-        submittedAt: daysFromNow(-1),
-      },
-    ],
-    offers: [
-      {
-        companyId: userId('arch'),
-        status: OfferStatus.WORK_SUBMITTED,
-        proposedPrice: '4800.00',
-        proposedDeadline: daysFromNow(5),
-        comment: 'Проект готов, приложила записку для согласования.',
-      },
-    ],
-  },
-  {
-    title: 'Ремонт санузла',
-    category: OrderCategory.PLAN_IMPLEMENTATION,
-    objectType: ObjectType.APARTMENT,
-    description: 'Санузел 6 м²: гидроизоляция, плитка, сантехника, тёплый пол.',
-    address: 'Сумгаит, пр. Нефтяников, 88, кв. 5',
-    squareMeters: 6,
-    clientBudget: '7700.00',
-    price: '7300.00',
-    deadline: daysFromNow(-2),
-    status: OrderStatus.COMPLETION_DISPUTED,
-    correctionComment:
-      'Затирка швов местами неровная, у душевого трапа стоит вода. ' +
-      'Прошу переделать до приёмки.',
-    files: [
-      clientFile('Схема разводки.pdf', 'application/pdf', 402_115),
-      companyFile('Фото после работ.jpg', 'image/jpeg', 2_204_910, 1),
-    ],
-    // Сдача отправлена и вернулась на доработку: следующий раунд компания
-    // откроет сама, загрузив исправления.
-    submissions: [
-      {
-        round: 1,
-        comment: 'Работы закончены, прикладываю фото.',
-        submittedAt: daysFromNow(-3),
-      },
-    ],
-    offers: [
-      {
-        companyId: userId('remont'),
-        status: OfferStatus.BACK_FOR_OVERRIDE,
-        proposedPrice: '7300.00',
-        proposedDeadline: daysFromNow(-2),
-      },
-    ],
-  },
-  {
-    title: 'Дизайн-проект кухни',
-    category: OrderCategory.PLAN_CREATION,
-    objectType: ObjectType.APARTMENT,
-    description: 'Дизайн-проект кухни-столовой с расстановкой мебели и техники.',
-    address: 'Баку, ул. Низами, 45, кв. 12',
-    squareMeters: 18,
-    clientBudget: '2600.00',
-    price: '2400.00',
-    deadline: daysFromNow(-10),
-    status: OrderStatus.COMPLETED,
-    clientCompletionComment: 'Всё отлично, спасибо за правки по цвету фасадов.',
-    files: [
-      // Две сдачи: первая ушла на доработку, вторая принята — на этом заказе
-      // проверяется блок «История сдач» (ТЗ §4.1).
-      companyFile('Дизайн-проект v1.pdf', 'application/pdf', 7_331_002, 1),
-      companyFile('Дизайн-проект финал.pdf', 'application/pdf', 7_905_244, 2),
-      companyFile('Визуализации.png', 'image/png', 4_120_338, 2),
-    ],
-    submissions: [
-      {
-        round: 1,
-        comment: 'Первый вариант дизайн-проекта на согласование.',
-        submittedAt: daysFromNow(-16),
-      },
-      {
-        round: 2,
-        comment: 'Поправил цвет фасадов, добавил визуализации.',
-        submittedAt: daysFromNow(-11),
-      },
-    ],
-    offers: [
-      {
-        companyId: userId('stroygrad'),
-        status: OfferStatus.COMPLETED,
-        proposedPrice: '2400.00',
-        proposedDeadline: daysFromNow(-10),
-      },
-    ],
-  },
-];
-
-async function seedOrders(): Promise<void> {
-  for (const order of buildOrders()) {
-    // Заказ создаётся первым, а файлы — следом: ключ объекта в хранилище
-    // содержит идентификатор заказа, и до вставки его ещё нет.
-    const created = await prisma.order.create({
-      data: {
-        clientId: userId('client'),
-        title: order.title,
-        category: order.category,
-        objectType: order.objectType,
-        description: order.description,
-        address: order.address,
-        squareMeters: order.squareMeters,
-        verifiedSquareMeters: order.verifiedSquareMeters ?? null,
-        clientBudget: order.clientBudget ?? null,
-        desiredStartDate: order.desiredStartDate ?? null,
-        price: order.price ?? null,
-        deadline: order.deadline ?? null,
-        status: order.status,
-        clientCompletionComment: order.clientCompletionComment ?? null,
-        correctionComment: order.correctionComment ?? null,
-        offers: { create: order.offers },
-        // Сдача — это комментарий компании плюс файлы того же раунда;
-        // без неё карточка заказа показала бы файлы «ничьей» сдачи.
-        submissions: { create: order.submissions ?? [] },
-      },
-    });
-
-    await prisma.orderFile.createMany({
-      data: order.files.map((file) => {
-        const prepared = {
-          fileHash: fakeHash(file.name),
-          safeName: sanitizeFileName(file.name),
-        };
-
-        return {
-          orderId: created.id,
-          // Ключ строится той же функцией, что и при настоящей загрузке:
-          // иначе seed-данные выглядели бы как файлы приложения, но лежали
-          // бы не там, где их ищет `FilesService`.
-          storageKey: buildStorageKey(
-            created.id,
-            file.ownerType,
-            file.submissionRound,
-            prepared,
-          ),
-          ownerType: file.ownerType,
-          submissionRound: file.submissionRound,
-          fileHash: prepared.fileHash,
-          originalName: file.name,
-          mimeType: file.mimeType,
-          sizeBytes: file.sizeBytes,
-        };
-      }),
-    });
-  }
-}
-
-/**
- * Уведомления по уже случившимся переходам: колокольчик и раздел
- * «Уведомления» должны быть не пустыми ещё до Фазы 5.
- */
-async function seedNotifications(): Promise<void> {
-  const byTitle = new Map(
-    (
-      await prisma.order.findMany({
-        where: { clientId: userId('client') },
-        select: { id: true, orderNumber: true, title: true },
-      })
-    ).map((order) => [order.title, order]),
-  );
-
-  const ref = (title: string): string => {
-    const order = byTitle.get(title);
-    if (!order) throw new Error(`Заказ «${title}» не найден после создания`);
-    return `${formatOrderNumber(order.orderNumber)} «${order.title}»`;
-  };
-
-  const orderId = (title: string): string => byTitle.get(title)!.id;
-
-  await prisma.notification.createMany({
-    data: [
-      {
-        userId: userId('client'),
-        type: NotificationType.OFFER_RECEIVED,
-        orderId: orderId('Отделка офиса открытого типа'),
-        title: 'Новое предложение',
-        body: `${ref('Отделка офиса открытого типа')}: предложение от «ООО «СтройГрад»»`,
-        isRead: false,
-      },
-      {
-        userId: userId('client'),
-        type: NotificationType.OFFER_RECEIVED,
-        orderId: orderId('Отделка офиса открытого типа'),
-        title: 'Новое предложение',
-        body: `${ref('Отделка офиса открытого типа')}: предложение от «ООО «Ремонт Плюс»»`,
-        isRead: false,
-      },
-      {
-        userId: userId('client'),
-        type: NotificationType.AREA_VERIFIED,
-        orderId: orderId('Строительство частного дома'),
-        title: 'Уточнена площадь',
-        body: `${ref('Строительство частного дома')}: исполнитель уточнил площадь — 186.5 м²`,
-        isRead: true,
-      },
-      {
-        userId: userId('client'),
-        type: NotificationType.WORK_SUBMITTED,
-        orderId: orderId('Проект перепланировки квартиры'),
-        title: 'Работа сдана',
-        body: `${ref('Проект перепланировки квартиры')}: работа сдана и ждёт вашего подтверждения`,
-        isRead: false,
-      },
-      {
-        userId: userId('stroygrad'),
-        type: NotificationType.OFFER_ACCEPTED,
-        orderId: orderId('Строительство частного дома'),
-        title: 'Предложение принято',
-        body: `${ref('Строительство частного дома')}: ваше предложение принято, можно приступать`,
-        isRead: true,
-      },
-      {
-        userId: userId('stroygrad'),
-        type: NotificationType.WORK_CONFIRMED,
-        orderId: orderId('Дизайн-проект кухни'),
-        title: 'Работа принята',
-        body: `${ref('Дизайн-проект кухни')}: клиент принял работу`,
-        isRead: false,
-      },
-      {
-        userId: userId('remont'),
-        type: NotificationType.WORK_DISPUTED,
-        orderId: orderId('Ремонт санузла'),
-        title: 'Работа отправлена на доработку',
-        body: `${ref('Ремонт санузла')}: клиент отправил работу на доработку`,
-        isRead: false,
-      },
-      {
-        // Проигравшей компании — то же уведомление, что создаёт машина
-        // при принятии чужого предложения (ТЗ §4, §8).
-        userId: userId('remont'),
-        type: NotificationType.OFFER_REJECTED,
-        orderId: orderId('Строительство частного дома'),
-        title: 'Предложение отклонено',
-        body: `${ref('Строительство частного дома')}: клиент выбрал другое предложение`,
-        isRead: true,
-      },
-    ],
-  });
-}
+const BUCKET = process.env.SUPABASE_STORAGE_BUCKET ?? 'order-files';
 
 async function main(): Promise<void> {
-  // Удаление прежних учётных записей — внутри: каскад от auth.users уносит
-  // профили, заказы, предложения, файлы и уведомления.
-  await createSeedUsers();
-  await seedOrders();
-  await seedNotifications();
+  const admin = createSupabaseAdminClient();
 
-  const ids = [...userIds.values()];
-  const clientId = userId('client');
+  const result = await resetDemo({
+    prisma,
+    admin,
+    password: SEED_PASSWORD,
+    removeObjects: async (keys) => {
+      if (keys.length === 0) return;
 
-  const [users, ordersCount, offers, files, notifications] = await Promise.all([
-    prisma.user.count({ where: { id: { in: ids } } }),
+      const { error } = await admin.storage.from(BUCKET).remove(keys);
+      if (error) {
+        // Как и на сервере: лишний объект в бакете — не повод считать seed
+        // проваленным, данные в базе уже на месте.
+        console.warn(`Не удалось удалить из бакета ${keys.length} объект(ов): ${error.message}`);
+      }
+    },
+  });
+
+  if (result && result.recreatedUsers > 0) {
+    console.log(`Учётные записи созданы заново: ${result.recreatedUsers}`);
+  }
+
+  const users = await prisma.user.findMany({
+    where: { email: { in: Object.values(DEMO_EMAILS) } },
+    select: { id: true, email: true },
+  });
+  const ids = users.map((user) => user.id);
+  const clientId = users.find((user) => user.email === DEMO_EMAILS.client)?.id;
+
+  // Без этой проверки `where: { clientId: undefined }` посчитал бы заказы всех.
+  if (!clientId) throw new Error('Демо-клиент не найден после сброса');
+
+  const [ordersCount, offers, files, notifications] = await Promise.all([
     prisma.order.count({ where: { clientId } }),
     prisma.offer.count({ where: { companyId: { in: ids } } }),
     prisma.orderFile.count({ where: { order: { clientId } } }),
@@ -627,7 +92,7 @@ async function main(): Promise<void> {
   ]);
 
   console.log(
-    `Готово: пользователей ${users}, заказов ${ordersCount}, ` +
+    `Готово: пользователей ${users.length}, заказов ${ordersCount}, ` +
       `предложений ${offers}, файлов ${files}, уведомлений ${notifications}`,
   );
   console.log(`Вход в тестовые аккаунты: пароль ${SEED_PASSWORD}`);

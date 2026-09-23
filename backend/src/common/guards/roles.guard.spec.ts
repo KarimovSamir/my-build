@@ -36,7 +36,7 @@ function contextFor(
 
 const guard = new RolesGuard(new Reflector());
 
-const verified = { emailVerified: true } as const;
+const verified = { emailVerified: true, isDemo: false } as const;
 
 const client: AuthUser = { id: 'u1', email: 'a@b.test', role: Role.CLIENT, ...verified };
 const company: AuthUser = { id: 'u2', email: 'c@d.test', role: Role.COMPANY, ...verified };

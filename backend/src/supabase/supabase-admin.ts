@@ -47,6 +47,10 @@ export interface AuthUserMetadata {
  *
  * `confirmEmail: false` нужен только тестам: так проверяется, что хук доступа
  * кладёт в токен `email_verified: false` (ТЗ §6).
+ *
+ * `demo: true` помечает общую демо-учётку с экрана входа (`app_metadata.demo`):
+ * по этому флагу база запрещает менять ей пароль и email, а backend — профиль.
+ * `app_metadata` пишет только ключ сервера, сам пользователь его не меняет.
  */
 export async function createAuthUser(
   admin: SupabaseClient,
@@ -55,6 +59,7 @@ export async function createAuthUser(
     password: string;
     metadata: AuthUserMetadata;
     confirmEmail?: boolean;
+    demo?: boolean;
   },
 ): Promise<User> {
   const { data, error } = await admin.auth.admin.createUser({
@@ -62,6 +67,7 @@ export async function createAuthUser(
     password: params.password,
     email_confirm: params.confirmEmail ?? true,
     user_metadata: params.metadata,
+    ...(params.demo ? { app_metadata: { demo: true } } : {}),
   });
 
   if (error || !data.user) {
@@ -73,18 +79,22 @@ export async function createAuthUser(
   return data.user;
 }
 
+/** Демо-учётка ли это: флаг ставит `createAuthUser({ demo: true })`. */
+export function isDemoAuthUser(user: User): boolean {
+  return user.app_metadata?.demo === true;
+}
+
 /**
- * Удалить учётные записи, чей email подходит под условие. Профили и всё,
- * что к ним привязано, уходят каскадом по внешнему ключу на auth.users.
+ * Учётные записи, чей email подходит под условие.
  *
  * Admin API не умеет искать по email, поэтому список перебирается страницами.
  */
-export async function deleteAuthUsersWhere(
+export async function findAuthUsersWhere(
   admin: SupabaseClient,
   matches: (email: string) => boolean,
-): Promise<number> {
+): Promise<User[]> {
   const perPage = 200;
-  const ids: string[] = [];
+  const found: User[] = [];
 
   for (let page = 1; ; page += 1) {
     // Страницы можно читать только по очереди: сколько их всего, известно
@@ -98,12 +108,19 @@ export async function deleteAuthUsersWhere(
 
     for (const user of data.users) {
       if (user.email && matches(user.email.toLowerCase())) {
-        ids.push(user.id);
+        found.push(user);
       }
     }
 
     if (data.users.length < perPage) break;
   }
+
+  return found;
+}
+
+/** Удалить учётные записи по идентификаторам. Профили и всё, что к ним привязано, уходят каскадом. */
+export async function deleteAuthUsers(admin: SupabaseClient, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
 
   const results = await Promise.all(
     ids.map(async (id) => ({ id, ...(await admin.auth.admin.deleteUser(id)) })),
@@ -115,17 +132,18 @@ export async function deleteAuthUsersWhere(
       `Не удалось удалить пользователя ${failed.id}: ${failed.error?.message}`,
     );
   }
-
-  return ids.length;
 }
 
-/** Удалить учётные записи с перечисленными адресами. */
-export function deleteAuthUsersByEmail(
+/**
+ * Удалить учётные записи, чей email подходит под условие. Профили и всё,
+ * что к ним привязано, уходят каскадом по внешнему ключу на auth.users.
+ */
+export async function deleteAuthUsersWhere(
   admin: SupabaseClient,
-  emails: string[],
+  matches: (email: string) => boolean,
 ): Promise<number> {
-  if (emails.length === 0) return Promise.resolve(0);
+  const ids = (await findAuthUsersWhere(admin, matches)).map((user) => user.id);
+  await deleteAuthUsers(admin, ids);
 
-  const wanted = new Set(emails.map((email) => email.toLowerCase()));
-  return deleteAuthUsersWhere(admin, (email) => wanted.has(email));
+  return ids.length;
 }

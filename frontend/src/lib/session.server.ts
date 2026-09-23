@@ -7,6 +7,7 @@ import type { Role, UserProfile } from "@/lib/types";
 
 import { serverApi } from "./api.server";
 import {
+  readDemoClaim,
   readEmailVerifiedClaim,
   readRoleClaim,
   toCurrentUser,
@@ -27,6 +28,8 @@ export interface SessionClaims {
   /** Claim из Custom Access Token Hook: подтверждён ли адрес (ТЗ §6). */
   emailVerified: boolean;
   role: Role | null;
+  /** Общая демо-учётка с экрана входа: пароль, email и профиль в ней не меняются. */
+  isDemo: boolean;
 }
 
 /**
@@ -47,6 +50,7 @@ export const getSessionClaims = cache(async (): Promise<SessionClaims | null> =>
     email: typeof claims.email === "string" ? claims.email : null,
     emailVerified: readEmailVerifiedClaim(claims.email_verified),
     role: readRoleClaim(claims.user_role),
+    isDemo: readDemoClaim(claims.app_metadata),
   };
 });
 

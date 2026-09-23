@@ -98,6 +98,7 @@ const client: AuthUser = {
   email: 'client@e2e.test',
   emailVerified: true,
   role: Role.CLIENT,
+  isDemo: false,
 };
 
 const company: AuthUser = {
@@ -105,6 +106,7 @@ const company: AuthUser = {
   email: 'company@e2e.test',
   emailVerified: true,
   role: Role.COMPANY,
+  isDemo: false,
 };
 
 const waitingOrder: StubOrder = {

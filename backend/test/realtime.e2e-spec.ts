@@ -397,6 +397,7 @@ describe('WebSocket-шлюз: истечение токена (e2e)', () => {
     email: 'ttl@mybuild.test',
     emailVerified: true,
     role: Role.CLIENT,
+    isDemo: false,
   };
 
   let app: INestApplication;

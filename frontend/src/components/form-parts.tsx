@@ -28,7 +28,8 @@ export function FormSection({
   icon: ReactNode;
   title: string;
   description?: ReactNode;
-  children: ReactNode;
+  /** Без содержимого остаётся одна шапка — например, когда блок только объясняет запрет. */
+  children?: ReactNode;
 }) {
   return (
     <Card>
@@ -42,7 +43,7 @@ export function FormSection({
         {description ? <CardDescription>{description}</CardDescription> : null}
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-5">{children}</CardContent>
+      {children ? <CardContent className="flex flex-col gap-5">{children}</CardContent> : null}
     </Card>
   );
 }

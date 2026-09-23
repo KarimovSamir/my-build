@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  HttpStatus,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,6 +22,7 @@ import {
 } from '../../../test/support/uploads.js';
 import type { PrismaService } from '../../prisma/prisma.service.js';
 import type { PreparedFile } from './file-validation.js';
+import { MAX_CLIENT_FILES_BYTES, MAX_TOTAL_FILES_BYTES } from './file-quota.js';
 import { FilesService } from './files.service.js';
 import type { StorageService } from './storage.service.js';
 import { prepareFile } from './uploaded-file.js';
@@ -60,11 +66,20 @@ interface StubOrder {
   offers: { companyId: string; status: OfferStatus }[];
 }
 
-/** Форма запроса, которую строит `assertFileAccess`. */
+/**
+ * Формы запроса к заказу: `assertFileAccess` спрашивает предложения зрителя,
+ * подсчёт квоты — только заказчика.
+ */
 interface OrderFindUniqueArgs {
   select: {
-    offers: { where: { companyId: string } };
+    clientId: true;
+    offers?: { where: { companyId: string } };
   };
+}
+
+/** Условие подсчёта места: заказ, все заказы заказчика или весь сервис. */
+interface AggregateArgs {
+  where: { orderId?: string; order?: { clientId: string } };
 }
 
 /**
@@ -77,6 +92,10 @@ function createPrismaStub(overrides: {
   liveKeys?: string[];
   /** Сколько байт файлы заказа занимают уже сейчас (проверка потолка). */
   usedBytes?: number;
+  /** Сколько занимают все заказы заказчика. По умолчанию — столько же, сколько заказ. */
+  clientBytes?: number;
+  /** Сколько занимает весь сервис. По умолчанию — столько же, сколько заказчик. */
+  totalBytes?: number;
   order?: StubOrder | null;
 }) {
   const stub = {
@@ -103,18 +122,33 @@ function createPrismaStub(overrides: {
           : (overrides.existingHashes ?? []).map((fileHash) => ({ fileHash })),
       ),
       findUnique: vi.fn(async () => null),
-      // Сколько места файлы заказа занимают уже сейчас — по этому числу
-      // считается потолок в 50 МБ.
-      aggregate: vi.fn(async (_args: unknown) => ({
-        _sum: { sizeBytes: overrides.usedBytes ?? 0 },
-      })),
+      // Сколько места уже занято — по условию запроса видно, какая из трёх
+      // квот спрашивает: заказ, заказчик или сервис целиком.
+      aggregate: vi.fn(async (args: AggregateArgs) => {
+        const order = overrides.usedBytes ?? 0;
+        const client = overrides.clientBytes ?? order;
+        const total = overrides.totalBytes ?? client;
+
+        const sizeBytes = args.where.orderId
+          ? order
+          : args.where.order
+            ? client
+            : total;
+
+        return { _sum: { sizeBytes } };
+      }),
     },
     order: {
       findUnique: vi.fn(async (args: OrderFindUniqueArgs) => {
-        const order = overrides.order;
+        // Квоте заказ нужен всегда, даже когда тест про доступ его не задал.
+        const order =
+          overrides.order === undefined
+            ? { clientId: CLIENT_ID, offers: [] }
+            : overrides.order;
         if (!order) return null;
 
-        const filter = args.select.offers.where;
+        const filter = args.select.offers?.where;
+        if (!filter) return { clientId: order.clientId };
 
         return {
           clientId: order.clientId,
@@ -459,9 +493,13 @@ describe('FilesService.attachFiles', () => {
     // Первый вызов (снимок до загрузки) отвечает «свободно», второй
     // (уже внутри транзакции) — «занято».
     const prisma = createPrismaStub({});
-    prisma.orderFile.aggregate
-      .mockResolvedValueOnce({ _sum: { sizeBytes: 0 } })
-      .mockResolvedValueOnce({ _sum: { sizeBytes: MAX_ORDER_FILES_BYTES } });
+    let orderQueries = 0;
+    prisma.orderFile.aggregate.mockImplementation(async (args: AggregateArgs) => {
+      if (!args.where.orderId) return { _sum: { sizeBytes: 0 } };
+
+      orderQueries += 1;
+      return { _sum: { sizeBytes: orderQueries === 1 ? 0 : MAX_ORDER_FILES_BYTES } };
+    });
 
     await expect(
       createService(prisma, storage).attachFiles({
@@ -475,6 +513,62 @@ describe('FilesService.attachFiles', () => {
     // Объект успел уехать в бакет — и его убирают вместе с откатом.
     expect(storage.upload).toHaveBeenCalledTimes(1);
     expect(storage.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('не пускает файлы сверх квоты заказчика, даже в пустой заказ', async () => {
+    // Потолок заказа не бережёт хранилище: заказов можно завести сколько угодно.
+    const file = await upload('смета.pdf', 'новый заказ того же клиента');
+    const prisma = createPrismaStub({
+      usedBytes: 0,
+      clientBytes: MAX_CLIENT_FILES_BYTES - file.sizeBytes + 1,
+    });
+
+    await expect(
+      createService(prisma, storage).attachFiles({
+        orderId: ORDER_ID,
+        ownerType: FileOwnerType.CLIENT,
+        submissionRound: 0,
+        files: [file],
+      }),
+    ).rejects.toThrow(/ваших заказов/);
+
+    expect(storage.upload).not.toHaveBeenCalled();
+  });
+
+  it('квота заказчика считается по заказчику из заказа, а не по тому, кто грузит', async () => {
+    const prisma = createPrismaStub({ clientBytes: MAX_CLIENT_FILES_BYTES });
+
+    await expect(
+      createService(prisma, storage).attachFiles({
+        orderId: ORDER_ID,
+        ownerType: FileOwnerType.COMPANY,
+        submissionRound: 1,
+        files: [await upload('акт.pdf', 'сдача исполнителя')],
+      }),
+    ).rejects.toThrow(/У заказчика закончилось место/);
+
+    expect(prisma.orderFile.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { order: { clientId: CLIENT_ID } } }),
+    );
+  });
+
+  it('при заполненном хранилище сервиса отвечает 507, а не 400', async () => {
+    const prisma = createPrismaStub({
+      usedBytes: 0,
+      clientBytes: 0,
+      totalBytes: MAX_TOTAL_FILES_BYTES,
+    });
+
+    await expect(
+      createService(prisma, storage).attachFiles({
+        orderId: ORDER_ID,
+        ownerType: FileOwnerType.CLIENT,
+        submissionRound: 0,
+        files: [await upload('план.pdf', 'в полное хранилище')],
+      }),
+    ).rejects.toMatchObject({ status: HttpStatus.INSUFFICIENT_STORAGE });
+
+    expect(storage.upload).not.toHaveBeenCalled();
   });
 
   it('не принимает пустой список файлов', async () => {

@@ -9,13 +9,14 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
   FileOwnerType,
-  MAX_ORDER_FILES_BYTES,
   Role,
   companySeesTaskFiles,
   isExecutorOffer,
@@ -31,6 +32,7 @@ import {
   type PreparedFile,
   type UploadedFileInput,
 } from './file-validation.js';
+import { checkStorageQuota, type StorageUsage } from './file-quota.js';
 import { prepareFile, readFileBuffer } from './uploaded-file.js';
 import { toOrderFileDto } from './file-view.js';
 import { StorageService } from './storage.service.js';
@@ -91,11 +93,6 @@ export interface AttachFilesParams {
  */
 const ATTACH_TX_OPTIONS = { timeout: 15_000, maxWait: 10_000 } as const;
 
-/** Байты в мегабайты для текста ошибки: «14,5», а не «15204352». */
-function toMegabytes(bytes: number): string {
-  return (bytes / 1024 / 1024).toLocaleString('ru-RU', { maximumFractionDigits: 1 });
-}
-
 @Injectable()
 export class FilesService {
   private readonly logger = new Logger(FilesService.name);
@@ -140,9 +137,9 @@ export class FilesService {
       return [];
     }
 
-    // Быстрый отказ до похода в бакет: перелив в 50 МБ незачем сначала
+    // Быстрый отказ до похода в бакет: перелив квоты незачем сначала
     // заливать, а потом убирать. Настоящая проверка — под транзакцией ниже.
-    await this.assertOrderQuota(this.prisma, orderId, fresh);
+    await this.assertStorageQuota(this.prisma, orderId, ownerType, fresh);
 
     const keys = fresh.map((file) =>
       buildStorageKey(orderId, ownerType, submissionRound, file),
@@ -170,7 +167,7 @@ export class FilesService {
 
         // Под той же транзакцией, что и вставка: снимок выше мог устареть —
         // параллельный запрос успел занять место, пока файлы ехали в бакет.
-        await this.assertOrderQuota(tx, orderId, fresh);
+        await this.assertStorageQuota(tx, orderId, ownerType, fresh);
 
         const created = await tx.orderFile.createManyAndReturn({
           data: fresh.map((file, index) => ({
@@ -350,36 +347,40 @@ export class FilesService {
   }
 
   /**
-   * Файлы заказа целиком должны укладываться в `MAX_ORDER_FILES_BYTES`.
+   * Новые файлы должны уложиться во все три квоты хранилища: заказа,
+   * заказчика и сервиса целиком (`file-quota.ts`).
    *
-   * Считается по всем файлам заказа, а не по сдаче и не по владельцу: лимит
-   * существует ради квоты хранилища, а ей безразлично, кто занял место.
    * Дубликаты сюда не доходят — их отсеял `dropDuplicates`, и места они
    * не занимают.
    *
    * Зовётся дважды: снимком до загрузки в бакет (чтобы не заливать то, что
    * всё равно не примут) и внутри транзакции вставки (потому что снимок мог
    * устареть). `client` — либо сам Prisma, либо клиент транзакции.
+   *
+   * Переполнение сервиса — 507, а не 400: запрос сам по себе правильный,
+   * и повторить его имеет смысл, когда место освободится.
    */
-  private async assertOrderQuota(
-    client: Pick<PrismaService, 'orderFile'> | Prisma.TransactionClient,
+  private async assertStorageQuota(
+    client: Pick<PrismaService, 'order' | 'orderFile'> | Prisma.TransactionClient,
     orderId: string,
+    uploader: FileOwnerType,
     adding: PreparedFile[],
   ): Promise<void> {
-    const { _sum } = await client.orderFile.aggregate({
-      where: { orderId },
-      _sum: { sizeBytes: true },
-    });
-
-    const used = _sum.sizeBytes ?? 0;
     const incoming = adding.reduce((total, file) => total + file.sizeBytes, 0);
+    const refusal = checkStorageQuota(
+      await readStorageUsage(client, orderId),
+      incoming,
+      uploader,
+    );
 
-    if (used + incoming > MAX_ORDER_FILES_BYTES) {
-      throw new BadRequestException(
-        `Файлы заказа не помещаются в ${toMegabytes(MAX_ORDER_FILES_BYTES)} МБ: ` +
-          `занято ${toMegabytes(used)} МБ, добавляется ${toMegabytes(incoming)} МБ`,
-      );
+    if (!refusal) return;
+
+    if (refusal.scope === 'total') {
+      this.logger.warn(`Хранилище заполнено: загрузка в заказ ${orderId} отклонена`);
+      throw new HttpException(refusal.message, HttpStatus.INSUFFICIENT_STORAGE);
     }
+
+    throw new BadRequestException(refusal.message);
   }
 
   /**
@@ -445,6 +446,40 @@ export class FilesService {
     const known = new Set(existing.map((file) => file.fileHash));
     return uniqueInBatch.filter((file) => !known.has(file.fileHash));
   }
+}
+
+/**
+ * Сколько места уже занято: файлы заказа, все файлы его заказчика и все
+ * файлы сервиса. Заказчик берётся из заказа, а не из запроса: грузить
+ * в заказ может и исполнитель, а место всё равно заказчика.
+ */
+async function readStorageUsage(
+  client: Pick<PrismaService, 'order' | 'orderFile'> | Prisma.TransactionClient,
+  orderId: string,
+): Promise<StorageUsage> {
+  const order = await client.order.findUnique({
+    where: { id: orderId },
+    select: { clientId: true },
+  });
+
+  if (!order) {
+    throw new NotFoundException('Заказ не найден');
+  }
+
+  const sum = async (where: Prisma.OrderFileWhereInput): Promise<number> => {
+    const { _sum } = await client.orderFile.aggregate({
+      where,
+      _sum: { sizeBytes: true },
+    });
+
+    return _sum.sizeBytes ?? 0;
+  };
+
+  return {
+    order: await sum({ orderId }),
+    client: await sum({ order: { clientId: order.clientId } }),
+    total: await sum({}),
+  };
 }
 
 /** Имя латиницей и цифрами — такое Supabase Storage отдаёт без искажений. */

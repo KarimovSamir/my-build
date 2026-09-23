@@ -8,6 +8,7 @@ import { Field, FormErrors, FormSection } from "@/components/form-parts";
 import { PasswordInput } from "@/components/password-input";
 import { Button } from "@/components/ui/button";
 import { authErrorMessage } from "@/lib/auth-errors";
+import { DEMO_LOCKED_NOTE } from "@/lib/demo";
 import {
   MIN_PASSWORD_LENGTH,
   emptyPasswordForm,
@@ -25,7 +26,18 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
  * пароль и запирала владельца снаружи. Проверка — вход тем же email и паролем:
  * пользователь тот же, сессия просто обновляется.
  */
-export function PasswordForm({ email }: { email: string }) {
+export function PasswordForm({
+  email,
+  locked = false,
+}: {
+  email: string;
+  /**
+   * Демо-учётка: формы нет вовсе. Смену пароля запрещает база (триггер
+   * на auth.users), и форма с тремя полями, которая всегда отказывает, хуже
+   * одной строки объяснения.
+   */
+  locked?: boolean;
+}) {
   const [values, setValues] = useState<PasswordFormValues>(emptyPasswordForm);
   const [errors, setErrors] = useState<PasswordFormErrors>({});
   const [formError, setFormError] = useState<string[] | null>(null);
@@ -101,6 +113,16 @@ export function PasswordForm({ email }: { email: string }) {
     toast.success("Пароль изменён", {
       description: "Другие устройства вышли из аккаунта, эта вкладка осталась",
     });
+  }
+
+  if (locked) {
+    return (
+      <FormSection
+        icon={<KeyRound className="size-[1.0625rem]" />}
+        title="Пароль"
+        description={DEMO_LOCKED_NOTE}
+      />
+    );
   }
 
   return (

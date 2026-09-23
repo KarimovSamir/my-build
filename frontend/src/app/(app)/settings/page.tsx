@@ -2,7 +2,7 @@ import { ComingSoon, PageHeader } from "@/components/page-shell";
 import { AccountCard } from "@/components/settings/account-card";
 import { PasswordForm } from "@/components/settings/password-form";
 import { ProfileForm } from "@/components/settings/profile-form";
-import { getCurrentUser } from "@/lib/session.server";
+import { getCurrentUser, getSessionClaims } from "@/lib/session.server";
 
 export const metadata = { title: "Настройки" };
 
@@ -18,7 +18,11 @@ export const metadata = { title: "Настройки" };
  * пользователь, событий про него в ТЗ §8 не существует.
  */
 export default async function SettingsPage() {
-  const user = await getCurrentUser();
+  const [user, claims] = await Promise.all([getCurrentUser(), getSessionClaims()]);
+  // Демо-аккаунтом пользуются все посетители сразу: правка профиля или
+  // пароля досталась бы остальным. Запрещают это backend и база, здесь —
+  // только чтобы не предлагать кнопку, которая откажет.
+  const locked = claims?.isDemo ?? false;
 
   return (
     <>
@@ -27,9 +31,9 @@ export default async function SettingsPage() {
       {/* Ширина ограничена: поле ввода во весь экран читается хуже, чем
           строка в 700 px, — колонка формы на макете ровно такая. */}
       <div className="flex max-w-3xl flex-col gap-6">
-        <ProfileForm profile={user} />
+        <ProfileForm profile={user} locked={locked} />
         <AccountCard profile={user} />
-        <PasswordForm email={user.email} />
+        <PasswordForm email={user.email} locked={locked} />
 
         <ComingSoon title="Платежи" phase="одном из следующих релизов">
           Карты и оплата заказов онлайн

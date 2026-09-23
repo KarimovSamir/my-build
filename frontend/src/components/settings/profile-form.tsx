@@ -11,6 +11,7 @@ import { Field, FormErrors, FormSection } from "@/components/form-parts";
 import { Button } from "@/components/ui/button";
 import { apiErrorMessages } from "@/lib/api-errors";
 import { browserApi } from "@/lib/api.client";
+import { DEMO_LOCKED_NOTE } from "@/lib/demo";
 import {
   isProfileChanged,
   toProfileBody,
@@ -33,7 +34,14 @@ import {
  * второй раз на фронте незачем. `router.refresh()` следом нужен каркасу —
  * имя в боковом меню и город в шапке приходят из layout'а.
  */
-export function ProfileForm({ profile: fromServer }: { profile: UserProfile }) {
+export function ProfileForm({
+  profile: fromServer,
+  locked = false,
+}: {
+  profile: UserProfile;
+  /** Демо-учётка: профиль только показывается, сохранить его backend не даст. */
+  locked?: boolean;
+}) {
   const router = useRouter();
   // Профиль в том виде, в каком он сейчас на сервере: с ним сверяется форма,
   // чтобы кнопка «Сохранить» не предлагала сохранить то же самое.
@@ -58,6 +66,7 @@ export function ProfileForm({ profile: fromServer }: { profile: UserProfile }) {
   }
 
   const changed = isProfileChanged(values, saved);
+  const disabled = pending || locked;
 
   function setField(field: ProfileFormField, value: string) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -116,9 +125,11 @@ export function ProfileForm({ profile: fromServer }: { profile: UserProfile }) {
       icon={<UserRound className="size-[1.0625rem]" />}
       title="Профиль"
       description={
-        saved.role === Role.COMPANY
-          ? "Название компании и контакты видит клиент в каталоге подрядчиков и в предложениях"
-          : "Имя и контакты видит компания, с которой вы работаете по заказу"
+        locked
+          ? DEMO_LOCKED_NOTE
+          : saved.role === Role.COMPANY
+            ? "Название компании и контакты видит клиент в каталоге подрядчиков и в предложениях"
+            : "Имя и контакты видит компания, с которой вы работаете по заказу"
       }
     >
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
@@ -133,7 +144,7 @@ export function ProfileForm({ profile: fromServer }: { profile: UserProfile }) {
             value={values.companyName}
             onChange={(event) => setField("companyName", event.target.value)}
             error={errors.companyName}
-            disabled={pending}
+            disabled={disabled}
             required
           />
         ) : null}
@@ -148,7 +159,7 @@ export function ProfileForm({ profile: fromServer }: { profile: UserProfile }) {
             value={values.firstName}
             onChange={(event) => setField("firstName", event.target.value)}
             error={errors.firstName}
-            disabled={pending}
+            disabled={disabled}
             required
           />
           <Field
@@ -160,7 +171,7 @@ export function ProfileForm({ profile: fromServer }: { profile: UserProfile }) {
             value={values.lastName}
             onChange={(event) => setField("lastName", event.target.value)}
             error={errors.lastName}
-            disabled={pending}
+            disabled={disabled}
           />
         </div>
 
@@ -176,7 +187,7 @@ export function ProfileForm({ profile: fromServer }: { profile: UserProfile }) {
           value={values.phone}
           onChange={(event) => setField("phone", event.target.value)}
           error={errors.phone}
-          disabled={pending}
+          disabled={disabled}
           required
         />
 
@@ -190,7 +201,7 @@ export function ProfileForm({ profile: fromServer }: { profile: UserProfile }) {
             value={values.city}
             onChange={(event) => setField("city", event.target.value)}
             error={errors.city}
-            disabled={pending}
+            disabled={disabled}
           />
           <Field
             id="country"
@@ -201,15 +212,16 @@ export function ProfileForm({ profile: fromServer }: { profile: UserProfile }) {
             value={values.country}
             onChange={(event) => setField("country", event.target.value)}
             error={errors.country}
-            disabled={pending}
+            disabled={disabled}
           />
         </div>
 
         {formError ? <FormErrors messages={formError} /> : null}
 
         {/* На узком экране кнопки во всю ширину: в строку они не помещаются
-            вдвоём и вставали ступенькой. */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+            вдвоём и вставали ступенькой. У демо-учётки кнопок нет вовсе:
+            сохранять нечего. */}
+        <div className={locked ? "hidden" : "flex flex-col gap-3 sm:flex-row sm:justify-end"}>
           <Button
             type="button"
             variant="outline"

@@ -1,4 +1,4 @@
-import { PayloadTooLargeException } from '@nestjs/common';
+import { HttpStatus, PayloadTooLargeException } from '@nestjs/common';
 import type { ExecutionContext } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 
@@ -34,8 +34,15 @@ describe('UploadSizeGuard', () => {
     ).toThrow(PayloadTooLargeException);
   });
 
-  it('пропускает запрос без Content-Length: за ним следят лимиты multer', () => {
-    expect(guard.canActivate(contextWith({}))).toBe(true);
-    expect(guard.canActivate(contextWith({ 'content-length': 'не число' }))).toBe(true);
+  it.each([
+    ['без заголовка', {}],
+    ['с мусором вместо числа', { 'content-length': 'не число' }],
+    ['с пустым значением', { 'content-length': '' }],
+    ['с отрицательным числом', { 'content-length': '-1' }],
+    ['с экспонентой', { 'content-length': '1e3' }],
+  ])('отклоняет запрос %s: потолок держится только на объявленной длине', (_, headers) => {
+    expect(() => guard.canActivate(contextWith(headers))).toThrow(
+      expect.objectContaining({ status: HttpStatus.LENGTH_REQUIRED }),
+    );
   });
 });

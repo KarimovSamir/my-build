@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { Role, type UserProfile } from "@/lib/types";
 
-import { readEmailVerifiedClaim, readRoleClaim, toCurrentUser } from "./session";
+import { readDemoClaim, readEmailVerifiedClaim, readRoleClaim, toCurrentUser } from "./session";
 
 function profile(patch: Partial<UserProfile> = {}): UserProfile {
   return {
@@ -46,6 +46,19 @@ describe("readEmailVerifiedClaim", () => {
 
   it("не подтверждённым — только явный false", () => {
     expect(readEmailVerifiedClaim(false)).toBe(false);
+  });
+});
+
+describe("readDemoClaim", () => {
+  it("демо-учётка — только при app_metadata.demo === true", () => {
+    expect(readDemoClaim({ provider: "email", demo: true })).toBe(true);
+  });
+
+  it("всё остальное — обычная учётка: флаг только сужает права", () => {
+    expect(readDemoClaim({ demo: "true" })).toBe(false);
+    expect(readDemoClaim({})).toBe(false);
+    expect(readDemoClaim(null)).toBe(false);
+    expect(readDemoClaim(undefined)).toBe(false);
   });
 });
 

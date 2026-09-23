@@ -15,7 +15,6 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 
 import {
   MAX_FILES_PER_REQUEST,
-  MAX_FILE_SIZE_BYTES,
   Role,
   type OrderDetail,
   type OrderListItem,
@@ -38,8 +37,11 @@ import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
 import { UploadSizeGuard } from '../../common/guards/upload-size.guard.js';
 import { TempUploadCleanupInterceptor } from '../../common/interceptors/temp-upload-cleanup.interceptor.js';
 import type { AuthUser } from '../auth/auth-user.js';
-import { UPLOAD_TEMP_DIR } from '../files/uploaded-file.js';
-import { toUploads, type MulterFile } from './multer-file.js';
+import {
+  UPLOAD_MULTER_OPTIONS,
+  toUploads,
+  type MulterFile,
+} from './multer-file.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { ListOrdersQueryDto } from './dto/list-orders.dto.js';
 import { OrdersService } from './orders.service.js';
@@ -59,14 +61,9 @@ export class OrdersController {
   /**
    * Создать заказ вместе с файлами (ТЗ §4.1).
    *
-   * `dest` вместо памяти: multer пишет файлы во временный каталог, иначе
-   * содержимое всего запроса (до 10 × 20 МБ) держалось бы в куче процесса.
-   * Убирает их `TempUploadCleanupInterceptor` — он идёт первым, чтобы
-   * охватить и разбор multipart, и отказ валидации DTO.
-   *
-   * `defParamCharset: 'utf8'` обязателен: по умолчанию multer читает имена
-   * файлов из multipart как latin1, и «План.pdf» попал бы в базу как
-   * «ÐÐ»Ð°Ð½.pdf».
+   * Настройки multer общие с загрузкой сдачи — см. `UPLOAD_MULTER_OPTIONS`.
+   * `TempUploadCleanupInterceptor` идёт первым, чтобы охватить и разбор
+   * multipart, и отказ валидации DTO.
    */
   @Post()
   @Roles(Role.CLIENT)
@@ -76,11 +73,7 @@ export class OrdersController {
   @Throttle({ limit: 20, ttl: 60_000 })
   @UseInterceptors(
     TempUploadCleanupInterceptor,
-    FilesInterceptor('files', MAX_FILES_PER_REQUEST, {
-      dest: UPLOAD_TEMP_DIR,
-      limits: { fileSize: MAX_FILE_SIZE_BYTES, files: MAX_FILES_PER_REQUEST },
-      defParamCharset: 'utf8',
-    }),
+    FilesInterceptor('files', MAX_FILES_PER_REQUEST, UPLOAD_MULTER_OPTIONS),
   )
   create(
     @CurrentUser() user: AuthUser,

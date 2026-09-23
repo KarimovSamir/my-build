@@ -4,6 +4,7 @@ import type { UserProfile } from '@mybuild/shared';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { Throttle } from '../../common/decorators/throttle.decorator.js';
+import { NotDemoGuard } from '../../common/guards/not-demo.guard.js';
 import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
 import type { AuthUser } from '../auth/auth-user.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
@@ -31,9 +32,14 @@ export class UsersController {
     return this.users.getProfile(user.id);
   }
 
-  /** Мутирующий маршрут — под ограничением частоты (ТЗ §6). */
+  /**
+   * Мутирующий маршрут — под ограничением частоты (ТЗ §6).
+   *
+   * Демо-учёткам закрыт: название «ООО «СтройГрад»» и контакты видят все
+   * посетители демо, и один из них переименовал бы компанию для остальных.
+   */
   @Patch()
-  @UseGuards(ThrottleGuard)
+  @UseGuards(ThrottleGuard, NotDemoGuard)
   @Throttle({ limit: 20, ttl: 60_000 })
   updateProfile(
     @CurrentUser() user: AuthUser,

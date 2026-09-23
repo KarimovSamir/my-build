@@ -78,7 +78,7 @@ describe('SupabaseAuthGuard', () => {
   });
 
   it('кладёт пользователя в запрос после успешной проверки', async () => {
-    const user = { id: 'u1', email: 'a@b.test', emailVerified: true, role: Role.CLIENT };
+    const user = { id: 'u1', email: 'a@b.test', emailVerified: true, role: Role.CLIENT, isDemo: false };
     const verify = vi.fn().mockResolvedValue(user);
     const { context, request } = contextFor('guarded', {
       headers: { authorization: 'Bearer token' },
@@ -103,7 +103,7 @@ describe('SupabaseAuthGuard', () => {
       headers: { authorization: 'Bearer token' },
     });
     const guard = guardWith(() =>
-      Promise.resolve({ id: 'u1', email: 'a@b.test', emailVerified: false, role: Role.CLIENT }),
+      Promise.resolve({ id: 'u1', email: 'a@b.test', emailVerified: false, role: Role.CLIENT, isDemo: false }),
     );
 
     await expect(guard.canActivate(context)).rejects.toThrow(ForbiddenException);

@@ -14,7 +14,6 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 
 import {
   MAX_FILES_PER_REQUEST,
-  MAX_FILE_SIZE_BYTES,
   Role,
   type OrderDetail,
 } from '@mybuild/shared';
@@ -35,8 +34,7 @@ import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
 import { UploadSizeGuard } from '../../common/guards/upload-size.guard.js';
 import { TempUploadCleanupInterceptor } from '../../common/interceptors/temp-upload-cleanup.interceptor.js';
 import type { AuthUser } from '../auth/auth-user.js';
-import { UPLOAD_TEMP_DIR } from '../files/uploaded-file.js';
-import { toUploads, type MulterFile } from './multer-file.js';
+import { UPLOAD_MULTER_OPTIONS, toUploads, type MulterFile } from './multer-file.js';
 import { ConfirmOrderDto, DisputeOrderDto } from './dto/completion.dto.js';
 import { SubmitFilesDto } from './dto/submit-files.dto.js';
 import { VerifiedAreaDto } from './dto/verified-area.dto.js';
@@ -132,11 +130,7 @@ export class OrderWorkflowController {
   @Throttle({ limit: 20, ttl: 60_000 })
   @UseInterceptors(
     TempUploadCleanupInterceptor,
-    FilesInterceptor('files', MAX_FILES_PER_REQUEST, {
-      dest: UPLOAD_TEMP_DIR,
-      limits: { fileSize: MAX_FILE_SIZE_BYTES, files: MAX_FILES_PER_REQUEST },
-      defParamCharset: 'utf8',
-    }),
+    FilesInterceptor('files', MAX_FILES_PER_REQUEST, UPLOAD_MULTER_OPTIONS),
   )
   @HttpCode(HttpStatus.OK)
   addFiles(
