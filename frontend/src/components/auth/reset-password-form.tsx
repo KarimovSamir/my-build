@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 import { Field, FormError } from "@/components/form-parts";
 import { PasswordInput } from "@/components/password-input";
 import { Button } from "@/components/ui/button";
-import { authErrorMessage } from "@/lib/auth-errors";
+import { authErrorMessage, isPasswordChangeRefused } from "@/lib/auth-errors";
 import { resolveAfterAuthHref } from "@/lib/auth-redirect";
 import { MIN_PASSWORD_LENGTH, validateNewPassword } from "@/lib/password-form";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -15,7 +15,9 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
  * Установка нового пароля (ТЗ §5).
  *
  * Форма работает поверх временной сессии, которую создала ссылка из письма:
- * без неё Supabase не примет смену пароля и вернёт ошибку.
+ * без неё Supabase не примет смену пароля и вернёт ошибку. Сессия к тому же
+ * должна быть свежей — старше `PASSWORD_CHANGE_WINDOW_MINUTES` смену отклонит
+ * база.
  *
  * Требования к паролю — общие с регистрацией и настройками
  * (`lib/password-form.ts`).
@@ -49,6 +51,13 @@ export function ResetPasswordForm() {
     if (authError) {
       setError(authErrorMessage(authError));
       setPending(false);
+
+      // Окно смены пароля закрылось, пока форма была открыта. Экран сам
+      // объясняет, что делать дальше, — перерисовываем его.
+      if (isPasswordChangeRefused(authError)) {
+        router.refresh();
+      }
+
       return;
     }
 

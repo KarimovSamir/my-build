@@ -28,7 +28,7 @@ import {
   type AllowedOrderEvent,
 } from '@mybuild/shared';
 
-import { orderRef } from './order-notification.js';
+import { notificationKeys, orderRef } from './order-notification.js';
 
 // Событие приходит в сигнатурах всего модуля заказов — реэкспорт избавляет
 // вызывающий код от второго импорта рядом с этим.
@@ -132,6 +132,8 @@ export type OrderSideEffect =
       type: NotificationType;
       title: string;
       body: string;
+      /** Непрочитанное с тем же адресатом и ключом новое заменяет. */
+      collapseKey: string | null;
     };
 
 export interface OrderTransitionResult {
@@ -215,10 +217,17 @@ function setOfferStatus(offer: OfferOwner, status: OfferStatus): OrderSideEffect
   };
 }
 
+/**
+ * `collapseKey` ставится уведомлениям о предложении: о нём компания может
+ * сообщать сколько угодно раз подряд (правка, отзыв, повторная отправка),
+ * и адресату нужно только последнее (`notificationKeys`). Уведомления
+ * о работе не схлопываются: между двумя сдачами всегда стоит ответ клиента.
+ */
 function notify(
   userId: string,
   type: NotificationType,
   body: string,
+  collapseKey: string | null = null,
 ): OrderSideEffect {
   return {
     kind: 'CREATE_NOTIFICATION',
@@ -226,6 +235,7 @@ function notify(
     type,
     title: notificationTypeLabels[type],
     body,
+    collapseKey,
   };
 }
 
@@ -245,6 +255,7 @@ const offerSubmitted: TransitionHandler = (context, event) => {
         context.clientId,
         NotificationType.OFFER_RECEIVED,
         `${orderRef(context)}: предложение от «${event.companyName}»`,
+        notificationKeys.offer(event.offerId),
       ),
     ],
   };
@@ -292,6 +303,7 @@ function offerLeftSelection(
           notice.to === 'client' ? context.clientId : event.companyId,
           notice.type,
           `${orderRef(context)}: ${notice.body}`,
+          notificationKeys.offer(event.offerId),
         ),
       ],
     };
@@ -312,6 +324,7 @@ const offerAccepted: TransitionHandler = (context, event) => {
       event.companyId,
       NotificationType.OFFER_ACCEPTED,
       `${orderRef(context)}: ваше предложение принято, можно приступать`,
+      notificationKeys.offer(event.offerId),
     ),
   ];
 
@@ -334,6 +347,7 @@ const offerAccepted: TransitionHandler = (context, event) => {
         rival.companyId,
         NotificationType.OFFER_NOT_ACCEPTED,
         `${orderRef(context)}: клиент выбрал другое предложение`,
+        notificationKeys.offer(rival.offerId),
       ),
     );
   }

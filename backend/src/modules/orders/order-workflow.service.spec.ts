@@ -99,6 +99,7 @@ function createStubs(options: StubOptions = {}) {
       update: vi.fn(async (_args: unknown) => order),
     },
     notification: {
+      deleteMany: vi.fn(async (_args: unknown) => ({ count: 0 })),
       create: vi.fn(async (_args: unknown) => ({ id: 'notification-tx' })),
     },
   };
@@ -328,6 +329,14 @@ describe('OrderWorkflowService: файлы сдачи', () => {
         userId: CLIENT_ID,
         type: NotificationType.FILES_UPDATED,
         orderId: ORDER_ID,
+        collapseKey: `files:${ORDER_ID}`,
+      },
+    });
+    // Загрузок подряд бывает сколько угодно: непрочитанное прежнее заменяется.
+    expect(prisma.tx.notification.deleteMany).toHaveBeenCalledWith({
+      where: {
+        isRead: false,
+        OR: [{ userId: CLIENT_ID, collapseKey: `files:${ORDER_ID}` }],
       },
     });
 
@@ -483,6 +492,14 @@ describe('OrderWorkflowService: уточнение площади', () => {
         userId: CLIENT_ID,
         type: NotificationType.AREA_VERIFIED,
         orderId: ORDER_ID,
+        collapseKey: `area:${ORDER_ID}`,
+      },
+    });
+    // Клиенту важна последняя площадь, а не каждое промежуточное число.
+    expect(prisma.tx.notification.deleteMany).toHaveBeenCalledWith({
+      where: {
+        isRead: false,
+        OR: [{ userId: CLIENT_ID, collapseKey: `area:${ORDER_ID}` }],
       },
     });
   });

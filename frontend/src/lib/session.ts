@@ -63,6 +63,29 @@ export function readEmailVerifiedClaim(claim: unknown): boolean {
  * Интерфейсу он нужен, чтобы не предлагать того, что демо запрещено: пароль
  * и email запрещает менять база, профиль — backend.
  */
+/**
+ * Когда выдана сессия — последняя отметка claim'а `amr`, в миллисекундах.
+ *
+ * GoTrue пишет в `amr` способ входа и время (в секундах): вход паролем,
+ * переход по ссылке из письма. Продление токена отметку не меняет, поэтому
+ * это время входа, а не выдачи токена. `null` — claim'а нет или он не того вида.
+ */
+export function readSignedInAt(amr: unknown): number | null {
+  if (!Array.isArray(amr)) return null;
+
+  let latest: number | null = null;
+
+  for (const entry of amr) {
+    const timestamp = (entry as { timestamp?: unknown } | null)?.timestamp;
+
+    if (typeof timestamp === "number" && Number.isFinite(timestamp)) {
+      latest = Math.max(latest ?? timestamp, timestamp);
+    }
+  }
+
+  return latest === null ? null : latest * 1000;
+}
+
 export function readDemoClaim(appMetadata: unknown): boolean {
   return (
     typeof appMetadata === "object" &&

@@ -2,7 +2,9 @@
  * Тестовые данные для разработки и демо: один клиент, три компании и по заказу
  * в каждом статусе state-машины (ТЗ §10, Фаза 1).
  *
- * Запуск: `npm run db:seed`.
+ * Запуск: `npm run db:seed`. Вместе с полной очисткой базы — `npm run db:reset`
+ * (`scripts/wipe-database.ts`): так база возвращается к стандартному виду после
+ * e2e и ручных проверок.
  *
  * Это тот же сброс демо, что сервер выполняет по расписанию
  * (`src/modules/demo/demo-reset.ts`), только без проверки «не пора ли»:
@@ -20,55 +22,16 @@
 
 import 'dotenv/config';
 
-import { PrismaPg } from '@prisma/adapter-pg';
-import { DEMO_EMAILS, DEMO_PASSWORD } from '@mybuild/shared';
+import { DEMO_EMAILS } from '@mybuild/shared';
 
-import { PrismaClient } from '../src/generated/prisma/client.js';
 import { resetDemo } from '../src/modules/demo/demo-reset.js';
-import { createSupabaseAdminClient } from '../src/supabase/supabase-admin.js';
+import { openDemoTools } from '../src/modules/demo/demo-tools.js';
 
-const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error(
-    'Не задана строка подключения: заполни DIRECT_URL в backend/.env ' +
-      '(шаблон — backend/env.example)',
-  );
-}
-
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
-
-/**
- * Пароль тестовых учётных записей. Годится только для локальной разработки
- * и для демо; на реальных данных seed не запускают.
- *
- * Умолчание берётся из `shared/`: тот же пароль показывает экран входа.
- * Заданный здесь свой `SEED_PASSWORD` до экрана не доедет — демо-доступ и
- * собственный пароль вместе не живут. Действует он только на учётки, которые
- * создаются заново: у помеченных флагом `demo` пароль менять запрещает база.
- */
-const SEED_PASSWORD = process.env.SEED_PASSWORD ?? DEMO_PASSWORD;
-
-const BUCKET = process.env.SUPABASE_STORAGE_BUCKET ?? 'order-files';
+const tools = openDemoTools();
+const { prisma } = tools;
 
 async function main(): Promise<void> {
-  const admin = createSupabaseAdminClient();
-
-  const result = await resetDemo({
-    prisma,
-    admin,
-    password: SEED_PASSWORD,
-    removeObjects: async (keys) => {
-      if (keys.length === 0) return;
-
-      const { error } = await admin.storage.from(BUCKET).remove(keys);
-      if (error) {
-        // Как и на сервере: лишний объект в бакете — не повод считать seed
-        // проваленным, данные в базе уже на месте.
-        console.warn(`Не удалось удалить из бакета ${keys.length} объект(ов): ${error.message}`);
-      }
-    },
-  });
+  const result = await resetDemo(tools);
 
   if (result && result.recreatedUsers > 0) {
     console.log(`Учётные записи созданы заново: ${result.recreatedUsers}`);
@@ -95,7 +58,7 @@ async function main(): Promise<void> {
     `Готово: пользователей ${users.length}, заказов ${ordersCount}, ` +
       `предложений ${offers}, файлов ${files}, уведомлений ${notifications}`,
   );
-  console.log(`Вход в тестовые аккаунты: пароль ${SEED_PASSWORD}`);
+  console.log(`Вход в тестовые аккаунты: пароль ${tools.password}`);
 }
 
 main()
@@ -103,4 +66,4 @@ main()
     console.error('Seed не выполнен:', error);
     process.exitCode = 1;
   })
-  .finally(() => prisma.$disconnect());
+  .finally(() => tools.close());

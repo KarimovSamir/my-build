@@ -8,13 +8,13 @@ import {
   socketRooms,
 } from '@mybuild/shared';
 
+import type { Notification } from '../../generated/prisma/client.js';
 import type { AppliedTransition } from '../orders/order-transition.service.js';
 import {
   orderCreatedBroadcast,
   orderDeletedBroadcast,
   orderUpdateBroadcast,
   transitionBroadcast,
-  type NotificationTarget,
   type RealtimeMessage,
 } from './realtime-events.js';
 
@@ -42,7 +42,7 @@ const clientRoom = socketRooms.user(CLIENT_ID);
  */
 const order = { id: ORDER_ID, clientId: CLIENT_ID } as AppliedTransition['order'];
 
-function notification(userId: string, type: NotificationType): NotificationTarget {
+function notification(userId: string, type: NotificationType): Notification {
   return {
     id: `notification-${userId}`,
     userId,
@@ -51,6 +51,7 @@ function notification(userId: string, type: NotificationType): NotificationTarge
     title: 'Заголовок',
     body: 'Текст уведомления',
     isRead: false,
+    collapseKey: null,
     createdAt: new Date('2026-09-05T10:00:00.000Z'),
   };
 }

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   MIN_PASSWORD_LENGTH,
+  PASSWORD_CHANGE_WINDOW_MINUTES,
+  canChangePasswordNow,
   emptyPasswordForm,
   validateNewPassword,
   validatePasswordForm,
@@ -69,5 +71,26 @@ describe("validatePasswordForm", () => {
         passwordConfirm: strong,
       }).password,
     ).toBe("Новый пароль совпадает с текущим");
+  });
+});
+
+describe("canChangePasswordNow", () => {
+  // Окно держит база (триггер on_auth_user_password_reauth); экран лишь
+  // не показывает форму, которую она уже не примет.
+  const window = PASSWORD_CHANGE_WINDOW_MINUTES * 60_000;
+  const now = 1_790_000_000_000;
+
+  it("сразу после входа — можно", () => {
+    expect(canChangePasswordNow(now - 1_000, now)).toBe(true);
+    expect(canChangePasswordNow(now - window + 1_000, now)).toBe(true);
+  });
+
+  it("вход старше окна — нельзя", () => {
+    expect(canChangePasswordNow(now - window, now)).toBe(false);
+    expect(canChangePasswordNow(now - 24 * 60 * 60_000, now)).toBe(false);
+  });
+
+  it("время входа неизвестно — нельзя", () => {
+    expect(canChangePasswordNow(null, now)).toBe(false);
   });
 });

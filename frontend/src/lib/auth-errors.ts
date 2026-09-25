@@ -33,12 +33,32 @@ const messages: Record<string, string> = {
  */
 const TRIGGER_FAILURE = /database error (saving|creating) new user/i;
 
+/**
+ * Отказ базы в смене пароля.
+ *
+ * Пароль меняется только вскоре после входа — это держит триггер
+ * `on_auth_user_password_reauth` (`lib/password-form.ts`,
+ * `PASSWORD_CHANGE_WINDOW_MINUTES`). Любой отказ триггера GoTrue отдаёт
+ * одной и той же фразой со статусом 500 и без кода, текст исключения
+ * не доезжает. Демо-учётку тот же отказ не задевает: форм смены пароля
+ * у неё нет вовсе.
+ */
+const PASSWORD_STORAGE_FAILURE = /error during password storage/i;
+
+export function isPasswordChangeRefused(error: unknown): boolean {
+  return error instanceof AuthError && PASSWORD_STORAGE_FAILURE.test(error.message);
+}
+
 /** Понятный текст ошибки для формы. Неизвестный код — общая формулировка. */
 export function authErrorMessage(error: unknown): string {
   if (error instanceof AuthError) {
     const known = error.code ? messages[error.code] : undefined;
 
     if (known) return known;
+
+    if (isPasswordChangeRefused(error)) {
+      return "Пароль меняется только сразу после входа. Войдите заново и повторите";
+    }
 
     if (TRIGGER_FAILURE.test(error.message)) {
       return "Проверьте данные профиля: имя, телефон или название компании не приняты";

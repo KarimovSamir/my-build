@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { Role, type UserProfile } from "@/lib/types";
 
-import { readDemoClaim, readEmailVerifiedClaim, readRoleClaim, toCurrentUser } from "./session";
+import {
+  readDemoClaim,
+  readEmailVerifiedClaim,
+  readRoleClaim,
+  readSignedInAt,
+  toCurrentUser,
+} from "./session";
 
 function profile(patch: Partial<UserProfile> = {}): UserProfile {
   return {
@@ -59,6 +65,24 @@ describe("readDemoClaim", () => {
     expect(readDemoClaim({})).toBe(false);
     expect(readDemoClaim(null)).toBe(false);
     expect(readDemoClaim(undefined)).toBe(false);
+  });
+});
+
+describe("readSignedInAt", () => {
+  it("берёт самую позднюю отметку amr и переводит секунды в миллисекунды", () => {
+    expect(
+      readSignedInAt([
+        { method: "password", timestamp: 1_790_000_000 },
+        { method: "otp", timestamp: 1_790_000_500 },
+      ]),
+    ).toBe(1_790_000_500_000);
+  });
+
+  it("без пригодной отметки времени входа нет", () => {
+    expect(readSignedInAt(undefined)).toBeNull();
+    expect(readSignedInAt([])).toBeNull();
+    expect(readSignedInAt([{ method: "password", timestamp: "1790000000" }])).toBeNull();
+    expect(readSignedInAt([null, { method: "otp" }])).toBeNull();
   });
 });
 

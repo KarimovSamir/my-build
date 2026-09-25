@@ -17,6 +17,7 @@ import { isUuid } from '../../common/uuid.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import type { Notification, Order } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { dropSupersededNotifications } from './order-notification.js';
 import {
   OrderEvent,
   OrderEventType,
@@ -380,6 +381,7 @@ export class OrderTransitionService {
             orderId,
             title: effect.title,
             body: effect.body,
+            collapseKey: effect.collapseKey,
           });
           break;
       }
@@ -401,6 +403,9 @@ export class OrderTransitionService {
 
     // Уведомления пишутся здесь же, а не отдельным вызовом после коммита:
     // иначе смена статуса могла бы пройти без уведомления (ТЗ §8).
+    // Непрочитанные о том же предложении новые заменяют — повторы не копятся.
+    await dropSupersededNotifications(tx, notificationsToCreate);
+
     const notifications = notificationsToCreate.length
       ? await tx.notification.createManyAndReturn({ data: notificationsToCreate })
       : [];

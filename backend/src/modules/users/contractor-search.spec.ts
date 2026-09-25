@@ -20,6 +20,12 @@ describe('buildContractorsWhere', () => {
     expect(where.companyName).toEqual({ not: null });
   });
 
+  it('берёт только компании с подтверждённым email', () => {
+    // Иначе «компания» на чужой адрес попадала бы в каталог сразу после signUp.
+    expect(buildContractorsWhere().emailVerifiedAt).toEqual({ not: null });
+    expect(buildContractorsWhere('строй').emailVerifiedAt).toEqual({ not: null });
+  });
+
   it('без поиска условий по тексту не добавляет', () => {
     expect(buildContractorsWhere().OR).toBeUndefined();
     expect(buildContractorsWhere('').OR).toBeUndefined();

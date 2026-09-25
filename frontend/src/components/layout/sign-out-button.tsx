@@ -5,14 +5,19 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { signOutScope } from "@/lib/demo";
+import { readDemoClaim } from "@/lib/session";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 /**
  * Выход из аккаунта.
  *
- * `scope: 'global'` — сессия закрывается на всех устройствах (ТЗ §5): для
- * общего компьютера это ожидаемое поведение кнопки «выйти».
+ * Обычная учётка выходит на всех устройствах (ТЗ §5): для общего компьютера
+ * это ожидаемое поведение кнопки «выйти». Общая демо-учётка — только на этом,
+ * иначе выход одного посетителя выкидывал бы остальных (`signOutScope`).
+ * Флаг демо читается из сессии этой вкладки: он лежит в `app_metadata`,
+ * которую пишет только ключ сервера.
  *
  * В шапке кабинета это иконка, а на служебных экранах — обычная кнопка
  * с подписью: там она единственное осмысленное действие, и прятать её
@@ -24,7 +29,13 @@ export function SignOutButton({ label, className }: { label?: string; className?
 
   async function signOut() {
     setPending(true);
-    await getSupabaseBrowserClient().auth.signOut({ scope: "global" });
+
+    const auth = getSupabaseBrowserClient().auth;
+    const { data } = await auth.getSession();
+
+    await auth.signOut({
+      scope: signOutScope(readDemoClaim(data.session?.user.app_metadata)),
+    });
     router.replace("/login");
     router.refresh();
   }

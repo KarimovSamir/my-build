@@ -1,7 +1,7 @@
-import { AuthError } from "@supabase/supabase-js";
+import { AuthError, AuthRetryableFetchError } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 
-import { authErrorMessage } from "./auth-errors";
+import { authErrorMessage, isPasswordChangeRefused } from "./auth-errors";
 
 function authError(code: string, message = "Original english text"): AuthError {
   return new AuthError(message, 400, code);
@@ -64,5 +64,26 @@ describe("authErrorMessage", () => {
     expect(authErrorMessage("строка")).toBe(
       "Что-то пошло не так. Проверьте соединение и попробуйте ещё раз",
     );
+  });
+});
+
+describe("isPasswordChangeRefused", () => {
+  // Так GoTrue отдаёт любой отказ триггера на смене пароля: статус 500,
+  // без кода, текст исключения не доезжает (проверено на живом проекте).
+  const refused = new AuthRetryableFetchError("Error during password storage", 500);
+
+  it("узнаёт отказ базы в смене пароля", () => {
+    expect(isPasswordChangeRefused(refused)).toBe(true);
+  });
+
+  it("объясняет его по-русски, а не общей фразой", () => {
+    expect(authErrorMessage(refused)).toBe(
+      "Пароль меняется только сразу после входа. Войдите заново и повторите",
+    );
+  });
+
+  it("другие ошибки за отказ не принимает", () => {
+    expect(isPasswordChangeRefused(authError("same_password"))).toBe(false);
+    expect(isPasswordChangeRefused(new Error("Error during password storage"))).toBe(false);
   });
 });

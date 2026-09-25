@@ -28,7 +28,12 @@ import type { UploadedFileInput } from '../files/file-validation.js';
 import { FilesService } from '../files/files.service.js';
 import type { NotificationTarget } from '../realtime/realtime-events.js';
 import { RealtimeService } from '../realtime/realtime.service.js';
-import { orderRef, type OrderRef } from './order-notification.js';
+import {
+  dropSupersededNotifications,
+  notificationKeys,
+  orderRef,
+  type OrderRef,
+} from './order-notification.js';
 import { OrderEventType } from './order-state-machine.js';
 import {
   OrderTransitionService,
@@ -236,11 +241,20 @@ export class OrderWorkflowService {
       files: prepared,
       guard: (tx) => this.assertSubmissionOpen(tx, orderId, submission.id),
       onAttached: async (tx) => {
+        // Адресат читается под блокировкой вместе с заказом, а не берётся
+        // из снимка guard'а: у заказа один владелец, и это его строка.
+        // Непрочитанное «файлы обновлены» по этому заказу новое заменяет:
+        // загрузок подряд может быть сколько угодно.
+        const draft = {
+          userId: submission.order.clientId,
+          collapseKey: notificationKeys.orderFiles(orderId),
+        };
+
+        await dropSupersededNotifications(tx, [draft]);
+
         created.notification = await tx.notification.create({
           data: {
-            // Адресат читается под блокировкой вместе с заказом, а не берётся
-            // из снимка guard'а: у заказа один владелец, и это его строка.
-            userId: submission.order.clientId,
+            ...draft,
             type: NotificationType.FILES_UPDATED,
             orderId,
             title: notificationTypeLabels[NotificationType.FILES_UPDATED],
@@ -304,9 +318,17 @@ export class OrderWorkflowService {
         data: { verifiedSquareMeters },
       });
 
+      // Уточнений подряд может быть сколько угодно, клиенту важно последнее.
+      const draft = {
+        userId: order.clientId,
+        collapseKey: notificationKeys.orderArea(orderId),
+      };
+
+      await dropSupersededNotifications(tx, [draft]);
+
       const notification = await tx.notification.create({
         data: {
-          userId: order.clientId,
+          ...draft,
           type: NotificationType.AREA_VERIFIED,
           orderId,
           title: notificationTypeLabels[NotificationType.AREA_VERIFIED],

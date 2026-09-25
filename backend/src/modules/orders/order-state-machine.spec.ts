@@ -327,6 +327,57 @@ describe('OrderStateMachine — побочные эффекты', () => {
     });
   });
 
+  it.each([
+    [OrderEventType.OFFER_SUBMITTED, OrderStatus.WAITING, events.OFFER_SUBMITTED],
+    [OrderEventType.OFFER_WITHDRAWN, OrderStatus.AWAITING_CONFIRMATION, events.OFFER_WITHDRAWN],
+    [OrderEventType.OFFER_REJECTED, OrderStatus.AWAITING_CONFIRMATION, events.OFFER_REJECTED],
+  ] as const)('уведомление на %s схлопывается по предложению', (_type, status, event) => {
+    // Правки, отзывы и повторные отправки идут подряд сколько угодно раз —
+    // у адресата остаётся одно непрочитанное с последним состоянием.
+    const notifications = machine
+      .transition(contextIn(status), event)
+      .effects.filter((effect) => effect.kind === 'CREATE_NOTIFICATION');
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({ collapseKey: `offer:${OFFER_ID}` });
+  });
+
+  it('при выборе исполнителя ключ у каждого предложения свой', () => {
+    const notifications = machine
+      .transition(contextIn(OrderStatus.AWAITING_CONFIRMATION), {
+        ...events.OFFER_ACCEPTED,
+        type: OrderEventType.OFFER_ACCEPTED,
+        otherOffers: [{ offerId: RIVAL_OFFER_ID, companyId: RIVAL_COMPANY_ID }],
+      })
+      .effects.filter((effect) => effect.kind === 'CREATE_NOTIFICATION');
+
+    expect(notifications).toEqual([
+      expect.objectContaining({ userId: COMPANY_ID, collapseKey: `offer:${OFFER_ID}` }),
+      expect.objectContaining({
+        userId: RIVAL_COMPANY_ID,
+        collapseKey: `offer:${RIVAL_OFFER_ID}`,
+      }),
+    ]);
+  });
+
+  it('уведомления о работе не схлопываются', () => {
+    // Между двумя сдачами всегда стоит ответ клиента — повторов тут не бывает,
+    // а каждая сдача и каждый ответ — отдельное событие в истории.
+    const cases = [
+      [OrderStatus.IN_PROGRESS, events.WORK_SUBMITTED],
+      [OrderStatus.AWAITING_COMPLETION_CONFIRMATION, events.WORK_CONFIRMED],
+      [OrderStatus.AWAITING_COMPLETION_CONFIRMATION, events.WORK_DISPUTED],
+    ] as const;
+
+    for (const [status, event] of cases) {
+      const notifications = machine
+        .transition(contextIn(status), event)
+        .effects.filter((effect) => effect.kind === 'CREATE_NOTIFICATION');
+
+      expect(notifications).toEqual([expect.objectContaining({ collapseKey: null })]);
+    }
+  });
+
   it('отклонение предложения уведомляет компанию', () => {
     const { effects } = machine.transition(
       contextIn(OrderStatus.AWAITING_CONFIRMATION),

@@ -6,10 +6,12 @@ import { cache } from "react";
 import type { Role, UserProfile } from "@/lib/types";
 
 import { serverApi } from "./api.server";
+import { canChangePasswordNow } from "./password-form";
 import {
   readDemoClaim,
   readEmailVerifiedClaim,
   readRoleClaim,
+  readSignedInAt,
   toCurrentUser,
   type CurrentUser,
 } from "./session";
@@ -30,6 +32,8 @@ export interface SessionClaims {
   role: Role | null;
   /** Общая демо-учётка с экрана входа: пароль, email и профиль в ней не меняются. */
   isDemo: boolean;
+  /** Когда выдана сессия (мс) — по нему видно, можно ли ещё сменить пароль. */
+  signedInAt: number | null;
 }
 
 /**
@@ -51,8 +55,19 @@ export const getSessionClaims = cache(async (): Promise<SessionClaims | null> =>
     emailVerified: readEmailVerifiedClaim(claims.email_verified),
     role: readRoleClaim(claims.user_role),
     isDemo: readDemoClaim(claims.app_metadata),
+    signedInAt: readSignedInAt(claims.amr),
   };
 });
+
+/**
+ * Примет ли база смену пароля от этой сессии прямо сейчас.
+ *
+ * Время берётся здесь, а не в компоненте: серверный экран рендерится один раз
+ * на запрос, а правило чистоты рендера у React Compiler этого не различает.
+ */
+export function canChangePasswordInSession(claims: SessionClaims): boolean {
+  return canChangePasswordNow(claims.signedInAt, Date.now());
+}
 
 /** Access-токен для запросов к нашему API. */
 export const getAccessToken = cache(async (): Promise<string | null> => {

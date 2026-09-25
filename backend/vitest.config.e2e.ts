@@ -11,6 +11,9 @@ export default defineConfig({
     root: './',
     include: ['test/**/*.e2e-spec.ts'],
     setupFiles: ['reflect-metadata'],
+    // e2e идут на боевой базе: после прогона она очищается целиком
+    // и получает стандартные демо-данные (`npm run db:reset`).
+    globalSetup: ['./test/support/global-setup.ts'],
     // e2e поднимают приложение целиком — параллельный запуск даёт гонки.
     fileParallelism: false,
     // Часть e2e ходит в реальную базу Supabase: десятки запросов подряд

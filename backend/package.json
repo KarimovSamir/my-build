@@ -25,6 +25,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
+    "db:wipe": "tsx scripts/wipe-database.ts",
+    "db:reset": "tsx scripts/wipe-database.ts --restore",
     "storage:setup": "tsx scripts/ensure-storage-bucket.ts",
     "security:check": "tsx scripts/check-security.ts"
   },

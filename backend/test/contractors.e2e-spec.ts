@@ -42,6 +42,7 @@ describe('Подрядчики (e2e)', () => {
   let client: E2eUser;
   let alpha: E2eUser;
   let beta: E2eUser;
+  let unverified: E2eUser;
 
   let clientToken: string;
   let companyToken: string;
@@ -62,7 +63,7 @@ describe('Подрядчики (e2e)', () => {
   beforeAll(async () => {
     await users.dropUsers();
 
-    [client, alpha, beta] = await Promise.all([
+    [client, alpha, beta, unverified] = await Promise.all([
       users.createUser('catalog-client', {
         role: Role.CLIENT,
         firstName: 'Анна',
@@ -81,6 +82,12 @@ describe('Подрядчики (e2e)', () => {
         city: 'Гянджа',
         country: 'Азербайджан',
       }),
+      // Адрес не подтверждён: регистрацию на чужой email каталог не показывает.
+      users.createUser(
+        'catalog-unverified',
+        { role: Role.COMPANY, companyName: `Вегастрой ${MARK}`, city: 'Баку' },
+        { confirmEmail: false },
+      ),
     ]);
 
     const { AppModule } = await import('../src/app.module.js');
@@ -172,6 +179,12 @@ describe('Подрядчики (e2e)', () => {
       expect(items.some((item) => item.id === client.id)).toBe(false);
     });
 
+    it('компанию с неподтверждённым email не показывает', async () => {
+      const items = await listContractors(clientToken);
+
+      expect(items.some((item) => item.id === unverified.id)).toBe(false);
+    });
+
     it('ищет по названию и по городу', async () => {
       const byName = await listContractors(clientToken, { q: `Бетастрой ${MARK}` });
       expect(byName.map((item) => item.id)).toEqual([beta.id]);
@@ -232,6 +245,14 @@ describe('Подрядчики (e2e)', () => {
         .set('Authorization', `Bearer ${clientToken}`);
 
       // 404, а не профиль: адрес отдаёт только компании (ТЗ §5).
+      expect(response.status).toBe(404);
+    });
+
+    it('карточку компании с неподтверждённым email не отдаёт', async () => {
+      const response = await request(app.getHttpServer())
+        .get(`/contractors/${unverified.id}`)
+        .set('Authorization', `Bearer ${clientToken}`);
+
       expect(response.status).toBe(404);
     });
 

@@ -16,6 +16,24 @@
  */
 export const MIN_PASSWORD_LENGTH = 8;
 
+/**
+ * Сколько минут после входа ещё можно сменить пароль.
+ *
+ * Держит это не форма, а база: триггер `on_auth_user_password_reauth`
+ * отказывает в смене, если учётка входила раньше (миграция
+ * `20260925120000_password_change_reauth`). Иначе угнанная сессия меняла бы
+ * пароль одним вызовом `updateUser` из консоли. Число здесь то же — по нему
+ * экран восстановления решает, показывать ли форму, которую база ещё примет.
+ */
+export const PASSWORD_CHANGE_WINDOW_MINUTES = 15;
+
+/** Примет ли база смену пароля от сессии, выданной в `signedInAt` (мс). */
+export function canChangePasswordNow(signedInAt: number | null, now: number): boolean {
+  return (
+    signedInAt !== null && now - signedInAt < PASSWORD_CHANGE_WINDOW_MINUTES * 60_000
+  );
+}
+
 /** Поле, в котором ошибка, и текст для человека. */
 export interface PasswordIssue {
   field: "password" | "passwordConfirm";

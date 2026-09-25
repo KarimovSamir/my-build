@@ -116,6 +116,7 @@ function createPrismaStub(options: {
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
     notification: {
+      deleteMany: vi.fn(async (_args: unknown) => ({ count: 0 })),
       createManyAndReturn: vi.fn(
         async ({ data }: { data: Record<string, unknown>[] }) =>
           data.map((row, index) => ({ ...row, id: `notification-${index}` })),
@@ -623,6 +624,45 @@ describe('OrderTransitionService: статус предложения до за�
       userId: CLIENT_ID,
       type: NotificationType.OFFER_RECEIVED,
     });
+  });
+
+  it('повторное предложение заменяет непрочитанное уведомление о нём же', async () => {
+    const prisma = createPrismaStub({
+      order: orderRow(OrderStatus.AWAITING_CONFIRMATION),
+      offers: [
+        {
+          id: OFFER_A,
+          companyId: COMPANY_A,
+          status: OfferStatus.SENT,
+          proposedPrice: '9500.00',
+        },
+      ],
+    });
+
+    await createService(prisma).apply({
+      type: OrderEventType.OFFER_SUBMITTED,
+      orderId: ORDER_ID,
+      offerId: OFFER_A,
+      // Правка уже отправленного: каждое сохранение прежде давало новую строку.
+      offerStatusBefore: OfferStatus.SENT,
+    });
+
+    const { deleteMany, createManyAndReturn } = prisma.tx.notification;
+
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: {
+        isRead: false,
+        OR: [{ userId: CLIENT_ID, collapseKey: `offer:${OFFER_A}` }],
+      },
+    });
+    expect(createManyAndReturn.mock.calls[0]![0].data[0]).toMatchObject({
+      userId: CLIENT_ID,
+      collapseKey: `offer:${OFFER_A}`,
+    });
+    // Сначала убрать старое, потом записать новое — иначе удалилось бы и оно.
+    expect(deleteMany.mock.invocationCallOrder[0]!).toBeLessThan(
+      createManyAndReturn.mock.invocationCallOrder[0]!,
+    );
   });
 
   it('повторная отправка после отказа клиента проходит', async () => {
