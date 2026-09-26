@@ -8,7 +8,7 @@ import { AppPreview } from "@/components/landing/app-preview";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { dealRoute } from "@/lib/landing";
+import { dealRoute, demoAccountsSummary } from "@/lib/landing";
 import { getHomeHref } from "@/lib/navigation";
 import { getSessionClaims } from "@/lib/session.server";
 import { cn } from "@/lib/utils";
@@ -142,7 +142,7 @@ export default async function LandingPage() {
               </div>
 
               <p className="text-muted-foreground font-mono mt-5 text-sm text-balance">
-                Демо открыто — на странице входа готовые аккаунты клиента и трёх компаний
+                Демо открыто — на странице входа готовые аккаунты {demoAccountsSummary()}
               </p>
             </div>
 
@@ -162,8 +162,8 @@ export default async function LandingPage() {
                 Начните с одного заказа
               </h2>
               <p className="text-brand-ink-muted mt-3.5 max-w-2xl leading-relaxed text-pretty">
-                На странице входа есть готовые аккаунты клиента и трёх компаний — можно пройти
-                сделку целиком, от публикации заказа до приёмки работы.
+                На странице входа есть готовые аккаунты {demoAccountsSummary()} — можно
+                пройти сделку целиком, от публикации заказа до приёмки работы.
               </p>
             </div>
 

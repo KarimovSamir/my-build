@@ -68,35 +68,29 @@ function nextEvent<T>(socket: Socket, event: string): Promise<T | null> {
 }
 
 /**
- * Убедиться, что событие **не** приходит. Ждём заметно меньше: здесь
- * ожидание — это чистая задержка теста, а не время доставки.
+ * Все события с таким именем с этого момента. Нужны там, где проверяется
+ * не «пришло ли», а «что именно пришло и ничего сверх того» — в том числе
+ * «не пришло ничего».
+ *
+ * Окно отсчитывается от `settle()`, то есть от конца действия, а не от
+ * начала слушания: запрос к боевой базе идёт секундами, и окно, начатое
+ * до него, закрылось бы раньше, чем событию вообще пора прийти. Проверка
+ * «события не было» тогда проходила бы впустую. Ждём заметно меньше, чем
+ * `EVENT_TIMEOUT_MS`: действие уже закончено, рассылка идёт сразу после него.
  */
-function noEvent(socket: Socket, event: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(true), 1_500);
-
-    socket.once(event, () => {
-      clearTimeout(timer);
-      resolve(false);
-    });
-  });
-}
-
-/**
- * Все события с таким именем за короткое окно. Нужны там, где проверяется
- * не «пришло ли», а «что именно пришло и ничего сверх того».
- */
-function collectEvents<T>(socket: Socket, event: string): Promise<T[]> {
+function collectEvents<T>(socket: Socket, event: string): { settle(): Promise<T[]> } {
   const seen: T[] = [];
+  const listener = (payload: T) => seen.push(payload);
 
-  socket.on(event, (payload: T) => seen.push(payload));
+  socket.on(event, listener);
 
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      socket.off(event);
-      resolve(seen);
-    }, 1_500);
-  });
+  return {
+    async settle() {
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      socket.off(event, listener);
+      return seen;
+    },
+  };
 }
 
 function subscribeOrder(socket: Socket, orderId: string): Promise<SubscribeAck> {
@@ -343,7 +337,7 @@ describe('WebSocket-шлюз (e2e)', () => {
         loserSocket,
         socketEvents.offerStatusChanged,
       );
-      const silent = noEvent(loserSocket, socketEvents.orderStatusChanged);
+      const loserStatusEvents = collectEvents(loserSocket, socketEvents.orderStatusChanged);
       const winnerSees = nextEvent<OrderEventPayload>(
         winnerSocket,
         socketEvents.orderStatusChanged,
@@ -365,7 +359,7 @@ describe('WebSocket-шлюз (e2e)', () => {
       // А про уход заказа в работу — уже нет: предложение выбыло, и заказ
       // снова выглядит для неё как `WAITING` (ТЗ §4.1). Выселение из комнаты
       // происходит до рассылки именно поэтому.
-      expect(await silent).toBe(true);
+      expect(await loserStatusEvents.settle()).toEqual([]);
 
       // Комната при этом рабочая: исполнитель то же событие получил.
       expect(await winnerSees).toEqual({ orderId: order.id });
@@ -373,9 +367,57 @@ describe('WebSocket-шлюз (e2e)', () => {
       // А вот про чужие предложения победитель не узнаёт ничего, хотя и остаётся
       // в комнате заказа: события про предложение адресуются поимённо, иначе
       // по ним читались бы и число конкурентов, и их идентификаторы (ТЗ §4.1).
-      expect((await winnerOfferEvents).map((event) => event.offerId)).toEqual([
+      expect((await winnerOfferEvents.settle()).map((event) => event.offerId)).toEqual([
         winnerOffer.body.id,
       ]);
+    });
+
+    it('заказ, ушедший в работу, пропадает из ленты компаний', async () => {
+      const order = await seedOrder('Ушёл из ленты');
+      const offer = await postOffer(winnerToken, order.id);
+
+      // Компания без предложения по этому заказу: для неё он просто строка ленты.
+      const feed = await connected(loserToken);
+      await feed.emitWithAck(socketMessages.subscribeFeed, {});
+
+      const left = nextEvent<OrderEventPayload>(feed, socketEvents.orderStatusChanged);
+
+      const accepted = await request(app.getHttpServer())
+        .post(`/orders/${order.id}/accept-offer/${offer.body.id}`)
+        .set('Authorization', `Bearer ${clientToken}`);
+
+      expect(accepted.status).toBe(200);
+      expect(await left).toEqual({ orderId: order.id });
+    });
+
+    it('удалённый заказ пропадает из ленты компаний', async () => {
+      const order = await seedOrder('Удалён из ленты');
+
+      const feed = await connected(loserToken);
+      await feed.emitWithAck(socketMessages.subscribeFeed, {});
+
+      const left = nextEvent<OrderEventPayload>(feed, socketEvents.orderStatusChanged);
+
+      const deleted = await request(app.getHttpServer())
+        .delete(`/orders/${order.id}`)
+        .set('Authorization', `Bearer ${clientToken}`);
+
+      expect(deleted.status).toBe(204);
+      expect(await left).toEqual({ orderId: order.id });
+    });
+
+    it('первое предложение по заказу ленте не сообщается', async () => {
+      // Заказ как стоял в ленте, так и стоит: событие рассказало бы остальным
+      // компаниям, что по нему кто-то предложился (ТЗ §4.1).
+      const order = await seedOrder('Остался в ленте');
+
+      const feed = await connected(loserToken);
+      await feed.emitWithAck(socketMessages.subscribeFeed, {});
+
+      const feedEvents = collectEvents(feed, socketEvents.orderStatusChanged);
+
+      expect((await postOffer(winnerToken, order.id)).status).toBe(201);
+      expect(await feedEvents.settle()).toEqual([]);
     });
   });
 });

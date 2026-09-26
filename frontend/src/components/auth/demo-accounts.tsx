@@ -49,7 +49,7 @@ export function DemoAccounts({
           return (
             <li
               key={account.email}
-              className="border-border bg-card flex items-center gap-3.5 rounded-xl border px-4 py-3.5"
+              className="border-border bg-brand-surface flex items-center gap-3.5 rounded-xl border px-4 py-3.5"
             >
               <span
                 className={cn(

@@ -68,14 +68,6 @@ export interface AddSubmissionFilesParams {
 interface OpenSubmission {
   id: string;
   round: number;
-  /**
-   * Изменился ли комментарий сдачи этим запросом.
-   *
-   * Отдельно от файлов: комментарий перезаписывается всегда, а файлы могут
-   * оказаться дубликатами и не добавиться вовсе. Клиент видит комментарий
-   * на карточке заказа, значит перечитать её надо и в этом случае.
-   */
-  commentChanged: boolean;
   order: OrderRef & { clientId: string };
 }
 
@@ -210,6 +202,10 @@ export class OrderWorkflowService {
    * пишутся под повторной проверкой (`assertSubmissionOpen`): за время загрузки
    * компания могла из другой вкладки сдать работу, и файлы дописались бы
    * в уже сданный раунд.
+   *
+   * Новый комментарий открытой сдачи пишется той же транзакцией, что и строки
+   * файлов, а не при открытии сдачи: отклони потом файлы квота или хранилище —
+   * и у клиента молча сменился бы текст сдачи, а файлов и события не было бы.
    */
   async addFiles(params: AddSubmissionFilesParams): Promise<OrderDetail> {
     const { orderId, companyId } = params;
@@ -232,14 +228,21 @@ export class OrderWorkflowService {
     // никто не сказал. Вызов идёт только если что-то действительно добавилось —
     // повторная загрузка тех же файлов отсеивается дедупликацией (ТЗ §4.1),
     // и сообщать клиенту об изменении, которого не было, незачем.
-    const created: { notification?: NotificationTarget } = {};
+    const created: { notification?: NotificationTarget; commentChanged?: boolean } = {};
 
     const added = await this.files.attachFiles({
       orderId,
       ownerType: FileOwnerType.COMPANY,
       submissionRound: submission.round,
       files: prepared,
-      guard: (tx) => this.assertSubmissionOpen(tx, orderId, submission.id),
+      guard: async (tx) => {
+        created.commentChanged = await this.saveComment(
+          tx,
+          orderId,
+          submission.id,
+          params.comment,
+        );
+      },
       onAttached: async (tx) => {
         // Адресат читается под блокировкой вместе с заказом, а не берётся
         // из снимка guard'а: у заказа один владелец, и это его строка.
@@ -264,6 +267,13 @@ export class OrderWorkflowService {
       },
     });
 
+    // Все файлы оказались дубликатами: до транзакции вставки дело не дошло,
+    // и комментарий — единственное, что этот запрос меняет.
+    created.commentChanged ??= await this.prisma.$transaction(
+      (tx) => this.saveComment(tx, orderId, submission.id, params.comment),
+      TRANSITION_TX_OPTIONS,
+    );
+
     // Рассылка — после коммита: событие изнутри транзакции ушло бы и в случае
     // отката.
     //
@@ -271,7 +281,7 @@ export class OrderWorkflowService {
     // только комментарий: он описывает сдачу целиком и виден клиенту, поэтому
     // открытая у него карточка обязана перечитаться. Уведомления при этом нет —
     // «перечитай» достаточно, а строка в колокольчике про правку текста лишняя.
-    if (added.length > 0 || submission.commentChanged) {
+    if (added.length > 0 || created.commentChanged) {
       this.realtime.orderFilesUpdated(
         { id: orderId, clientId: submission.order.clientId },
         created.notification ? [created.notification] : [],
@@ -352,6 +362,9 @@ export class OrderWorkflowService {
   /**
    * Сдача, в которую пишутся файлы: открытая, если она есть, иначе новая.
    *
+   * Комментарий здесь пишется только новой сдаче — у неё он обязателен.
+   * Открытой сдаче его меняет `saveComment` вместе с файлами.
+   *
    * Заказ берётся под блокировку первым — тем же порядком, что и в переходе:
    * иначе две транзакции взяли бы те же строки в обратном порядке. Под
    * блокировкой же считается номер раунда, поэтому две параллельные загрузки
@@ -371,15 +384,7 @@ export class OrderWorkflowService {
     const open = await this.findOpenSubmission(tx, orderId);
 
     if (open) {
-      // Тот же текст правкой не считается — ни записи, ни события: то же
-      // правило, что у повторного уточнения площади тем же числом.
-      const commentChanged = open.comment !== comment;
-
-      if (commentChanged) {
-        await tx.orderSubmission.update({ where: { id: open.id }, data: { comment } });
-      }
-
-      return { ...open, order, commentChanged };
+      return { ...open, order };
     }
 
     const last = await tx.orderSubmission.findFirst({
@@ -393,10 +398,29 @@ export class OrderWorkflowService {
       select: { id: true, round: true },
     });
 
-    // У нового раунда своего события не просят: дедупликация работает
-    // в пределах сдачи, в пустом раунде дубликатов нет, и файлы добавятся
-    // обязательно — событие уйдёт по ним.
-    return { ...created, order, commentChanged: false };
+    return { ...created, order };
+  }
+
+  /**
+   * Записать комментарий сдачи, если она всё ещё открыта. Возвращает, изменился
+   * ли он: тот же текст правкой не считается — ни записи, ни события, то же
+   * правило, что у повторного уточнения площади тем же числом.
+   */
+  private async saveComment(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    submissionId: string,
+    comment: string,
+  ): Promise<boolean> {
+    const open = await this.assertSubmissionOpen(tx, orderId, submissionId);
+
+    if (open.comment === comment) {
+      return false;
+    }
+
+    await tx.orderSubmission.update({ where: { id: submissionId }, data: { comment } });
+
+    return true;
   }
 
   /**
@@ -411,7 +435,7 @@ export class OrderWorkflowService {
     tx: Prisma.TransactionClient,
     orderId: string,
     submissionId: string,
-  ): Promise<void> {
+  ): Promise<{ comment: string }> {
     const order = await this.transitions.lockOrder(tx, orderId);
 
     if (!canUploadWork(order.status)) {
@@ -420,12 +444,14 @@ export class OrderWorkflowService {
 
     const submission = await tx.orderSubmission.findFirst({
       where: { id: submissionId, submittedAt: null },
-      select: { id: true },
+      select: { comment: true },
     });
 
     if (!submission) {
       throw new ConflictException(SUBMISSION_ALREADY_SENT);
     }
+
+    return submission;
   }
 
   /**
@@ -436,13 +462,11 @@ export class OrderWorkflowService {
   private async findOpenSubmission(
     tx: Prisma.TransactionClient,
     orderId: string,
-  ): Promise<{ id: string; round: number; comment: string } | null> {
+  ): Promise<{ id: string; round: number } | null> {
     return tx.orderSubmission.findFirst({
       where: { orderId, submittedAt: null },
       orderBy: { round: 'desc' },
-      // Комментарий нужен `openSubmission`, чтобы отличить настоящую правку
-      // от повторной отправки того же текста.
-      select: { id: true, round: true, comment: true },
+      select: { id: true, round: true },
     });
   }
 }

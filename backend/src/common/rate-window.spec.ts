@@ -44,20 +44,4 @@ describe('RateWindows', () => {
     expect(windows.hit('a', OPTIONS, 0).allowed).toBe(false);
     expect(windows.hit('b', OPTIONS, 0).allowed).toBe(true);
   });
-
-  it('забывает ключ вместе с его подключами', () => {
-    const windows = new RateWindows();
-
-    windows.hit('socket-1:subscribe:order', OPTIONS, 0);
-    windows.hit('socket-1:subscribe:order', OPTIONS, 0);
-    windows.hit('socket-2:subscribe:order', OPTIONS, 0);
-
-    windows.forget('socket-1');
-
-    // Идентификатор отключившегося сокета больше не повторится, а окно соседа
-    // трогать нельзя.
-    expect(windows.hit('socket-1:subscribe:order', OPTIONS, 0).allowed).toBe(true);
-    expect(windows.hit('socket-2:subscribe:order', OPTIONS, 0).allowed).toBe(true);
-    expect(windows.hit('socket-2:subscribe:order', OPTIONS, 0).allowed).toBe(false);
-  });
 });

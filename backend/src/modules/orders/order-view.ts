@@ -204,7 +204,10 @@ export function toOrderDetail(
     // Комментарии приёмки и доработки — только сторонам сделки (ТЗ §4.1).
     clientCompletionComment: view.isParty ? order.clientCompletionComment : null,
     correctionComment: view.isParty ? order.correctionComment : null,
-    updatedAt: order.updatedAt.toISOString(),
+    // Время последнего изменения меняется на каждом переходе, то есть выдало
+    // бы движение заказа тому, кому оно замаскировано под `WAITING`. Для него
+    // заказ с создания не менялся — так и отвечаем.
+    updatedAt: (view.seesProgress ? order.updatedAt : order.createdAt).toISOString(),
     // Имя, город и контакты заказчика — только сторонам сделки. Компания,
     // которая в заказе не участвует, получает его карточку по любому UUID,
     // и почта с телефоном клиента собирались бы одним циклом по ним.

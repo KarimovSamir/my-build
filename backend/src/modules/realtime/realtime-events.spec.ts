@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DELETABLE_ORDER_STATUSES,
   NotificationType,
+  OFFER_ELIGIBLE_ORDER_STATUSES,
   OfferStatus,
   OrderStatus,
   socketEvents,
@@ -91,7 +93,12 @@ describe('orderCreatedBroadcast', () => {
 
 describe('transitionBroadcast', () => {
   it('смену статуса шлёт в комнату заказа и лично клиенту', () => {
-    const { messages } = transitionBroadcast(applied());
+    const { messages } = transitionBroadcast(
+      applied({
+        fromStatus: OrderStatus.IN_PROGRESS,
+        nextStatus: OrderStatus.AWAITING_COMPLETION_CONFIRMATION,
+      }),
+    );
 
     expect(messagesOf(messages, socketEvents.orderStatusChanged)).toEqual([
       {
@@ -100,6 +107,31 @@ describe('transitionBroadcast', () => {
         payload: { orderId: ORDER_ID },
       },
     ]);
+  });
+
+  it('заказ, ушедший из ленты, пропадает и из ленты компаний', () => {
+    // Выбран исполнитель: без сигнала строка висела бы в ленте у всех
+    // компаний до перечитывания, а предложение по ней давало бы 409.
+    const { messages } = transitionBroadcast(applied());
+
+    expect(messagesOf(messages, socketEvents.orderStatusChanged)).toEqual([
+      {
+        rooms: [orderRoom, clientRoom, socketRooms.companyFeed()],
+        event: socketEvents.orderStatusChanged,
+        payload: { orderId: ORDER_ID },
+      },
+    ]);
+  });
+
+  it('движение внутри ленты ленте не сообщается', () => {
+    // Первое предложение: заказ как стоял в ленте, так и стоит, а событие
+    // рассказало бы всем компаниям, что по нему кто-то предложился.
+    const { messages } = transitionBroadcast(
+      applied({ fromStatus: OrderStatus.WAITING, nextStatus: OrderStatus.AWAITING_CONFIRMATION }),
+    );
+    const rooms = messages.flatMap((message) => message.rooms);
+
+    expect(rooms).not.toContain(socketRooms.companyFeed());
   });
 
   it('без смены статуса события о ней нет', () => {
@@ -302,14 +334,25 @@ describe('orderUpdateBroadcast', () => {
 });
 
 describe('orderDeletedBroadcast', () => {
-  it('шлёт только уведомления: заказа, о котором говорить, уже нет', () => {
+  it('убирает заказ из ленты и уведомляет компании с предложением', () => {
     const { messages } = orderDeletedBroadcast(ORDER_ID, [
       notification(LOSER_ID, NotificationType.ORDER_DELETED),
     ]);
 
-    expect(messages).toHaveLength(1);
-    expect(messages[0]!.event).toBe(socketEvents.notificationCreated);
-    expect(messages[0]!.rooms).toEqual([socketRooms.user(LOSER_ID)]);
+    expect(messages.map(({ rooms, event }) => ({ rooms, event }))).toEqual([
+      { rooms: [socketRooms.companyFeed()], event: socketEvents.orderStatusChanged },
+      { rooms: [socketRooms.user(LOSER_ID)], event: socketEvents.notificationCreated },
+    ]);
+  });
+
+  it('удалить можно только заказ из ленты', () => {
+    // На этом держится безусловный сигнал ленте выше: появись удаляемый
+    // статус вне ленты, компаниям уходило бы событие о чужом заказе.
+    const outsideFeed = DELETABLE_ORDER_STATUSES.filter(
+      (status) => !OFFER_ELIGIBLE_ORDER_STATUSES.includes(status),
+    );
+
+    expect(outsideFeed).toEqual([]);
   });
 
   it('распускает комнату удалённого заказа', () => {

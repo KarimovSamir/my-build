@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsString, Matches, MaxLength, ValidateIf } from 'class-validator';
 
 import { PHONE_ERROR_MESSAGE, PHONE_PATTERN, PROFILE_LIMITS } from '@mybuild/shared';
 
@@ -8,6 +8,13 @@ const trim = () =>
   Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   );
+
+/**
+ * Ключ можно не присылать, но присланный — проверяется. `@IsOptional` сюда
+ * не годится: он пропускает и `null`, а `null` в обязательной колонке —
+ * это 500 от Prisma вместо 400. «Очистить» здесь означает пустую строку.
+ */
+const omittable = () => ValidateIf((_object: object, value: unknown) => value !== undefined);
 
 /**
  * Изменение профиля (`PATCH /profile`, ТЗ §5).
@@ -24,20 +31,20 @@ const trim = () =>
  * сохранить, и наоборот.
  */
 export class UpdateProfileDto {
-  @IsOptional()
+  @omittable()
   @IsString()
   @trim()
   @IsNotEmpty({ message: 'Имя не может быть пустым' })
   @MaxLength(PROFILE_LIMITS.firstName)
   firstName?: string;
 
-  @IsOptional()
+  @omittable()
   @IsString()
   @trim()
   @MaxLength(PROFILE_LIMITS.lastName)
   lastName?: string;
 
-  @IsOptional()
+  @omittable()
   @IsString()
   @trim()
   @IsNotEmpty({ message: 'Телефон не может быть пустым' })
@@ -45,20 +52,20 @@ export class UpdateProfileDto {
   @Matches(PHONE_PATTERN, { message: PHONE_ERROR_MESSAGE })
   phone?: string;
 
-  @IsOptional()
+  @omittable()
   @IsString()
   @trim()
   @MaxLength(PROFILE_LIMITS.city)
   city?: string;
 
-  @IsOptional()
+  @omittable()
   @IsString()
   @trim()
   @MaxLength(PROFILE_LIMITS.country)
   country?: string;
 
   /** Только для роли COMPANY и очистке не подлежит (ТЗ §3). */
-  @IsOptional()
+  @omittable()
   @IsString()
   @trim()
   @MaxLength(PROFILE_LIMITS.companyName)

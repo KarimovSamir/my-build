@@ -18,6 +18,7 @@
  */
 
 import {
+  acceptsOffers,
   isActiveOffer,
   socketEvents,
   socketRooms,
@@ -128,11 +129,17 @@ export function transitionBroadcast(
   // (ТЗ §4.1): перехода не было, и события о смене статуса тоже нет —
   // о самом предложении уже сказало `offer:created`.
   if (applied.fromStatus !== applied.nextStatus) {
-    messages.push({
-      rooms: [orderRoom, clientRoom],
-      event: socketEvents.orderStatusChanged,
-      payload: { orderId },
-    });
+    const rooms = [orderRoom, clientRoom];
+
+    // Заказ ушёл из ленты (выбран исполнитель) — лента узнаёт об этом тем же
+    // событием. Нового компании оно не сообщает: заказ исчез бы из её ленты
+    // при ближайшем перечитывании, а без события строка висела бы до него,
+    // и предложение по ней давало бы 409.
+    if (acceptsOffers(applied.fromStatus) !== acceptsOffers(applied.nextStatus)) {
+      rooms.push(socketRooms.companyFeed());
+    }
+
+    messages.push({ rooms, event: socketEvents.orderStatusChanged, payload: { orderId } });
   }
 
   // Событие уходит на любое изменение статуса предложения, включая перевод
@@ -180,12 +187,14 @@ export function orderUpdateBroadcast(
 }
 
 /**
- * Заказ удалён (`ORDER_DELETED`): уведомления сторонам и роспуск комнаты.
+ * Заказ удалён (`ORDER_DELETED`): уведомления сторонам, сигнал ленте и роспуск
+ * комнаты.
  *
- * События про сам заказ нет — рассказывать больше не о чем. Зато комнату надо
- * распустить руками: сокеты остаются в ней до отключения, а комната заказа,
- * которого нет, — это участники, которых никто не выселит, и имя, которое
- * достанется следующему заказу разве что при совпадении uuid.
+ * Своего события у удаления нет (ТЗ §8, `CLAUDE.md` §7). Ленте уходит
+ * `order:status_changed` — тот же сигнал «заказ покинул ленту», что и при
+ * выборе исполнителя: удалить можно только заказ, который ищет исполнителя,
+ * то есть стоящий в ленте. Комнату заказа надо распустить руками: сокеты
+ * остаются в ней до отключения, и выселить их потом будет некому.
  */
 export function orderDeletedBroadcast(
   orderId: string,
@@ -195,7 +204,14 @@ export function orderDeletedBroadcast(
 
   return {
     evictions: [{ members: room, room }],
-    messages: notificationMessages(notifications),
+    messages: [
+      {
+        rooms: [socketRooms.companyFeed()],
+        event: socketEvents.orderStatusChanged,
+        payload: { orderId },
+      },
+      ...notificationMessages(notifications),
+    ],
   };
 }
 

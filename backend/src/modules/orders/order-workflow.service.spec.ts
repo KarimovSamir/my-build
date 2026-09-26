@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FileOwnerType, NotificationType, OrderStatus } from '@mybuild/shared';
@@ -83,8 +83,10 @@ function createStubs(options: StubOptions = {}) {
             : (submissions.at(-1) ?? null);
         },
       ),
-      create: vi.fn(async ({ data }: { data: { round: number } }) => {
+      create: vi.fn(async ({ data }: { data: { round: number; comment: string } }) => {
         trace.push('submission.create');
+        // Созданная сдача остаётся открытой: её перепроверяет транзакция вставки.
+        submissions.push({ id: 'submission-new', submittedAt: null, ...data });
         return { id: 'submission-new', round: data.round };
       }),
       update: vi.fn(async (_args: unknown) => {
@@ -128,16 +130,19 @@ function createStubs(options: StubOptions = {}) {
     ),
     attachFiles: vi.fn(
       async (params: {
+        guard?: (tx: unknown) => Promise<void>;
         onAttached?: (tx: unknown, added: unknown[]) => Promise<void>;
       }) => {
         const rows = Array.from({ length: options.attached ?? 1 }, (_, index) => ({
           id: `file-${index}`,
         }));
 
-        // Настоящий `FilesService` зовёт `onAttached` внутри той же транзакции,
-        // что и вставка строк, и только если что-то добавилось. Подставная
-        // версия обязана вести себя так же: уведомление о файлах пишется там.
+        // Настоящий `FilesService` открывает транзакцию вставки, только если
+        // есть что вставлять, и зовёт в ней `guard`, а после вставки —
+        // `onAttached`. Подставная версия обязана вести себя так же: там
+        // пишутся комментарий сдачи и уведомление о файлах.
         if (rows.length > 0) {
+          await params.guard?.(tx);
           await params.onAttached?.(tx, rows);
         }
 
@@ -275,8 +280,9 @@ describe('OrderWorkflowService: файлы сдачи', () => {
       order.push('commit');
       return result;
     });
-    files.attachFiles.mockImplementation(async () => {
+    files.attachFiles.mockImplementation(async (params) => {
       order.push('attachFiles');
+      await params.guard?.(prisma.tx);
       return [{ id: 'file-0' }];
     });
 
@@ -298,6 +304,22 @@ describe('OrderWorkflowService: файлы сдачи', () => {
       data: { comment: 'Добавил разрез' },
     });
     expect(files.attachFiles.mock.calls[0]![0]).toMatchObject({ submissionRound: 1 });
+  });
+
+  it('не меняет комментарий, если файлы не приняли', async () => {
+    // Квота или хранилище отказали до вставки строк: сменись текст раньше —
+    // клиент увидел бы новый комментарий к старым файлам, и без события.
+    const { service, prisma, files, realtime } = createStubs({
+      submissions: [{ id: 'submission-1', round: 1, submittedAt: null, comment: 'Первый этап' }],
+    });
+    files.attachFiles.mockRejectedValue(new BadRequestException('Места нет'));
+
+    await expect(
+      service.addFiles(addFilesParams({ comment: 'Добавил разрез' })),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.tx.orderSubmission.update).not.toHaveBeenCalled();
+    expect(realtime.orderFilesUpdated).not.toHaveBeenCalled();
   });
 
   it('после сданного раунда открывает следующий', async () => {

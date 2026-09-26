@@ -322,7 +322,7 @@ model Payment {
   payer   User   @relation(fields: [payerId], references: [id], onDelete: Cascade)
 
   amount     Decimal       @db.Decimal(12, 2)
-  currency   String        @default("USD")
+  currency   String        @default("AZN")
   status     PaymentStatus @default(PENDING)
   provider   String?
   externalId String?

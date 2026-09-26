@@ -42,7 +42,7 @@ interface SocketStubData {
   expiryTimer?: ReturnType<typeof setTimeout>;
 }
 
-/** У каждого сокета свой идентификатор: по нему считается частота сообщений. */
+/** У каждого сокета свой идентификатор — как у настоящих. */
 let socketCounter = 0;
 
 /** Сокет в том объёме, в каком его трогает шлюз. */
@@ -328,6 +328,26 @@ describe('OrderGateway: комнаты', () => {
     ).resolves.toEqual({ ok: false, error: 'Заказ не найден' });
 
     expect(socket.join).not.toHaveBeenCalled();
+  });
+
+  it('выводит из комнаты, если участие кончилось, пока сокет входил', async () => {
+    // Первая проверка прошла до коммита отклонения, а выселение сработало
+    // раньше, чем сокет вошёл, — выселять его после этого уже некому.
+    const { gateway, prisma } = createStubs();
+    prisma.order.findFirst
+      .mockResolvedValueOnce({ id: ORDER_ID })
+      .mockResolvedValueOnce(null);
+    const socket = createSocket(client);
+
+    await expect(
+      gateway.subscribeOrder(asSocket(socket), { orderId: ORDER_ID }),
+    ).resolves.toEqual({ ok: false, error: 'Заказ не найден' });
+
+    expect(socket.leave).toHaveBeenCalledWith(socketRooms.order(ORDER_ID));
+    // Повторная проверка — строго после входа, иначе окно осталось бы.
+    expect(socket.join.mock.invocationCallOrder[0]!).toBeLessThan(
+      prisma.order.findFirst.mock.invocationCallOrder[1]!,
+    );
   });
 
   it('мусор вместо идентификатора не доходит до базы', async () => {

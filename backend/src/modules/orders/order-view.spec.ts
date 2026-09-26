@@ -344,6 +344,18 @@ describe('toOrderDetail — компания, которая в заказе н�
     expect(toOrderDetail(order(), { id: OUTSIDER_ID }).filesSizeBytes).toBeNull();
     expect(toOrderDetail(order(), { id: RIVAL_ID }).filesSizeBytes).toBeNull();
   });
+
+  it('не видит времени последнего изменения: оно двигается с каждым переходом', () => {
+    // Для неё заказ с создания стоит в `WAITING`, и время изменения
+    // обязано говорить то же самое.
+    for (const id of [OUTSIDER_ID, RIVAL_ID]) {
+      expect(toOrderDetail(order(), { id }).updatedAt).toBe('2026-09-01T09:00:00.000Z');
+    }
+
+    expect(toOrderDetail(order(), { id: EXECUTOR_ID }).updatedAt).toBe(
+      '2026-09-02T09:00:00.000Z',
+    );
+  });
 });
 
 describe('toOrderDetail — объём файлов заказа', () => {

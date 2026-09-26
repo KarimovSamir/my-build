@@ -19,7 +19,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { DEMO_EMAILS } from '@mybuild/shared';
+import { ACTIVE_OFFER_STATUSES, DEMO_EMAILS } from '@mybuild/shared';
 
 import type { PrismaClient } from '../../generated/prisma/client.js';
 import {
@@ -140,8 +140,14 @@ export async function resetDemo(
     // других пользователей о них остаются без ссылки (`onDelete: SetNull`).
     await tx.order.deleteMany({ where: { clientId: { in: demoIds } } });
     // Предложения демо-компаний по чужим заказам: демо не должно оставлять
-    // следов у настоящих пользователей дольше одного цикла.
-    await tx.offer.deleteMany({ where: { companyId: { in: demoIds } } });
+    // следов у настоящих пользователей дольше одного цикла. Кроме тех, что
+    // ещё в игре: на них держится статус чужого заказа. Без отправленного
+    // заказ остался бы «ждёт подтверждения» без единого предложения, без
+    // принятого — «в работе» без исполнителя, и сдвинуть его было бы нечем.
+    // Это уже настоящая сделка настоящего пользователя, и сброс её не трогает.
+    await tx.offer.deleteMany({
+      where: { companyId: { in: demoIds }, status: { notIn: [...ACTIVE_OFFER_STATUSES] } },
+    });
     await tx.notification.deleteMany({ where: { userId: { in: demoIds } } });
 
     for (const user of DEMO_USERS) {

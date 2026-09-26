@@ -1,7 +1,7 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 
-import { DEMO_EMAILS } from '@mybuild/shared';
+import { ACTIVE_OFFER_STATUSES, DEMO_EMAILS } from '@mybuild/shared';
 
 import type { PrismaClient } from '../../generated/prisma/client.js';
 import { isDemoStale, resetDemo, type DemoResetDeps } from './demo-reset.js';
@@ -159,6 +159,11 @@ describe('resetDemo', () => {
     // Данные демо заведены заново, профили возвращены.
     expect(tx.order.deleteMany).toHaveBeenCalledTimes(1);
     expect(tx.offer.deleteMany).toHaveBeenCalledTimes(1);
+    // Активные предложения демо-компаний по чужим заказам остаются: без них
+    // заказ настоящего пользователя застрял бы «в работе» без исполнителя.
+    expect(tx.offer.deleteMany.mock.calls[0]![0]).toMatchObject({
+      where: { status: { notIn: [...ACTIVE_OFFER_STATUSES] } },
+    });
     expect(tx.user.update).toHaveBeenCalledTimes(
       Object.keys(DEMO_EMAILS).length,
     );

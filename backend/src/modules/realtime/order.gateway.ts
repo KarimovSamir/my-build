@@ -87,6 +87,12 @@ interface SocketData {
   expiresAt?: number | null;
   /** Таймер, закрывающий сокет в этот момент. Снимается при отключении. */
   expiryTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * Частота сообщений — на сокет, а не на пользователя: вкладок может быть
+   * много. Окна живут на самом сокете и уходят вместе с ним: общая карта
+   * на все сокеты требовала бы перебора целиком на каждое отключение.
+   */
+  messageRate?: RateWindows;
 }
 
 type AppSocket = Socket<
@@ -130,9 +136,6 @@ export class OrderGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
   private readonly logger = new Logger(OrderGateway.name);
-
-  /** Частота сообщений — на сокет, а не на пользователя: вкладок может быть много. */
-  private readonly messageRate = new RateWindows();
 
   @WebSocketServer()
   private readonly namespace?: Namespace;
@@ -199,8 +202,6 @@ export class OrderGateway
   /** Сокет закрылся — снять таймер: держать его до `exp` уже не за чем. */
   handleDisconnect(socket: AppSocket): void {
     clearExpiry(socket);
-    // Окно частоты живёт на идентификатор сокета, а он больше не повторится.
-    this.messageRate.forget(socket.id);
   }
 
   /**
@@ -224,7 +225,18 @@ export class OrderGateway
         return { ok: false, error: ORDER_FORBIDDEN };
       }
 
-      await socket.join(socketRooms.order(orderId));
+      const room = socketRooms.order(orderId);
+      await socket.join(room);
+
+      // Проверка выше могла пройти до коммита отклонения, а выселение —
+      // сработать раньше, чем сокет вошёл: тогда выбывшая компания осталась бы
+      // в комнате. Выселение идёт после коммита, поэтому повторная проверка
+      // уже после входа видит отклонение, если выселение сокет не застало.
+      if (!(await this.isOrderParticipant(user.id, orderId))) {
+        await socket.leave(room);
+        return { ok: false, error: ORDER_FORBIDDEN };
+      }
+
       return { ok: true };
     });
   }
@@ -329,7 +341,8 @@ export class OrderGateway
     message: string,
     run: () => Promise<SubscribeAck>,
   ): Promise<SubscribeAck> {
-    const allowed = this.messageRate.hit(`${socket.id}:${message}`, MESSAGE_RATE);
+    socket.data.messageRate ??= new RateWindows();
+    const allowed = socket.data.messageRate.hit(message, MESSAGE_RATE);
 
     if (!allowed.allowed) {
       return { ok: false, error: TOO_MANY_MESSAGES, retryable: true };

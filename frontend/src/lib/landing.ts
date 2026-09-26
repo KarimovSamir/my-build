@@ -1,4 +1,10 @@
-import { OrderStatus, orderStatusLabels } from "@/lib/types";
+import {
+  DEMO_ACCOUNTS,
+  OrderStatus,
+  Role,
+  orderStatusLabels,
+  type DemoAccount,
+} from "@/lib/types";
 
 /**
  * Маршрут сделки на лендинге (ТЗ §4).
@@ -49,3 +55,22 @@ export const dealRoute: DealRouteStep[] = routeOrder.map((status) => ({
   note: routeNotes[status],
   current: status === currentStatus,
 }));
+
+/** «Трёх компаний» — числительное в родительном падеже, как после «аккаунты». */
+const companiesGenitive: Record<number, string> = {
+  1: "одной компании",
+  2: "двух компаний",
+  3: "трёх компаний",
+  4: "четырёх компаний",
+};
+
+/**
+ * Кем можно войти в демо — «клиента и двух компаний». Считается по тому же
+ * списку, что рисует экран входа: число, написанное в разметке руками, уже
+ * однажды разошлось с ним.
+ */
+export function demoAccountsSummary(accounts: readonly DemoAccount[] = DEMO_ACCOUNTS): string {
+  const companies = accounts.filter((account) => account.role === Role.COMPANY).length;
+
+  return `клиента и ${companiesGenitive[companies] ?? `${companies} компаний`}`;
+}

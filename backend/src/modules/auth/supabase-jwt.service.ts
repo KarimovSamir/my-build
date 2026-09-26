@@ -73,6 +73,10 @@ export class SupabaseJwtService implements OnModuleInit {
 
     try {
       ({ payload } = await jwtVerify(token, this.jwks, {
+        // Алгоритм закреплён, а не берётся из заголовка токена: ключи проекта
+        // Supabase — ES256. Сменят их тип при ротации — токены начнут
+        // отклоняться сразу и явно, а не приниматься по чему угодно.
+        algorithms: ['ES256'],
         issuer: this.issuer,
         audience: this.audience,
       }));

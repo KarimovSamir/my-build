@@ -67,15 +67,6 @@ export class RateWindows {
     return { allowed: true, retryAfterMs: 0 };
   }
 
-  /** Забыть ключ целиком: сокет отключился — держать его окно незачем. */
-  forget(prefix: string): void {
-    for (const key of this.windows.keys()) {
-      if (key === prefix || key.startsWith(`${prefix}:`)) {
-        this.windows.delete(key);
-      }
-    }
-  }
-
   /**
    * Убрать окна, срок которых истёк. Иначе карта растёт на каждого
    * пользователя и не уменьшается никогда.

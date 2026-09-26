@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { OrderStatus, orderStatusLabels } from "@/lib/types";
+import { DEMO_ACCOUNTS, OrderStatus, Role, orderStatusLabels } from "@/lib/types";
 
-import { dealRoute } from "./landing";
+import { dealRoute, demoAccountsSummary } from "./landing";
 
 describe("dealRoute", () => {
   it("показывает все статусы заказа, каждый по одному разу", () => {
@@ -30,5 +30,21 @@ describe("dealRoute", () => {
     for (const step of dealRoute) {
       expect(step.note.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("demoAccountsSummary", () => {
+  it("называет столько компаний, сколько кнопок на экране входа", () => {
+    expect(demoAccountsSummary()).toBe("клиента и двух компаний");
+  });
+
+  it("говорит «клиента» в единственном числе — демо-клиент один", () => {
+    expect(DEMO_ACCOUNTS.filter((account) => account.role === Role.CLIENT)).toHaveLength(1);
+  });
+
+  it("меняет число вместе со списком", () => {
+    const company = DEMO_ACCOUNTS.find((account) => account.role === Role.COMPANY)!;
+
+    expect(demoAccountsSummary([...DEMO_ACCOUNTS, company])).toBe("клиента и трёх компаний");
   });
 });

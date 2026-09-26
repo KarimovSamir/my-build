@@ -229,6 +229,27 @@ describe('Аутентификация и доступ (e2e)', () => {
       },
     );
 
+    it.each(['firstName', 'phone', 'lastName'])(
+      'null в поле %s — ошибка запроса, а не падение сервера',
+      async (field) => {
+        const response = await request(app.getHttpServer())
+          .patch('/profile')
+          .set('Authorization', `Bearer ${clientToken}`)
+          .send({ [field]: null });
+
+        expect(response.status).toBe(400);
+      },
+    );
+
+    it('null в названии компании — тоже 400: в базе на нём ограничение', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/profile')
+        .set('Authorization', `Bearer ${companyToken}`)
+        .send({ companyName: null });
+
+      expect(response.status).toBe(400);
+    });
+
     it('принимает телефон в привычных записях', async () => {
       const response = await request(app.getHttpServer())
         .patch('/profile')
