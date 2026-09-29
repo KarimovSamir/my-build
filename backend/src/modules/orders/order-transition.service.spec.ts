@@ -10,7 +10,12 @@ import {
 
 import { Prisma } from '../../generated/prisma/client.js';
 import type { PrismaService } from '../../prisma/prisma.service.js';
-import { OrderEventType, OrderStateMachine } from './order-state-machine.js';
+import {
+  OfferExpiredError,
+  OfferFinallyRejectedError,
+  OrderEventType,
+  OrderStateMachine,
+} from './order-state-machine.js';
 import { OrderTransitionService } from './order-transition.service.js';
 
 /**
@@ -38,6 +43,10 @@ interface StubOffer {
   status: OfferStatus;
   proposedPrice: string;
   companyName?: string;
+  /** Сколько раз клиент уже отклонял предложение. По умолчанию — ни разу. */
+  rejectionCount?: number;
+  /** Срок в предложении. По умолчанию — заведомо будущий `DEADLINE`. */
+  proposedDeadline?: Date;
 }
 
 function orderRow(status: OrderStatus) {
@@ -88,7 +97,8 @@ function createPrismaStub(options: {
     companyId: offer.companyId,
     status: offer.status,
     proposedPrice: new Prisma.Decimal(offer.proposedPrice),
-    proposedDeadline: DEADLINE,
+    proposedDeadline: offer.proposedDeadline ?? DEADLINE,
+    rejectionCount: offer.rejectionCount ?? 0,
     company: { companyName: offer.companyName ?? 'ООО «Тест»' },
   });
 
@@ -113,7 +123,7 @@ function createPrismaStub(options: {
         async ({ where }: { where: OfferWhere }) =>
           offers.filter((offer) => matches(offer, where)).length,
       ),
-      updateMany: vi.fn(async () => ({ count: 1 })),
+      updateMany: vi.fn(async (_args: { where: unknown; data: unknown }) => ({ count: 1 })),
     },
     notification: {
       deleteMany: vi.fn(async (_args: unknown) => ({ count: 0 })),
@@ -688,5 +698,74 @@ describe('OrderTransitionService: статус предложения до за�
     expect(applied.offerUpdates).toEqual([
       { offerId: OFFER_A, companyId: COMPANY_A, status: OfferStatus.SENT },
     ]);
+  });
+
+  it('отклонение считает отказ клиента', async () => {
+    const prisma = createPrismaStub({
+      order: orderRow(OrderStatus.AWAITING_CONFIRMATION),
+      offers: [
+        { id: OFFER_A, companyId: COMPANY_A, status: OfferStatus.SENT, proposedPrice: '9500.00' },
+      ],
+    });
+
+    await createService(prisma).apply({
+      type: OrderEventType.OFFER_REJECTED,
+      orderId: ORDER_ID,
+      offerId: OFFER_A,
+    });
+
+    expect(prisma.tx.offer.updateMany.mock.calls[0]![0].data).toEqual({
+      status: OfferStatus.REJECTED,
+      rejectionCount: { increment: 1 },
+    });
+  });
+
+  it('после второго отказа повторная отправка не доходит до записи', async () => {
+    const prisma = createPrismaStub({
+      order: orderRow(OrderStatus.WAITING),
+      offers: [
+        {
+          id: OFFER_A,
+          companyId: COMPANY_A,
+          status: OfferStatus.SENT,
+          proposedPrice: '9500.00',
+          rejectionCount: 2,
+        },
+      ],
+    });
+
+    await expect(
+      createService(prisma).apply({
+        type: OrderEventType.OFFER_SUBMITTED,
+        orderId: ORDER_ID,
+        offerId: OFFER_A,
+        offerStatusBefore: OfferStatus.REJECTED,
+      }),
+    ).rejects.toBeInstanceOf(OfferFinallyRejectedError);
+    expect(prisma.tx.offer.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('предложение с прошедшим сроком не принимается', async () => {
+    const prisma = createPrismaStub({
+      order: orderRow(OrderStatus.AWAITING_CONFIRMATION),
+      offers: [
+        {
+          id: OFFER_A,
+          companyId: COMPANY_A,
+          status: OfferStatus.SENT,
+          proposedPrice: '9500.00',
+          proposedDeadline: new Date('2020-01-01T00:00:00.000Z'),
+        },
+      ],
+    });
+
+    await expect(
+      createService(prisma).apply({
+        type: OrderEventType.OFFER_ACCEPTED,
+        orderId: ORDER_ID,
+        offerId: OFFER_A,
+      }),
+    ).rejects.toBeInstanceOf(OfferExpiredError);
+    expect(prisma.tx.order.update).not.toHaveBeenCalled();
   });
 });

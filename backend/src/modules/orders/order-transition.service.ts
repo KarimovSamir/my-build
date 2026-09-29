@@ -11,7 +11,12 @@
  */
 
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { EXECUTOR_OFFER_STATUSES, OfferStatus, OrderStatus } from '@mybuild/shared';
+import {
+  EXECUTOR_OFFER_STATUSES,
+  OfferStatus,
+  OrderStatus,
+  utcCalendarDate,
+} from '@mybuild/shared';
 
 import { runInOrderQueue } from '../../common/order-queue.js';
 import { isUuid } from '../../common/uuid.js';
@@ -105,6 +110,7 @@ type OfferWithCompany = {
   status: OfferStatus;
   proposedPrice: Prisma.Decimal;
   proposedDeadline: Date;
+  rejectionCount: number;
   company: { companyName: string | null };
 };
 
@@ -240,6 +246,7 @@ export class OrderTransitionService {
       status: true,
       proposedPrice: true,
       proposedDeadline: true,
+      rejectionCount: true,
       company: { select: { companyName: true } },
     } as const;
 
@@ -289,6 +296,8 @@ export class OrderTransitionService {
           ...ref,
           // Статус берётся из команды, а не из строки: см. `offerStatusBefore`.
           offerStatus: command.offerStatusBefore,
+          // Счётчик — из строки: upsert предложения его не трогает.
+          rejectionCount: offer.rejectionCount,
           companyName: offer.company.companyName ?? 'Компания',
         };
 
@@ -313,6 +322,7 @@ export class OrderTransitionService {
           // Decimal не переживает JSON без потерь, поэтому цена везде строка.
           proposedPrice: offer.proposedPrice.toString(),
           proposedDeadline: offer.proposedDeadline,
+          today: utcCalendarDate(new Date()),
           // Проигравшие нужны поимённо: каждой компании — свой статус
           // и своё уведомление. Читаются под блокировкой строки заказа,
           // то есть параллельный переход их не изменит.
@@ -405,9 +415,18 @@ export class OrderTransitionService {
     // Обновления сгруппированы по новому статусу: сколько бы предложений
     // ни было у заказа, запросов остаётся не больше двух. Группы не
     // пересекаются по идентификаторам, поэтому порядок между ними не важен.
+    // Отказ клиента ещё и считается: после `MAX_OFFER_REJECTIONS` отказов
+    // прислать предложение заново нельзя. В `REJECTED` предложение переводит
+    // только его отклонение клиентом — проигравшие уходят в `NOT_ACCEPTED`.
     await Promise.all(
       [...groupOfferIdsByStatus(offerUpdates)].map(([status, offerIds]) =>
-        tx.offer.updateMany({ where: { id: { in: offerIds } }, data: { status } }),
+        tx.offer.updateMany({
+          where: { id: { in: offerIds } },
+          data:
+            status === OfferStatus.REJECTED
+              ? { status, rejectionCount: { increment: 1 } }
+              : { status },
+        }),
       ),
     );
 

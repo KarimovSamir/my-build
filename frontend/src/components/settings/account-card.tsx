@@ -4,7 +4,7 @@ import { roleLabels, type UserProfile } from "@/lib/types";
 
 import { FormSection } from "@/components/form-parts";
 import { ListField } from "@/components/list-parts";
-import { formatDate } from "@/lib/format";
+import { formatMoment } from "@/lib/format";
 
 /**
  * Учётная запись: то, что в настройках показывается, но не меняется.
@@ -33,7 +33,7 @@ export function AccountCard({ profile }: { profile: UserProfile }) {
           <span className="text-[0.9375rem] font-semibold">{roleLabels[profile.role]}</span>
         </ListField>
         <ListField label="На площадке с">
-          <span className="font-mono text-sm">{formatDate(profile.createdAt)}</span>
+          <span className="font-mono text-sm">{formatMoment(profile.createdAt)}</span>
         </ListField>
       </dl>
     </FormSection>

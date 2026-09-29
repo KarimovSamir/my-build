@@ -138,6 +138,12 @@ export interface OfferDto {
    */
   editedAt: IsoDateString | null;
   updatedAt: IsoDateString;
+  /**
+   * Сколько раз клиент отклонял это предложение. После первого отказа
+   * компания может прислать новое один раз, после второго — уже нет
+   * (`MAX_OFFER_REJECTIONS`, решение пользователя).
+   */
+  rejectionCount: number;
 }
 
 /** Строка в списке заказов. */

@@ -101,3 +101,62 @@ export function checkStorageQuota(
 
   return null;
 }
+
+/**
+ * Место, обещанное загрузкам, которые ещё едут в бакет.
+ *
+ * Окончательная проверка квоты идёт под транзакцией вставки, то есть уже
+ * после загрузки в хранилище, а строк `OrderFile` до неё нет. Без резерва
+ * двадцать параллельных запросов по 50 МБ все проходили предварительную
+ * проверку и заливали в бакет гигабайт: лишнее потом отклонялось и удалялось,
+ * но бесплатный лимит хранилища на это время был превышен. Резерв учитывается
+ * предварительной проверкой, поэтому залить больше квоты нельзя и на время.
+ *
+ * Живёт в памяти процесса — как семафор загрузок и по той же причине
+ * (один экземпляр backend'а — условие деплоя).
+ */
+export class StorageReservations {
+  private readonly byOrder = new Map<string, number>();
+  private readonly byClient = new Map<string, number>();
+  private total = 0;
+
+  /** Сколько места сейчас обещано по тем же трём границам. */
+  pending(orderId: string, clientId: string): StorageUsage {
+    return {
+      order: this.byOrder.get(orderId) ?? 0,
+      client: this.byClient.get(clientId) ?? 0,
+      total: this.total,
+    };
+  }
+
+  /** Занять место. Возвращает освобождение — звать ровно один раз. */
+  reserve(orderId: string, clientId: string, bytes: number): () => void {
+    adjust(this.byOrder, orderId, bytes);
+    adjust(this.byClient, clientId, bytes);
+    this.total += bytes;
+
+    let released = false;
+
+    return () => {
+      if (released) return;
+      released = true;
+
+      adjust(this.byOrder, orderId, -bytes);
+      adjust(this.byClient, clientId, -bytes);
+      this.total -= bytes;
+    };
+  }
+}
+
+/** Сложить занятое в базе и обещанное. */
+export function addUsage(a: StorageUsage, b: StorageUsage): StorageUsage {
+  return { order: a.order + b.order, client: a.client + b.client, total: a.total + b.total };
+}
+
+function adjust(map: Map<string, number>, key: string, delta: number): void {
+  const next = (map.get(key) ?? 0) + delta;
+
+  // Пустые записи убираются, иначе карта росла бы на каждый заказ навсегда.
+  if (next <= 0) map.delete(key);
+  else map.set(key, next);
+}

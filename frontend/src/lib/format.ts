@@ -1,10 +1,11 @@
 /**
  * Форматирование значений для интерфейса: суммы, площади, размеры, даты.
  *
- * Даты приходят с сервера ISO-строками в UTC (`toISOString()`), и разбираются
- * здесь как календарная дата, а не как момент времени: `Intl` и `Date`
- * пересчитали бы её в часовой пояс машины, и «25 декабря» у пользователя
- * западнее Гринвича превратилось бы в 24-е.
+ * Даты приходят с сервера ISO-строками в UTC (`toISOString()`), и их два рода.
+ * Календарная дата (срок, желаемая дата начала) хранится полуночью UTC и
+ * читается строкой (`formatDate`): пересчёт в часовой пояс машины превратил бы
+ * «25 декабря» у пользователя западнее Гринвича в 24-е. Момент времени
+ * (`createdAt` и подобные) показывается по календарю Баку (`formatMoment`).
  */
 
 import type { IsoDateString, MoneyString } from "@/lib/types";
@@ -140,7 +141,45 @@ export function formatLocation({
   return parts.length > 0 ? parts.join(", ") : null;
 }
 
-/** Дата в виде «25 дек 2025». */
+/**
+ * Часовой пояс, в котором показываются моменты времени.
+ *
+ * Сервис работает в Азербайджане (адреса, телефоны, манаты), и «когда создан
+ * заказ» для его пользователей — время Баку. Пояс задан явно, а не берётся
+ * у машины: страницы рендерит сервер, у которого свой пояс (на Vercel — UTC),
+ * и без этого сервер и браузер показывали бы разные числа. Пояс Баку — UTC+4
+ * круглый год: без него всё, что случилось с полуночи до четырёх утра,
+ * выглядело вчерашним.
+ */
+export const DISPLAY_TIME_ZONE = "Asia/Baku";
+
+const momentParts = new Intl.DateTimeFormat("en-CA", {
+  timeZone: DISPLAY_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/**
+ * Момент времени (`createdAt`, `updatedAt`, «сдана») в виде «25 дек 2025» —
+ * по календарю Баку (`DISPLAY_TIME_ZONE`).
+ *
+ * Для календарных дат — срока, желаемой даты начала — это не годится: они
+ * хранятся полуночью UTC, и сдвиг пояса там ни к чему. Для них `formatDate`.
+ */
+export function formatMoment(value: IsoDateString): string {
+  const moment = new Date(value);
+
+  if (Number.isNaN(moment.getTime())) return value;
+
+  // `en-CA` отдаёт дату как «2025-12-25» — ровно то, что понимает `formatDate`.
+  return formatDate(momentParts.format(moment));
+}
+
+/**
+ * Календарная дата (срок, желаемая дата начала) в виде «25 дек 2025».
+ * Моменты времени показывает `formatMoment`.
+ */
 export function formatDate(value: IsoDateString): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   const monthName = match ? monthsShort[Number(match[2]) - 1] : undefined;

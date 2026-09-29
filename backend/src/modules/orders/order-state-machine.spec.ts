@@ -1,4 +1,5 @@
 import {
+  MAX_OFFER_REJECTIONS,
   NotificationType,
   OfferStatus,
   OrderStatus,
@@ -12,6 +13,8 @@ import { describe, expect, it } from 'vitest';
 import {
   InvalidOfferStatusError,
   InvalidStateTransitionError,
+  OfferExpiredError,
+  OfferFinallyRejectedError,
   OrderEvent,
   OrderEventType,
   OrderStateContext,
@@ -59,6 +62,7 @@ const events: { [T in OrderEventType]: Extract<OrderEvent, { type: T }> } = {
     type: OrderEventType.OFFER_SUBMITTED,
     ...offerRef(OfferStatus.SENT),
     companyName: 'ООО «Стройка»',
+    rejectionCount: 0,
   },
   OFFER_WITHDRAWN: {
     type: OrderEventType.OFFER_WITHDRAWN,
@@ -75,6 +79,7 @@ const events: { [T in OrderEventType]: Extract<OrderEvent, { type: T }> } = {
     ...offerRef(OfferStatus.SENT),
     proposedPrice: '12500.00',
     proposedDeadline: new Date('2026-12-01T00:00:00.000Z'),
+    today: '2026-09-29',
     otherOffers: [],
   },
   WORK_SUBMITTED: {
@@ -494,9 +499,64 @@ describe('OrderStateMachine — статус предложения', () => {
       ...events.OFFER_SUBMITTED,
       type: OrderEventType.OFFER_SUBMITTED,
       offerStatus: OfferStatus.REJECTED,
+      rejectionCount: 1,
     });
 
     expect(result.nextStatus).toBe(OrderStatus.AWAITING_CONFIRMATION);
+  });
+
+  it('после второго отказа клиента прислать предложение снова нельзя', () => {
+    // Решение пользователя: один повтор после отказа, второй отказ — окончательный.
+    expect(() =>
+      machine.transition(contextIn(OrderStatus.AWAITING_CONFIRMATION), {
+        ...events.OFFER_SUBMITTED,
+        offerStatus: OfferStatus.REJECTED,
+        rejectionCount: MAX_OFFER_REJECTIONS,
+      }),
+    ).toThrow(OfferFinallyRejectedError);
+  });
+
+  it('отказы клиента не мешают вернуться к заказу после собственного отзыва', () => {
+    const result = machine.transition(contextIn(OrderStatus.WAITING), {
+      ...events.OFFER_SUBMITTED,
+      offerStatus: OfferStatus.WITHDRAWN,
+      rejectionCount: MAX_OFFER_REJECTIONS,
+    });
+
+    expect(result.nextStatus).toBe(OrderStatus.AWAITING_CONFIRMATION);
+  });
+
+  it('текст окончательного отказа не называет статус заказа', () => {
+    try {
+      machine.transition(contextIn(OrderStatus.AWAITING_CONFIRMATION), {
+        ...events.OFFER_SUBMITTED,
+        offerStatus: OfferStatus.REJECTED,
+        rejectionCount: MAX_OFFER_REJECTIONS,
+      });
+      expect.unreachable('переход должен был получить отказ');
+    } catch (error) {
+      const message = messageOf((error as OfferFinallyRejectedError).getResponse());
+      for (const label of Object.values(orderStatusLabels)) {
+        expect(message).not.toContain(label);
+      }
+    }
+  });
+
+  describe('принятие предложения со сроком', () => {
+    const accept = (deadline: string) =>
+      machine.transition(contextIn(OrderStatus.AWAITING_CONFIRMATION), {
+        ...events.OFFER_ACCEPTED,
+        proposedDeadline: new Date(deadline),
+        today: '2026-09-29',
+      });
+
+    it('в прошлом — 409: сделка не начинается с просроченным дедлайном', () => {
+      expect(() => accept('2026-09-28T00:00:00.000Z')).toThrow(OfferExpiredError);
+    });
+
+    it('сегодняшним — ещё можно', () => {
+      expect(accept('2026-09-29T00:00:00.000Z').nextStatus).toBe(OrderStatus.IN_PROGRESS);
+    });
   });
 
   it('не даёт сдать работу по предложению, которое уже на приёмке', () => {

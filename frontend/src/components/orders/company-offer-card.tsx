@@ -40,7 +40,7 @@ export function CompanyOfferCard({
   // возвращать компанию в ленту за заказом, который у неё открыт, незачем.
   const canResubmit = canSubmitOffer && !pending;
 
-  const hint = isExecutor ? null : offerHint(offer.status, order.id, canResubmit);
+  const hint = isExecutor ? null : offerHint(offer, order.id, canResubmit);
   const orderLabel = formatOrderNumber(order.orderNumber);
 
   // Ссылка «Открыть заказ» ведёт на страницу, которая сейчас открыта:

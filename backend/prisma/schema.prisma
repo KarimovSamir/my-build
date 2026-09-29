@@ -245,6 +245,9 @@ model Offer {
   /// не отличить: он меняется и от смены статуса.
   editedAt  DateTime?
   updatedAt DateTime  @updatedAt
+  /// Сколько раз клиент отклонил это предложение. После второго отказа
+  /// компания прислать его заново уже не может (`MAX_OFFER_REJECTIONS`).
+  rejectionCount Int @default(0)
 
   @@unique([orderId, companyId])
   @@index([companyId, status])

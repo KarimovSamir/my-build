@@ -472,6 +472,37 @@ describe('FilesService.attachFiles', () => {
     expect(prisma.orderFile.createManyAndReturn).not.toHaveBeenCalled();
   });
 
+  it('параллельные загрузки не проходят предварительную проверку все разом', async () => {
+    // Строк первой загрузки ещё нет — она едет в бакет. Без резерва вторая
+    // увидела бы то же свободное место и тоже залила бы файл сверх потолка.
+    const first = await upload('первый.pdf', 'первая загрузка');
+    const second = await upload('второй.pdf', 'вторая загрузка');
+    const prisma = createPrismaStub({
+      usedBytes: MAX_ORDER_FILES_BYTES - first.sizeBytes - second.sizeBytes + 1,
+    });
+    const service = createService(prisma, storage);
+
+    let finishUpload!: () => void;
+    storage.upload.mockImplementationOnce(
+      () => new Promise<undefined>((resolve) => (finishUpload = () => resolve(undefined))),
+    );
+
+    const params = { orderId: ORDER_ID, ownerType: FileOwnerType.CLIENT, submissionRound: 0 };
+    const running = service.attachFiles({ ...params, files: [first] });
+    await vi.waitFor(() => expect(storage.upload).toHaveBeenCalledTimes(1));
+
+    await expect(service.attachFiles({ ...params, files: [second] })).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(storage.upload).toHaveBeenCalledTimes(1);
+
+    finishUpload();
+    await running;
+
+    // Первая закончилась — резерв снят, и место снова считается по базе.
+    await expect(service.attachFiles({ ...params, files: [second] })).resolves.toHaveLength(1);
+  });
+
   it('впритык к потолку файлы принимает', async () => {
     const file = await upload('смета.pdf', 'ровно столько, сколько осталось');
     const prisma = createPrismaStub({

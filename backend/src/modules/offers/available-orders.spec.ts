@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { OfferStatus, OrderStatus } from '@mybuild/shared';
+import { MAX_OFFER_REJECTIONS, OfferStatus, OrderStatus } from '@mybuild/shared';
 
 import { buildAvailableOrdersWhere } from './available-orders.js';
 
@@ -31,11 +31,15 @@ describe('buildAvailableOrdersWhere', () => {
 
     expect(availability.OR).toEqual([
       { offers: { none: { companyId: COMPANY } } },
+      { offers: { some: { companyId: COMPANY, status: OfferStatus.WITHDRAWN } } },
+      // Отклонённое — только пока отказ не окончательный (решение пользователя):
+      // после второго отказа клиента заказ уходит из ленты компании насовсем.
       {
         offers: {
           some: {
             companyId: COMPANY,
-            status: { in: [OfferStatus.WITHDRAWN, OfferStatus.REJECTED] },
+            status: OfferStatus.REJECTED,
+            rejectionCount: { lt: MAX_OFFER_REJECTIONS },
           },
         },
       },

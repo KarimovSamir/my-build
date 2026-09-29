@@ -32,6 +32,7 @@ function offer(companyId: string, status: OfferStatus): OfferDto {
     createdAt: "2026-09-01T00:00:00.000Z",
     editedAt: null,
     updatedAt: "2026-09-01T00:00:00.000Z",
+    rejectionCount: 0,
   };
 }
 
@@ -74,9 +75,16 @@ function order(patch: Partial<OrderDetail> = {}): OrderDetail {
   };
 }
 
+/**
+ * «Сегодня» для тестов — задано явно: срок предложений в фикстурах
+ * (1 октября 2026) иначе однажды оказался бы в прошлом, и тесты начали бы
+ * падать сами собой.
+ */
+const TODAY = "2026-09-15";
+
 /** Действия глазами конкретного пользователя — как их считает страница. */
-function actionsFor(detail: OrderDetail, viewerId: string | null) {
-  return resolveClientActions(detail, resolveOrderDetailAccess(detail, viewerId));
+function actionsFor(detail: OrderDetail, viewerId: string | null, today = TODAY) {
+  return resolveClientActions(detail, resolveOrderDetailAccess(detail, viewerId), today);
 }
 
 describe("resolveClientActions — выбор предложения", () => {
@@ -91,6 +99,32 @@ describe("resolveClientActions — выбор предложения", () => {
     expect(actions.decisions).toHaveLength(2);
     expect(actions.decisions.every((cell) => cell.canAccept && cell.canReject)).toBe(true);
     expect(actions.executorOffer).toBeNull();
+  });
+
+  it("предложение с прошедшим сроком не принять, но отклонить можно", () => {
+    // Сервер отвечает на такое принятие 409 `OfferExpired`: сделка началась бы
+    // с дедлайном в прошлом.
+    const actions = actionsFor(
+      order({ offers: [offer(COMPANY_A, OfferStatus.SENT)] }),
+      CLIENT_ID,
+      "2026-10-02",
+    );
+
+    expect(actions.decisions[0]).toMatchObject({
+      expired: true,
+      canAccept: false,
+      canReject: true,
+    });
+  });
+
+  it("в последний день срока предложение ещё принимается", () => {
+    const actions = actionsFor(
+      order({ offers: [offer(COMPANY_A, OfferStatus.SENT)] }),
+      CLIENT_ID,
+      "2026-10-01",
+    );
+
+    expect(actions.decisions[0]).toMatchObject({ expired: false, canAccept: true });
   });
 
   it("в статусе поиска исполнителя решать нечего", () => {

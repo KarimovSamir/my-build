@@ -1,7 +1,7 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ACTIVE_OFFER_STATUSES, DEMO_EMAILS } from '@mybuild/shared';
+import { ACTIVE_OFFER_STATUSES, DEMO_EMAILS, NotificationType } from '@mybuild/shared';
 
 import type { PrismaClient } from '../../generated/prisma/client.js';
 import { isDemoStale, resetDemo, type DemoResetDeps } from './demo-reset.js';
@@ -68,6 +68,8 @@ function createPrismaStub(options: {
   markerAt?: Date;
   staleKeys?: string[];
   txKeys?: string[];
+  /** Активные предложения настоящих компаний по демо-заказам. */
+  outsiders?: { companyId: string; order: { orderNumber: number; title: string } }[];
 }) {
   let orderNumber = 0;
   const events: string[] = [];
@@ -101,10 +103,13 @@ function createPrismaStub(options: {
         })),
       ),
     },
-    offer: { deleteMany: vi.fn(async (_args: unknown) => ({ count: 0 })) },
+    offer: {
+      findMany: vi.fn(async (_args: unknown) => options.outsiders ?? []),
+      deleteMany: vi.fn(async (_args: unknown) => ({ count: 0 })),
+    },
     notification: {
       deleteMany: vi.fn(async (_args: unknown) => ({ count: 0 })),
-      createMany: vi.fn(async (_args: unknown) => ({ count: 0 })),
+      createMany: vi.fn(async (_args: { data: Record<string, unknown>[] }) => ({ count: 0 })),
     },
     user: { update: vi.fn(async (_args: unknown) => ({})) },
   };
@@ -143,6 +148,33 @@ function deps(
 }
 
 describe('resetDemo', () => {
+  it('сообщает настоящим компаниям, что их предложение ушло вместе с демо-заказом', async () => {
+    // Демо-заказ открыт всем компаниям, и настоящая может успеть в нём
+    // поработать. Каскад удалил бы её предложение молча — даже принятое.
+    const { client } = createAdminStub(flagged());
+    const { prisma, tx } = createPrismaStub({
+      outsiders: [{ companyId: 'real-company', order: { orderNumber: 42, title: 'Ремонт' } }],
+    });
+
+    const result = await resetDemo(deps(prisma, client));
+
+    expect(result?.notifiedCompanies).toBe(1);
+    expect(tx.offer.findMany.mock.calls[0]![0]).toMatchObject({
+      where: { status: { in: [...ACTIVE_OFFER_STATUSES] } },
+    });
+    // Первая пачка уведомлений — этой компании; вторая — демо-данные.
+    expect(tx.notification.createMany.mock.calls[0]![0].data).toEqual([
+      expect.objectContaining({
+        userId: 'real-company',
+        type: NotificationType.ORDER_DELETED,
+        orderId: null,
+      }),
+    ]);
+    expect(tx.offer.findMany.mock.invocationCallOrder[0]!).toBeLessThan(
+      tx.order.deleteMany.mock.invocationCallOrder[0]!,
+    );
+  });
+
   it('учётки с флагом не пересоздаёт: сессии посетителей переживают сброс', async () => {
     const { client, admin } = createAdminStub(flagged());
     const { prisma, tx } = createPrismaStub({
@@ -152,7 +184,7 @@ describe('resetDemo', () => {
 
     const result = await resetDemo(reset);
 
-    expect(result).toEqual({ recreatedUsers: 0, removedObjects: 1 });
+    expect(result).toEqual({ recreatedUsers: 0, removedObjects: 1, notifiedCompanies: 0 });
     expect(admin.deleteUser).not.toHaveBeenCalled();
     expect(admin.createUser).not.toHaveBeenCalled();
 

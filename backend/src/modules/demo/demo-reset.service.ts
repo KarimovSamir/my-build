@@ -107,7 +107,8 @@ export class DemoResetService
       if (result) {
         this.logger.log(
           `Демо сброшено: учёток создано заново ${result.recreatedUsers}, ` +
-            `объектов на удаление ${result.removedObjects}`,
+            `объектов на удаление ${result.removedObjects}, ` +
+            `предупреждено настоящих компаний ${result.notifiedCompanies}`,
         );
       }
     } catch (error) {

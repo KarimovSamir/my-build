@@ -19,7 +19,12 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { ACTIVE_OFFER_STATUSES, DEMO_EMAILS } from '@mybuild/shared';
+import {
+  ACTIVE_OFFER_STATUSES,
+  DEMO_EMAILS,
+  NotificationType,
+  notificationTypeLabels,
+} from '@mybuild/shared';
 
 import type { PrismaClient } from '../../generated/prisma/client.js';
 import {
@@ -28,6 +33,7 @@ import {
   findAuthUsersWhere,
   isDemoAuthUser,
 } from '../../supabase/supabase-admin.js';
+import { orderRef } from '../orders/order-notification.js';
 import {
   DEMO_USERS,
   createDemoNotifications,
@@ -60,6 +66,8 @@ export interface DemoResetResult {
   recreatedUsers: number;
   /** Сколько объектов отправлено на удаление из бакета. */
   removedObjects: number;
+  /** Скольким настоящим компаниям сообщено, что их предложение ушло со сбросом. */
+  notifiedCompanies: number;
 }
 
 /**
@@ -108,7 +116,7 @@ export async function resetDemo(
   const now = options.now ?? Date.now;
   const { ids, recreated, orphanKeys } = await ensureDemoUsers(deps);
 
-  const keys = await deps.prisma.$transaction(async (tx) => {
+  const reset = await deps.prisma.$transaction(async (tx) => {
     const clientId = ids.get('client')!;
 
     // Блокировка строки демо-клиента делает сброс одиночным: второй
@@ -136,9 +144,37 @@ export async function resetDemo(
       select: { storageKey: true },
     });
 
+    // Настоящие компании, чьи предложения по демо-заказам ещё в игре, — в том
+    // числе принятые и в работе. Каскад снесёт их молча, поэтому каждой —
+    // то же уведомление, что при удалении заказа клиентом (`ORDER_DELETED`,
+    // без ссылки: заказа больше нет). Отозванные и отклонённые не трогаем —
+    // для их компаний заказ уже чужой, как и при обычном удалении.
+    const outsiders = await tx.offer.findMany({
+      where: {
+        order: { clientId: { in: demoIds } },
+        companyId: { notIn: demoIds },
+        status: { in: [...ACTIVE_OFFER_STATUSES] },
+      },
+      select: { companyId: true, order: { select: { orderNumber: true, title: true } } },
+    });
+
     // Каскадом уходят предложения, сдачи и файлы этих заказов; уведомления
     // других пользователей о них остаются без ссылки (`onDelete: SetNull`).
     await tx.order.deleteMany({ where: { clientId: { in: demoIds } } });
+
+    if (outsiders.length > 0) {
+      await tx.notification.createMany({
+        data: outsiders.map(({ companyId, order }) => ({
+          userId: companyId,
+          type: NotificationType.ORDER_DELETED,
+          orderId: null,
+          title: notificationTypeLabels[NotificationType.ORDER_DELETED],
+          body:
+            `${orderRef(order)}: демо-заказ удалён плановым сбросом демо, ` +
+            'ваше предложение больше не действует',
+        })),
+      });
+    }
     // Предложения демо-компаний по чужим заказам: демо не должно оставлять
     // следов у настоящих пользователей дольше одного цикла. Кроме тех, что
     // ещё в игре: на них держится статус чужого заказа. Без отправленного
@@ -162,19 +198,24 @@ export async function resetDemo(
     await createDemoOrders(tx, ids);
     await createDemoNotifications(tx, ids);
 
-    return files.map((file) => file.storageKey);
+    return {
+      keys: files.map((file) => file.storageKey),
+      notifiedCompanies: outsiders.length,
+    };
   }, RESET_TX_OPTIONS);
 
-  if (keys === null) {
+  if (reset === null) {
     return null;
   }
+
+  const { keys, notifiedCompanies } = reset;
 
   // После коммита: удалить объекты раньше — значит оставить строки без файлов,
   // если транзакция откатится.
   const doomed = [...new Set([...orphanKeys, ...keys])];
   await deps.removeObjects(doomed);
 
-  return { recreatedUsers: recreated, removedObjects: doomed.length };
+  return { recreatedUsers: recreated, removedObjects: doomed.length, notifiedCompanies };
 }
 
 /**

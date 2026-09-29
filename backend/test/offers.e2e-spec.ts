@@ -573,6 +573,71 @@ describe('Предложения (e2e)', () => {
       expect(await availableIds(alphaToken, order.orderNumber)).toContain(order.id);
     });
 
+    it('после второго отказа клиента компания прислать предложение больше не может', async () => {
+      // Решение пользователя: один повтор после отказа, второй отказ — «нет» насовсем.
+      const order = await seedOrder('Заказ с двумя отказами');
+      const reject = (offerId: string) =>
+        request(app.getHttpServer())
+          .post(`/offers/${offerId}/reject`)
+          .set('Authorization', `Bearer ${clientToken}`)
+          .expect(200);
+
+      const first = await postOffer(alphaToken, order.id);
+      await reject(first.body.id);
+
+      // Первый отказ — можно прислать снова, и заказ есть в ленте.
+      expect(await availableIds(alphaToken, order.orderNumber)).toContain(order.id);
+      const second = await postOffer(alphaToken, order.id, { proposedPrice: '80000.00' });
+      expect(second.status).toBe(201);
+      expect(second.body.rejectionCount).toBe(1);
+
+      await reject(second.body.id);
+
+      const third = await postOffer(alphaToken, order.id, { proposedPrice: '75000.00' });
+      expect(third.status).toBe(409);
+      expect(third.body.error).toBe('OfferFinallyRejected');
+
+      expect(await availableIds(alphaToken, order.orderNumber)).not.toContain(order.id);
+
+      const detail = await request(app.getHttpServer())
+        .get(`/orders/${order.id}`)
+        .set('Authorization', `Bearer ${alphaToken}`)
+        .expect(200);
+      expect(detail.body.canSubmitOffer).toBe(false);
+
+      // Другой компании чужие отказы ничего не закрывают.
+      expect((await postOffer(betaToken, order.id)).status).toBe(201);
+    });
+
+    it('предложение с прошедшим сроком клиент принять не может', async () => {
+      // Такое предложение не отправить через API — срок проверяет DTO, — но оно
+      // возникает само, если клиент долго не выбирал.
+      const order = await seedOrder('Заказ с просроченным предложением', OrderStatus.AWAITING_CONFIRMATION);
+      const stale = await prisma.offer.create({
+        data: {
+          orderId: order.id,
+          companyId: alpha.id,
+          status: OfferStatus.SENT,
+          proposedPrice: '85000.00',
+          proposedDeadline: new Date(`${inDays(-1)}T00:00:00.000Z`),
+        },
+      });
+
+      const response = await request(app.getHttpServer())
+        .post(`/orders/${order.id}/accept-offer/${stale.id}`)
+        .set('Authorization', `Bearer ${clientToken}`);
+
+      expect(response.status).toBe(409);
+      expect(response.body.error).toBe('OfferExpired');
+      expect(await orderStatus(order.id)).toBe(OrderStatus.AWAITING_CONFIRMATION);
+
+      // Отклонить его при этом можно.
+      await request(app.getHttpServer())
+        .post(`/offers/${stale.id}/reject`)
+        .set('Authorization', `Bearer ${clientToken}`)
+        .expect(200);
+    });
+
     it('предложение по чужому заказу клиент отклонить не может', async () => {
       const stranger = await users.createUser('offers-stranger', {
         role: Role.CLIENT,

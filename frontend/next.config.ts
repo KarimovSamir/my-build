@@ -18,6 +18,10 @@ const nextConfig: NextConfig = {
   // Пакет общих типов собирается в ESM локально и не публикуется в npm.
   transpilePackages: ["@mybuild/shared"],
 
+  // `X-Powered-By: Next.js` ничего не даёт посетителю, а сканеру сразу
+  // называет фреймворк и сужает перебор известных уязвимостей.
+  poweredByHeader: false,
+
   async headers() {
     return [
       {

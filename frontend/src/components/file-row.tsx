@@ -2,7 +2,7 @@ import { FileText, Image as ImageIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { fileKindLabel, isImageMimeType } from "@/lib/file-kind";
-import { formatDate, formatFileSize } from "@/lib/format";
+import { formatFileSize, formatMoment } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
@@ -62,7 +62,7 @@ export function FileRow({
             от неё остаётся тип с половиной размера. */}
         <span className="text-muted-foreground mt-0.5 block font-mono text-xs">
           {fileKindLabel(file.mimeType)} · {formatFileSize(file.sizeBytes)} ·{" "}
-          {formatDate(file.createdAt)}
+          {formatMoment(file.createdAt)}
           {extra ? ` · ${extra}` : ""}
         </span>
       </span>

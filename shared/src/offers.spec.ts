@@ -5,12 +5,16 @@ import {
   ACTIVE_OFFER_STATUSES,
   EXECUTING_OFFER_STATUSES,
   EXECUTOR_OFFER_STATUSES,
+  MAX_OFFER_REJECTIONS,
   OFFER_PRICE_PATTERN,
   acceptsOffers,
   canResubmitOffer,
   isActiveOffer,
   isExecutorOffer,
+  isFinallyRejected,
+  isOfferExpired,
   isPendingOffer,
+  utcCalendarDate,
 } from './offers.js';
 
 /**
@@ -76,15 +80,26 @@ describe('acceptsOffers', () => {
 });
 
 describe('canResubmitOffer', () => {
-  it.each([OfferStatus.WITHDRAWN, OfferStatus.REJECTED])(
-    'после статуса %s компания вправе прислать предложение заново',
-    (status) => {
-      expect(canResubmitOffer(status)).toBe(true);
-    },
-  );
+  it('после отзыва компания вправе прислать предложение заново всегда', () => {
+    expect(canResubmitOffer(OfferStatus.WITHDRAWN, 0)).toBe(true);
+    // Отказы клиента, случившиеся раньше, отзыв не закрывают: он — решение
+    // самой компании.
+    expect(canResubmitOffer(OfferStatus.WITHDRAWN, 1)).toBe(true);
+  });
+
+  it('после первого отказа клиента — один раз можно', () => {
+    expect(canResubmitOffer(OfferStatus.REJECTED, 1)).toBe(true);
+  });
+
+  it('после второго отказа — окончательно нельзя', () => {
+    expect(canResubmitOffer(OfferStatus.REJECTED, MAX_OFFER_REJECTIONS)).toBe(false);
+    expect(isFinallyRejected(OfferStatus.REJECTED, MAX_OFFER_REJECTIONS)).toBe(true);
+    expect(isFinallyRejected(OfferStatus.REJECTED, 1)).toBe(false);
+    expect(isFinallyRejected(null, MAX_OFFER_REJECTIONS)).toBe(false);
+  });
 
   it('пока предложение в SENT, оно не «выбывшее» — обновляется на месте', () => {
-    expect(canResubmitOffer(OfferStatus.SENT)).toBe(false);
+    expect(canResubmitOffer(OfferStatus.SENT, 0)).toBe(false);
   });
 
   it.each([
@@ -94,7 +109,18 @@ describe('canResubmitOffer', () => {
     OfferStatus.COMPLETED,
     OfferStatus.NOT_ACCEPTED,
   ])('в ленту заказ со статусом предложения %s не возвращается', (status) => {
-    expect(canResubmitOffer(status)).toBe(false);
+    expect(canResubmitOffer(status, 0)).toBe(false);
+  });
+});
+
+describe('isOfferExpired', () => {
+  const today = utcCalendarDate(new Date('2026-09-29T21:30:00.000Z'));
+
+  it('сегодняшний срок ещё действует, вчерашний — уже нет', () => {
+    expect(today).toBe('2026-09-29');
+    expect(isOfferExpired('2026-09-29T00:00:00.000Z', today)).toBe(false);
+    expect(isOfferExpired('2026-10-15T00:00:00.000Z', today)).toBe(false);
+    expect(isOfferExpired('2026-09-28T00:00:00.000Z', today)).toBe(true);
   });
 });
 

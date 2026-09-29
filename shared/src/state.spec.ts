@@ -116,7 +116,9 @@ describe('canTransition — предусловия по статусу пред�
           OrderEventType.OFFER_SUBMITTED,
           offerStatus,
         ),
-      ).toBe(isPendingOffer(offerStatus) || canResubmitOffer(offerStatus));
+        // Таблица статусов не знает о счётчике отказов: окончательный отказ
+        // проверяется отдельно (`isFinallyRejected`), здесь — первый.
+      ).toBe(isPendingOffer(offerStatus) || canResubmitOffer(offerStatus, 1));
     },
   );
 

@@ -136,7 +136,48 @@ export function isPendingOffer(status: OfferStatus): boolean {
   return status === OfferStatus.SENT;
 }
 
-/** Предложение выбыло из выбора, и компания может прислать новое (ТЗ §4.1). */
-export function canResubmitOffer(status: OfferStatus): boolean {
-  return RESUBMITTABLE_OFFER_STATUSES.includes(status);
+/**
+ * После скольких отказов клиента отклонение становится окончательным
+ * (решение пользователя; ТЗ §4.1 разрешает присылать заново без предела).
+ *
+ * Без предела клиенту нечем остановить компанию, которой он уже отказал:
+ * она возвращала бы предложение снова и снова. Один повтор оставлен — после
+ * отказа компания может пересмотреть цену или срок, — а второй отказ значит
+ * «нет» насовсем. Отозванного это не касается: отзыв — решение самой
+ * компании, и вернуться к заказу она вправе всегда.
+ */
+export const MAX_OFFER_REJECTIONS = 2;
+
+/** Клиент отказал этой компании окончательно — прислать заново нельзя. */
+export function isFinallyRejected(status: OfferStatus | null, rejectionCount: number): boolean {
+  return status === OfferStatus.REJECTED && rejectionCount >= MAX_OFFER_REJECTIONS;
+}
+
+/**
+ * Предложение выбыло из выбора, и компания может прислать новое (ТЗ §4.1):
+ * отозванное — всегда, отклонённое — пока отказ не окончательный.
+ */
+export function canResubmitOffer(status: OfferStatus, rejectionCount: number): boolean {
+  return (
+    RESUBMITTABLE_OFFER_STATUSES.includes(status) && !isFinallyRejected(status, rejectionCount)
+  );
+}
+
+/**
+ * Календарная дата момента по UTC — «2026-09-29». Той же границей backend
+ * проверяет, что дата из формы не в прошлом (`IsNotPastDate`), и сроки здесь
+ * сравниваются с ней же: иначе форма приняла бы срок, который приёмка уже
+ * сочла бы прошедшим.
+ */
+export function utcCalendarDate(moment: Date): string {
+  return moment.toISOString().slice(0, 10);
+}
+
+/**
+ * Срок в предложении уже прошёл: последний день выполнения позади.
+ * Принять такое предложение нельзя — сделка началась бы с дедлайном
+ * в прошлом. Срок хранится полуночью UTC, поэтому сравнивается дата.
+ */
+export function isOfferExpired(proposedDeadline: string, today: string): boolean {
+  return proposedDeadline.slice(0, 10) < today;
 }

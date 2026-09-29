@@ -14,6 +14,7 @@ import {
   companySeesTaskFiles,
   isActiveOffer,
   isExecutorOffer,
+  isFinallyRejected,
   type AvailableOrderItem,
   type IsoDateString,
   type MoneyString,
@@ -51,6 +52,7 @@ export interface OfferRow {
   createdAt: Date;
   editedAt: Date | null;
   updatedAt: Date;
+  rejectionCount: number;
   company: { companyName: string | null };
 }
 
@@ -223,13 +225,15 @@ export function toOrderDetail(
     submissions: view.isParty ? order.submissions.map(toSubmissionDto) : [],
     // Считается по настоящему статусу заказа: компании он виден как `WAITING`,
     // и собранная по нему кнопка обещала бы то, на что сервер ответит 409.
+    // Окончательный отказ клиента — то же правило, что в state-машине.
     canSubmitOffer:
       !view.isOwner &&
       canTransition(
         order.status,
         OrderEventType.OFFER_SUBMITTED,
         view.ownOffer?.status ?? null,
-      ),
+      ) &&
+      !(view.ownOffer && isFinallyRejected(view.ownOffer.status, view.ownOffer.rejectionCount)),
   };
 }
 
@@ -288,6 +292,7 @@ export function toOfferDto(offer: OfferRow): OfferDto {
     createdAt: offer.createdAt.toISOString(),
     editedAt: toIso(offer.editedAt),
     updatedAt: offer.updatedAt.toISOString(),
+    rejectionCount: offer.rejectionCount,
   };
 }
 

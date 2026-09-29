@@ -37,6 +37,32 @@ describe('prepareFile', () => {
     });
   });
 
+  it('убирает из имени символ, разворачивающий видимое расширение', async () => {
+    // Символ собирается кодом: невидимый U+202E в исходнике — та самая атака.
+    const disguised = `счёт${String.fromCodePoint(0x202e)}fdp.pdf`;
+    const prepared = await prepareFile(
+      writeUpload(disguised, 'application/pdf', pdfBytes('счёт')),
+    );
+
+    expect(prepared.originalName).toBe('счётfdp.pdf');
+  });
+
+  it('отклоняет имя длиннее 255 символов, не вставляя его в текст целиком', async () => {
+    const huge = `${'а'.repeat(10_000)}.pdf`;
+    const refusal = prepareFile(writeUpload(huge, 'application/pdf', pdfBytes('длинное')));
+
+    await expect(refusal).rejects.toThrow(BadRequestException);
+    await expect(refusal).rejects.toThrow(/длиннее 255 символов/);
+    await refusal.catch((error: Error) => expect(error.message.length).toBeLessThan(200));
+  });
+
+  it('имя ровно в 255 символов принимает', async () => {
+    const name = `${'б'.repeat(251)}.pdf`;
+    const prepared = await prepareFile(writeUpload(name, 'application/pdf', pdfBytes('впритык')));
+
+    expect(prepared.originalName).toBe(name);
+  });
+
   it('верит расширению, когда браузер не опознал тип', async () => {
     const prepared = await prepareFile(
       writeUpload('Фото.png', 'application/octet-stream', pngBytes('пиксели')),

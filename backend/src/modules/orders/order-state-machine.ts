@@ -3,7 +3,8 @@
  *
  * Это чистая функция: `(контекст заказа, событие) → { следующий статус,
  * побочные эффекты }`. Внутри нет ни базы, ни сети, ни времени — всё, что
- * нужно для решения, приходит в контексте и событии. Благодаря этому
+ * нужно для решения, приходит в контексте и событии (даже «сегодня» для
+ * проверки срока предложения). Благодаря этому
  * переходы тестируются целиком и мгновенно, без поднятия приложения.
  *
  * Применяет эффекты и открывает транзакцию сервис-обёртка
@@ -22,6 +23,8 @@ import {
   OrderEventType,
   OrderStatus,
   canTransition,
+  isFinallyRejected,
+  isOfferExpired,
   notificationTypeLabels,
   offerStatusLabels,
   orderEventLabels,
@@ -69,6 +72,11 @@ interface OfferRef extends OfferOwner {
  */
 interface SubmittedOfferRef extends OfferOwner {
   offerStatus: OfferStatus | null;
+  /**
+   * Сколько раз клиент уже отклонял это предложение. После
+   * `MAX_OFFER_REJECTIONS` отказов прислать его заново нельзя.
+   */
+  rejectionCount: number;
 }
 
 /** Чужое предложение того же заказа, всё ещё ждущее решения клиента. */
@@ -93,6 +101,12 @@ export type OrderEvent =
       type: typeof OrderEventType.OFFER_ACCEPTED;
       proposedPrice: string;
       proposedDeadline: Date;
+      /**
+       * Сегодняшняя дата по UTC («2026-09-29», `utcCalendarDate`): предложение
+       * с прошедшим сроком принять нельзя. Приходит извне, потому что машина
+       * времени не знает — иначе её нельзя было бы проверить целиком.
+       */
+      today: string;
       /**
        * Остальные предложения заказа в статусе SENT: они проигрывают выбор.
        * Список, а не счётчик, — каждой компании нужно и сменить статус,
@@ -186,6 +200,40 @@ export class InvalidOfferStatusError extends ConflictException {
       message:
         `Действие «${orderEventLabels[event]}» недоступно: ` +
         `предложение в статусе «${offerStatusLabels[offerStatus]}».`,
+    });
+  }
+}
+
+/**
+ * 409 на принятие предложения, срок которого уже прошёл: сделка началась бы
+ * с дедлайном в прошлом. Компания может обновить предложение — тогда его
+ * снова можно принять.
+ */
+export class OfferExpiredError extends ConflictException {
+  constructor() {
+    super({
+      statusCode: 409,
+      error: 'OfferExpired',
+      message:
+        'Срок выполнения в этом предложении уже прошёл. Принять его нельзя — ' +
+        'компания может обновить предложение с новым сроком.',
+    });
+  }
+}
+
+/**
+ * 409 на повторную отправку предложения, которое клиент отклонил
+ * окончательно (`MAX_OFFER_REJECTIONS`, решение пользователя).
+ *
+ * Статуса заказа в тексте нет — по той же причине, что у
+ * `InvalidStateTransitionError`; о своём предложении компания знает и так.
+ */
+export class OfferFinallyRejectedError extends ConflictException {
+  constructor() {
+    super({
+      statusCode: 409,
+      error: 'OfferFinallyRejected',
+      message: 'Клиент дважды отклонил ваше предложение — прислать его снова нельзя.',
     });
   }
 }
@@ -481,6 +529,8 @@ export class OrderStateMachine {
    *
    * @throws InvalidStateTransitionError если перехода нет в таблице ТЗ §4.
    * @throws InvalidOfferStatusError если событию не подходит статус предложения.
+   * @throws OfferFinallyRejectedError если клиент отказал этой компании окончательно.
+   * @throws OfferExpiredError если принимается предложение с прошедшим сроком.
    */
   transition(context: OrderStateContext, event: OrderEvent): OrderTransitionResult {
     const handler = handlerFor(context.status, event.type);
@@ -502,6 +552,20 @@ export class OrderStateMachine {
 
     if (offerStatus !== null && !OFFER_PRECONDITIONS[event.type].includes(offerStatus)) {
       throw new InvalidOfferStatusError(offerStatus, event.type);
+    }
+
+    if (
+      event.type === OrderEventType.OFFER_SUBMITTED &&
+      isFinallyRejected(offerStatus, event.rejectionCount)
+    ) {
+      throw new OfferFinallyRejectedError();
+    }
+
+    if (
+      event.type === OrderEventType.OFFER_ACCEPTED &&
+      isOfferExpired(event.proposedDeadline.toISOString(), event.today)
+    ) {
+      throw new OfferExpiredError();
     }
 
     return { fromStatus: context.status, ...handler(context, event) };

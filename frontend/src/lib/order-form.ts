@@ -12,11 +12,13 @@
 import {
   ALLOWED_FILE_EXTENSIONS,
   ALLOWED_FILE_EXTENSIONS_HINT,
+  MAX_FILE_NAME_LENGTH,
   MAX_FILES_PER_REQUEST,
   MAX_FILE_SIZE_BYTES,
   MAX_ORDER_FILES_BYTES,
   MONEY_PATTERN,
   ORDER_LIMITS,
+  cleanFileName,
   fileExtension,
   type ObjectType,
   type OrderCategory,
@@ -142,6 +144,13 @@ export function fileRejectionReason(file: File): string | null {
 
   if (file.size === 0) {
     return `«${file.name}»: файл пустой`;
+  }
+
+  // То же правило, что на backend (`assertFileName`): имя без управляющих
+  // символов — не длиннее 255. В текст идёт начало имени, а не всё целиком.
+  const name = [...cleanFileName(file.name)];
+  if (name.length > MAX_FILE_NAME_LENGTH) {
+    return `«${name.slice(0, 40).join("")}…»: имя длиннее ${MAX_FILE_NAME_LENGTH} символов — переименуйте файл`;
   }
 
   if (file.size > MAX_FILE_SIZE_BYTES) {

@@ -9,7 +9,7 @@
  * Модуль чистый — ни React, ни fetch.
  */
 
-import { OfferStatus, type IsoDateString, type OfferDto } from "@/lib/types";
+import { OfferStatus, isFinallyRejected, type IsoDateString, type OfferDto } from "@/lib/types";
 
 /** Какую дату предложения показывать и как её подписать. */
 export interface OfferDate {
@@ -60,7 +60,7 @@ export interface OfferHint {
  * не соберётся, пока ему не напишут подсказку.
  */
 export function offerHint(
-  status: OfferStatus,
+  { status, rejectionCount }: Pick<OfferDto, "status" | "rejectionCount">,
   orderId: string,
   canResubmit = false,
 ): OfferHint | null {
@@ -79,8 +79,14 @@ export function offerHint(
     case OfferStatus.COMPLETED:
       return { text: "Заказ завершён, клиент принял работу.", link: openOrder };
     case OfferStatus.REJECTED:
+      // Второй отказ окончательный (решение пользователя): звать в ленту
+      // незачем — заказа там для этой компании больше нет.
+      if (isFinallyRejected(status, rejectionCount)) {
+        return { text: "Клиент дважды отклонил предложение — отправить его снова нельзя." };
+      }
+
       return canResubmit
-        ? { text: "Клиент отклонил предложение. Можно отправить новое." }
+        ? { text: "Клиент отклонил предложение. Можно отправить новое — ещё один раз." }
         : {
             text: "Клиент отклонил предложение. Если заказ ещё ищет исполнителя, он есть в ленте.",
             link: toFeed,

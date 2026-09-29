@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { DEMO_LOCKED_NOTE } from "@/lib/demo";
 import { getHomeHref } from "@/lib/navigation";
 import { PASSWORD_CHANGE_WINDOW_MINUTES } from "@/lib/password-form";
-import { canChangePasswordInSession, getSessionClaims } from "@/lib/session.server";
+import { canRecoverPasswordInSession, getSessionClaims } from "@/lib/session.server";
 
 export const metadata = { title: "Новый пароль" };
 
@@ -54,16 +54,17 @@ export default async function ResetPasswordPage() {
     );
   }
 
-  // Сессия старше окна: база смену пароля уже не примет
-  // (`on_auth_user_password_reauth`), и форма, которая всегда отказывает,
-  // хуже прямого объяснения. Сюда же попадает вошедший обычным путём, кто
-  // открыл экран сам, — пароль в обход текущего ему не сменить.
-  if (!canChangePasswordInSession(claims)) {
+  // Форма без текущего пароля — только сессии, пришедшей по ссылке
+  // восстановления, и только в её окно: дальше база смену пароля не примет
+  // (`on_auth_user_password_reauth`). Вошедший паролем сюда тоже попадает,
+  // если откроет адрес сам, — и получает объяснение вместо формы: иначе
+  // живая сессия меняла бы пароль, не зная текущего, в обход настроек.
+  if (!canRecoverPasswordInSession(claims)) {
     return (
       <div className="flex flex-col gap-8">
         <AuthHeader
-          title="Время вышло"
-          description={`Новый пароль по ссылке из письма задаётся в течение ${PASSWORD_CHANGE_WINDOW_MINUTES} минут. Запросите новую ссылку — или смените пароль в настройках, если помните текущий.`}
+          title="Нужна свежая ссылка"
+          description={`Новый пароль без текущего задаётся только по ссылке из письма и в течение ${PASSWORD_CHANGE_WINDOW_MINUTES} минут после перехода по ней. Запросите новую ссылку — или смените пароль в настройках, если помните текущий.`}
         />
 
         <div className="flex flex-col gap-3">

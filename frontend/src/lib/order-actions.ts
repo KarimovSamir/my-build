@@ -19,7 +19,9 @@ import {
   canUploadWork,
   canVerifyArea,
   isExecutorOffer,
+  isOfferExpired,
   isPendingOffer,
+  utcCalendarDate,
   type OfferDto,
   type OrderDetail,
 } from "@/lib/types";
@@ -32,6 +34,12 @@ export interface OfferDecision {
   offer: OfferDto;
   canAccept: boolean;
   canReject: boolean;
+  /**
+   * Срок в предложении уже прошёл: принять его сервер не даст (409
+   * `OfferExpired`), поэтому и кнопки нет — вместо неё объяснение.
+   * Отклонить такое предложение можно.
+   */
+  expired: boolean;
 }
 
 export interface OrderClientActions {
@@ -53,6 +61,8 @@ const NOTHING: OrderClientActions = {
 export function resolveClientActions(
   order: OrderDetail,
   access: OrderDetailAccess,
+  /** Сегодня по UTC — той же границей срок проверяет сервер. */
+  today: string = utcCalendarDate(new Date()),
 ): OrderClientActions {
   // Проверка владения здесь не лишняя: своё собственное предложение в статусе
   // `SENT` компания видит в том же поле `offers`, и по одним лишь статусам
@@ -60,19 +70,22 @@ export function resolveClientActions(
   if (!access.isOwner) return NOTHING;
 
   const decisions = order.offers.filter((offer) => isPendingOffer(offer.status)).map(
-    (offer): OfferDecision => ({
-      offer,
-      canAccept: canTransition(
-        order.status,
-        OrderEventType.OFFER_ACCEPTED,
-        offer.status,
-      ),
-      canReject: canTransition(
-        order.status,
-        OrderEventType.OFFER_REJECTED,
-        offer.status,
-      ),
-    }),
+    (offer): OfferDecision => {
+      const expired = isOfferExpired(offer.proposedDeadline, today);
+
+      return {
+        offer,
+        canAccept:
+          !expired &&
+          canTransition(order.status, OrderEventType.OFFER_ACCEPTED, offer.status),
+        canReject: canTransition(
+          order.status,
+          OrderEventType.OFFER_REJECTED,
+          offer.status,
+        ),
+        expired,
+      };
+    },
   );
 
   const executorOffer =

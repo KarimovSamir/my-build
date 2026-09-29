@@ -17,6 +17,7 @@ import { join } from 'node:path';
 
 import {
   FILE_HEAD_BYTES,
+  assertFileName,
   assertFileSignature,
   assertUploadSize,
   resolveMimeType,
@@ -39,7 +40,12 @@ mkdirSync(UPLOAD_TEMP_DIR, { recursive: true });
  * Проверить файл и посчитать всё, что нужно для записи.
  * Бросает 400 на недопустимый тип и содержимое, 413 — на превышение размера.
  */
-export async function prepareFile(file: UploadedFileInput): Promise<PreparedFile> {
+export async function prepareFile(input: UploadedFileInput): Promise<PreparedFile> {
+  // Имя чистится первым: дальше оно идёт в тексты ошибок, в базу и в список
+  // файлов, и символ, разворачивающий видимое расширение, не должен дожить
+  // ни до одного из этих мест.
+  const file = { ...input, originalName: assertFileName(input.originalName) };
+
   assertUploadSize(file.originalName, file.sizeBytes);
 
   const mimeType = resolveMimeType(file.originalName, file.mimeType);

@@ -10,6 +10,7 @@ import {
   MAX_PAGE,
   MAX_PAGE_SIZE,
   MAX_UPLOAD_REQUEST_BYTES,
+  cleanFileName,
   fileExtension,
 } from './api.js';
 
@@ -94,5 +95,21 @@ describe('лимиты', () => {
 
     expect(Number.isSafeInteger(skip)).toBe(true);
     expect(skip).toBeLessThan(Number.MAX_SAFE_INTEGER);
+  });
+});
+
+describe('cleanFileName', () => {
+  it('убирает символ, разворачивающий видимое расширение', () => {
+    // Со вставленным U+202E «счётfdp.exe» на экране читается как «счётexe.pdf».
+    expect(cleanFileName('счёт'+String.fromCodePoint(0x202e)+'fdp.exe')).toBe('счётfdp.exe');
+  });
+
+  it('убирает управляющие символы и пробелы по краям', () => {
+    expect(cleanFileName('  план\u0000\n.pdf\t')).toBe('план.pdf');
+  });
+
+  it('обычное имя, в том числе кириллическое и арабское, не трогает', () => {
+    expect(cleanFileName('План этажа (финал).pdf')).toBe('План этажа (финал).pdf');
+    expect(cleanFileName('مخطط.pdf')).toBe('مخطط.pdf');
   });
 });

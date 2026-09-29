@@ -3,7 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { FileRow } from "@/components/file-row";
 import { DownloadFileButton } from "@/components/orders/download-file-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDate } from "@/lib/format";
+import { formatMoment } from "@/lib/format";
 import { pluralRu } from "@/lib/plural";
 import type { SubmissionsView, SubmissionView } from "@/lib/submissions";
 
@@ -118,7 +118,7 @@ function Submission({
         </h3>
         <p className="text-muted-foreground font-mono text-xs">
           {submission.submittedAt
-            ? `сдана ${formatDate(submission.submittedAt)}`
+            ? `сдана ${formatMoment(submission.submittedAt)}`
             : isOwner
               ? "исполнитель ещё готовит эту сдачу"
               : "готовится — вы ещё не сдали её клиенту"}

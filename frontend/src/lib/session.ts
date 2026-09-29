@@ -57,28 +57,39 @@ export function readEmailVerifiedClaim(claim: unknown): boolean {
 }
 
 /**
- * Общая демо-учётка с экрана входа — `app_metadata.demo` в токене.
+ * Способы входа, которыми приходит сессия по ссылке восстановления пароля.
  *
- * Флаг ставит seed ключом сервера; сам пользователь `app_metadata` не меняет.
- * Интерфейсу он нужен, чтобы не предлагать того, что демо запрещено: пароль
- * и email запрещает менять база, профиль — backend.
+ * GoTrue пишет в `amr` способ входа и время. Одноразовый `token_hash`
+ * восстановления даёт `otp` (проверено на живом проекте), ссылка «Забыли
+ * пароль» из нашей формы идёт через PKCE и по коду GoTrue даёт `recovery`.
+ * Вход паролем — `password`, и его здесь нет намеренно.
  */
+const RECOVERY_AMR_METHODS: readonly string[] = ["recovery", "otp"];
+
 /**
- * Когда выдана сессия — последняя отметка claim'а `amr`, в миллисекундах.
+ * Когда сессия пришла по ссылке восстановления — самая поздняя такая отметка
+ * `amr`, в миллисекундах. `null` — сессия выдана не по ссылке из письма.
  *
- * GoTrue пишет в `amr` способ входа и время (в секундах): вход паролем,
- * переход по ссылке из письма. Продление токена отметку не меняет, поэтому
- * это время входа, а не выдачи токена. `null` — claim'а нет или он не того вида.
+ * Именно по ней `/reset-password` решает, показывать ли форму нового пароля
+ * без текущего. По времени входа вообще (как раньше) форма открывалась и
+ * вошедшему паролем — в течение 15 минут любая живая сессия меняла пароль,
+ * не зная текущего, в обход проверки в настройках. Продление токена отметку
+ * не меняет.
  */
-export function readSignedInAt(amr: unknown): number | null {
+export function readRecoveredAt(amr: unknown): number | null {
   if (!Array.isArray(amr)) return null;
 
   let latest: number | null = null;
 
   for (const entry of amr) {
-    const timestamp = (entry as { timestamp?: unknown } | null)?.timestamp;
+    const { method, timestamp } = (entry ?? {}) as { method?: unknown; timestamp?: unknown };
 
-    if (typeof timestamp === "number" && Number.isFinite(timestamp)) {
+    if (
+      typeof method === "string" &&
+      RECOVERY_AMR_METHODS.includes(method) &&
+      typeof timestamp === "number" &&
+      Number.isFinite(timestamp)
+    ) {
       latest = Math.max(latest ?? timestamp, timestamp);
     }
   }
@@ -86,6 +97,13 @@ export function readSignedInAt(amr: unknown): number | null {
   return latest === null ? null : latest * 1000;
 }
 
+/**
+ * Общая демо-учётка с экрана входа — `app_metadata.demo` в токене.
+ *
+ * Флаг ставит seed ключом сервера; сам пользователь `app_metadata` не меняет.
+ * Интерфейсу он нужен, чтобы не предлагать того, что демо запрещено: пароль
+ * и email запрещает менять база, профиль — backend.
+ */
 export function readDemoClaim(appMetadata: unknown): boolean {
   return (
     typeof appMetadata === "object" &&

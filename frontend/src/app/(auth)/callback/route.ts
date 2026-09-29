@@ -1,7 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import type { EmailOtpType } from "@supabase/supabase-js";
-
 import { safeNextPath } from "@/lib/redirects";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -19,12 +17,15 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
  * 3. `#access_token=…` — токены во фрагменте. Так отвечают ссылки, выданные
  *    Admin API: приглашения и всё, что отправлено из панели Supabase.
  *
- * Третий случай сервер увидеть не может — фрагмент браузер не отправляет.
- * Поэтому запрос без узнаваемых параметров уходит на `/callback/complete`,
- * где фрагмент разбирает браузер. Без этого такие ссылки молча приводили бы
- * на экран «ссылка не сработала».
+ * Сам входит здесь только первый способ: обмен кода проходит лишь в браузере,
+ * который запросил письмо (verifier лежит в его cookie), и чужую ссылку так
+ * не подсунуть. Второй и третий способы входят под тем, чьи токены в ссылке,
+ * в каком бы браузере её ни открыли, — поэтому они уходят на
+ * `/callback/complete`: там человек видит, чья учётная запись откроется,
+ * и входит кнопкой (login-CSRF, `lib/callback-link.ts`). Фрагмент к тому же
+ * виден только браузеру — сервер его не получает вовсе.
  *
- * Успех — это сессия в cookie: их ставит route-обработчик, а не браузер.
+ * Успех первого способа — это сессия в cookie: её ставит route-обработчик.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = request.nextUrl;
@@ -32,25 +33,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
-  const type = searchParams.get("type") as EmailOtpType | null;
-
-  const supabase = await createSupabaseServerClient();
+  const type = searchParams.get("type");
 
   if (code) {
+    const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
       return NextResponse.redirect(new URL(next, request.url));
     }
-  } else if (tokenHash && type) {
-    const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-    if (!error) {
-      return NextResponse.redirect(new URL(next, request.url));
-    }
   } else if (!searchParams.has("error")) {
-    // Параметров нет вовсе — возможно, токены во фрагменте. Фрагмент
-    // переживает редирект, так что до браузера он доедет.
+    // `token_hash` — или параметров нет вовсе, и токены, возможно, во
+    // фрагменте: он переживает редирект, так что до браузера доедет.
     const complete = new URL("/callback/complete", request.url);
     complete.searchParams.set("next", next);
+    if (tokenHash && type) {
+      complete.searchParams.set("token_hash", tokenHash);
+      complete.searchParams.set("type", type);
+    }
 
     return NextResponse.redirect(complete);
   }

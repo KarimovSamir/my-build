@@ -45,6 +45,7 @@ function offer(
     createdAt: new Date('2026-09-01T10:00:00.000Z'),
     editedAt: null,
     updatedAt: new Date('2026-09-02T10:00:00.000Z'),
+    rejectionCount: status === OfferStatus.REJECTED ? 1 : 0,
     company: { companyName: `ООО «${companyId.slice(0, 4)}»` },
     ...overrides,
   };
@@ -277,6 +278,31 @@ describe('toOrderDetail — файлы и право отправить пред
     );
 
     expect(view.canSubmitOffer).toBe(true);
+  });
+
+  it('после первого отказа клиента компания может прислать предложение ещё раз', () => {
+    const view = toOrderDetail(
+      order({
+        status: OrderStatus.WAITING,
+        offers: [offer(RIVAL_ID, OfferStatus.REJECTED, { rejectionCount: 1 })],
+      }),
+      { id: RIVAL_ID },
+    );
+
+    expect(view.canSubmitOffer).toBe(true);
+    expect(view.offers[0]?.rejectionCount).toBe(1);
+  });
+
+  it('после второго отказа — уже нет: отклонение окончательное', () => {
+    const view = toOrderDetail(
+      order({
+        status: OrderStatus.WAITING,
+        offers: [offer(RIVAL_ID, OfferStatus.REJECTED, { rejectionCount: 2 })],
+      }),
+      { id: RIVAL_ID },
+    );
+
+    expect(view.canSubmitOffer).toBe(false);
   });
 
   it('компания, которая уже исполняет заказ, предложение не отправляет', () => {

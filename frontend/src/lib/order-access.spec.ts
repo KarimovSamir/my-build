@@ -34,6 +34,7 @@ function offer(companyId: string, status: OfferStatus): OfferDto {
     createdAt: "2026-09-01T00:00:00.000Z",
     editedAt: null,
     updatedAt: "2026-09-01T00:00:00.000Z",
+    rejectionCount: 0,
   };
 }
 

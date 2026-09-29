@@ -182,6 +182,13 @@ describe("fileRejectionReason", () => {
     expect(fileRejectionReason(file("чертёж.dwg"))).toBeNull();
   });
 
+  it("отклоняет имя длиннее 255 символов тем же правилом, что backend", () => {
+    expect(fileRejectionReason(file(`${"а".repeat(251)}.pdf`))).toBeNull();
+    expect(fileRejectionReason(file(`${"а".repeat(252)}.pdf`))).toContain(
+      "имя длиннее 255 символов",
+    );
+  });
+
   it("отклоняет чужое расширение и файл без расширения", () => {
     expect(fileRejectionReason(file("вирус.exe"))).toContain("такой тип загрузить нельзя");
     expect(fileRejectionReason(file("readme"))).toContain("такой тип загрузить нельзя");

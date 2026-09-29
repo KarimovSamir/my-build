@@ -33,7 +33,13 @@ import {
   type PreparedFile,
   type UploadedFileInput,
 } from './file-validation.js';
-import { checkStorageQuota, type StorageUsage } from './file-quota.js';
+import {
+  addUsage,
+  checkStorageQuota,
+  StorageReservations,
+  type QuotaRefusal,
+  type StorageUsage,
+} from './file-quota.js';
 import { prepareFile, readFileBuffer } from './uploaded-file.js';
 import { toOrderFileDto } from './file-view.js';
 import { StorageService } from './storage.service.js';
@@ -94,6 +100,9 @@ export interface AttachFilesParams {
  */
 const ATTACH_TX_OPTIONS = { timeout: 15_000, maxWait: 10_000 } as const;
 
+/** Место под загрузки, которые ещё едут в бакет (`file-quota.ts`). */
+const reservations = new StorageReservations();
+
 @Injectable()
 export class FilesService {
   private readonly logger = new Logger(FilesService.name);
@@ -139,8 +148,24 @@ export class FilesService {
     }
 
     // Быстрый отказ до похода в бакет: перелив квоты незачем сначала
-    // заливать, а потом убирать. Настоящая проверка — под транзакцией ниже.
-    await this.assertStorageQuota(this.prisma, orderId, ownerType, fresh);
+    // заливать, а потом убирать. Место резервируется до конца загрузки, чтобы
+    // параллельные запросы не прошли эту проверку все разом. Окончательная
+    // проверка — под транзакцией вставки в `uploadAndInsert`.
+    const release = await this.reserveStorage(orderId, ownerType, fresh);
+
+    try {
+      return await this.uploadAndInsert(params, fresh);
+    } finally {
+      release();
+    }
+  }
+
+  /** Загрузить в бакет и записать строки; при откате — убрать загруженное. */
+  private async uploadAndInsert(
+    params: AttachFilesParams,
+    fresh: PreparedFile[],
+  ): Promise<OrderFileDto[]> {
+    const { orderId, ownerType, submissionRound } = params;
 
     const keys = fresh.map((file) =>
       buildStorageKey(orderId, ownerType, submissionRound, file),
@@ -363,19 +388,42 @@ export class FilesService {
    * Переполнение сервиса — 507, а не 400: запрос сам по себе правильный,
    * и повторить его имеет смысл, когда место освободится.
    */
+  /**
+   * Предварительная проверка квоты вместе с загрузками, которые ещё едут
+   * в бакет, и резерв места под эту. Возвращает освобождение резерва.
+   *
+   * Проверка и резерв идут в одном такте, без `await` между ними: иначе два
+   * запроса снова увидели бы одно и то же свободное место.
+   */
+  private async reserveStorage(
+    orderId: string,
+    uploader: FileOwnerType,
+    adding: PreparedFile[],
+  ): Promise<() => void> {
+    const incoming = sumSizes(adding);
+    const { usage, clientId } = await readStorageUsage(this.prisma, orderId);
+
+    this.refuseOverQuota(
+      orderId,
+      checkStorageQuota(addUsage(usage, reservations.pending(orderId, clientId)), incoming, uploader),
+    );
+
+    return reservations.reserve(orderId, clientId, incoming);
+  }
+
+  /** Окончательная проверка — по строкам в базе, под транзакцией вставки. */
   private async assertStorageQuota(
-    client: Pick<PrismaService, 'order' | 'orderFile'> | Prisma.TransactionClient,
+    client: Prisma.TransactionClient,
     orderId: string,
     uploader: FileOwnerType,
     adding: PreparedFile[],
   ): Promise<void> {
-    const incoming = adding.reduce((total, file) => total + file.sizeBytes, 0);
-    const refusal = checkStorageQuota(
-      await readStorageUsage(client, orderId),
-      incoming,
-      uploader,
-    );
+    const { usage } = await readStorageUsage(client, orderId);
 
+    this.refuseOverQuota(orderId, checkStorageQuota(usage, sumSizes(adding), uploader));
+  }
+
+  private refuseOverQuota(orderId: string, refusal: QuotaRefusal | null): void {
     if (!refusal) return;
 
     if (refusal.scope === 'total') {
@@ -459,7 +507,7 @@ export class FilesService {
 async function readStorageUsage(
   client: Pick<PrismaService, 'order' | 'orderFile'> | Prisma.TransactionClient,
   orderId: string,
-): Promise<StorageUsage> {
+): Promise<{ usage: StorageUsage; clientId: string }> {
   const order = await client.order.findUnique({
     where: { id: orderId },
     select: { clientId: true },
@@ -479,10 +527,17 @@ async function readStorageUsage(
   };
 
   return {
-    order: await sum({ orderId }),
-    client: await sum({ order: { clientId: order.clientId } }),
-    total: await sum({}),
+    usage: {
+      order: await sum({ orderId }),
+      client: await sum({ order: { clientId: order.clientId } }),
+      total: await sum({}),
+    },
+    clientId: order.clientId,
   };
+}
+
+function sumSizes(files: PreparedFile[]): number {
+  return files.reduce((total, file) => total + file.sizeBytes, 0);
 }
 
 /** Имя латиницей и цифрами — такое Supabase Storage отдаёт без искажений. */

@@ -86,6 +86,7 @@ describe("offerFormValues", () => {
     createdAt: "2026-09-01T10:00:00.000Z",
     editedAt: null,
     updatedAt: "2026-09-01T10:00:00.000Z",
+    rejectionCount: 0,
   };
 
   it("подставляет отправленное предложение, срок — календарной датой", () => {

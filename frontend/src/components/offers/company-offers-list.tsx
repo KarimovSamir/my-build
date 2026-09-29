@@ -16,7 +16,7 @@ import { OfferStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { serverApi } from "@/lib/api.server";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatMoment, formatMoney } from "@/lib/format";
 import { offerHint } from "@/lib/offer-view";
 import { companyOffersHref, type CompanyOffersFilter } from "@/lib/offers-filter";
 
@@ -89,7 +89,7 @@ export async function CompanyOffersList({ filter }: { filter: CompanyOffersFilte
 function CompanyOfferRow({ offer }: { offer: CompanyOfferItem }) {
   const { order } = offer;
   const orderLabel = formatOrderNumber(order.orderNumber);
-  const hint = offerHint(offer.status, order.id);
+  const hint = offerHint(offer, order.id);
 
   return (
     <li className="flex flex-col gap-4 px-5 py-5">
@@ -102,7 +102,7 @@ function CompanyOfferRow({ offer }: { offer: CompanyOfferItem }) {
             {order.title}
           </Link>
           <p className="text-muted-foreground font-mono mt-1 text-xs">
-            {orderLabel} · обновлено {formatDate(offer.updatedAt)}
+            {orderLabel} · обновлено {formatMoment(offer.updatedAt)}
           </p>
         </div>
 

@@ -6,7 +6,7 @@ import {
 } from "@/components/orders/offer-decision-dialogs";
 import { OfferStatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { companyInitial, formatDate, formatMoney } from "@/lib/format";
+import { companyInitial, formatDate, formatMoment, formatMoney } from "@/lib/format";
 import { offerDate } from "@/lib/offer-view";
 import type { OrderClientActions } from "@/lib/order-actions";
 import { pluralRu } from "@/lib/plural";
@@ -56,13 +56,20 @@ export function OrderOffersCard({
           </p>
         ) : (
           <ul className="flex flex-col gap-3.5">
-            {actions.decisions.map(({ offer, canAccept, canReject }) => (
+            {actions.decisions.map(({ offer, canAccept, canReject, expired }) => (
               <li key={offer.id} className="rounded-xl border px-5 py-5">
                 <OfferHead offer={offer} />
 
                 {offer.comment ? (
                   <p className="text-secondary-foreground mt-3.5 text-sm leading-relaxed whitespace-pre-line">
                     {offer.comment}
+                  </p>
+                ) : null}
+
+                {expired ? (
+                  <p className="text-muted-foreground mt-3.5 text-sm">
+                    Срок выполнения в этом предложении уже прошёл, поэтому принять его
+                    нельзя. Компания может обновить предложение с новым сроком.
                   </p>
                 ) : null}
 
@@ -132,7 +139,7 @@ function OfferHead({ offer }: { offer: OfferDto }) {
             {offer.companyName}
           </p>
           <p className="text-muted-foreground mt-0.5 font-mono text-xs">
-            {date.label} {formatDate(date.iso)}
+            {date.label} {formatMoment(date.iso)}
           </p>
         </div>
       </div>

@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { isPendingOffer, OfferStatus } from "@/lib/types";
+import { isPendingOffer, MAX_OFFER_REJECTIONS, OfferStatus } from "@/lib/types";
 
 import { offerDate, offerHint } from "./offer-view";
 
 const ORDER_ID = "9f1f3f4e-0000-4000-8000-000000000002";
 
+/** Предложение в статусе; отклонённое — отклонено один раз, отказ не окончательный. */
+function offerIn(status: OfferStatus, rejectionCount = status === OfferStatus.REJECTED ? 1 : 0) {
+  return { status, rejectionCount };
+}
+
 describe("offerHint", () => {
   it("у предложения, ждущего выбора клиента, подсказки нет — там кнопки", () => {
-    expect(offerHint(OfferStatus.SENT, ORDER_ID)).toBeNull();
+    expect(offerHint(offerIn(OfferStatus.SENT), ORDER_ID)).toBeNull();
     expect(isPendingOffer(OfferStatus.SENT)).toBe(true);
   });
 
@@ -17,7 +22,7 @@ describe("offerHint", () => {
   )("объясняет статус %s", (status) => {
     // Каждый статус, кроме отправленного, обязан что-то сказать: иначе
     // строка выглядит так, будто по ней просто нечего делать.
-    expect(offerHint(status, ORDER_ID)?.text).toBeTruthy();
+    expect(offerHint(offerIn(status), ORDER_ID)?.text).toBeTruthy();
   });
 
   it.each([
@@ -26,7 +31,7 @@ describe("offerHint", () => {
     OfferStatus.BACK_FOR_OVERRIDE,
     OfferStatus.COMPLETED,
   ])("из статуса исполнителя (%s) ведёт на страницу заказа", (status) => {
-    expect(offerHint(status, ORDER_ID)?.link?.href).toBe(`/orders/${ORDER_ID}`);
+    expect(offerHint(offerIn(status), ORDER_ID)?.link?.href).toBe(`/orders/${ORDER_ID}`);
   });
 
   it.each([OfferStatus.REJECTED, OfferStatus.WITHDRAWN])(
@@ -34,22 +39,31 @@ describe("offerHint", () => {
     (status) => {
       // Права на новое предложение у списка «Мои предложения» нет: там заказ
       // приходит строкой списка, без `canSubmitOffer`.
-      expect(offerHint(status, ORDER_ID)?.link?.href).toBe("/available");
+      expect(offerHint(offerIn(status), ORDER_ID)?.link?.href).toBe("/available");
     },
   );
 
   it.each([OfferStatus.REJECTED, OfferStatus.WITHDRAWN])(
     "после статуса %s не зовёт в ленту, если предложение можно отправить прямо здесь",
     (status) => {
-      const hint = offerHint(status, ORDER_ID, true);
+      const hint = offerHint(offerIn(status), ORDER_ID, true);
 
       expect(hint?.text).toBeTruthy();
       expect(hint?.link).toBeUndefined();
     },
   );
 
+  it("после второго отказа клиента не обещает ни ленты, ни новой отправки", () => {
+    // Окончательный отказ (решение пользователя): заказа в ленте для этой
+    // компании больше нет, и ссылка туда вела бы в пустоту.
+    const final = offerIn(OfferStatus.REJECTED, MAX_OFFER_REJECTIONS);
+
+    expect(offerHint(final, ORDER_ID)?.text).toContain("дважды");
+    expect(offerHint(final, ORDER_ID)?.link).toBeUndefined();
+  });
+
   it("проигравшему предложению никуда идти не предлагает", () => {
-    expect(offerHint(OfferStatus.NOT_ACCEPTED, ORDER_ID)?.link).toBeUndefined();
+    expect(offerHint(offerIn(OfferStatus.NOT_ACCEPTED), ORDER_ID)?.link).toBeUndefined();
   });
 });
 

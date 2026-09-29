@@ -6,7 +6,7 @@ import {
   readDemoClaim,
   readEmailVerifiedClaim,
   readRoleClaim,
-  readSignedInAt,
+  readRecoveredAt,
   toCurrentUser,
 } from "./session";
 
@@ -68,21 +68,32 @@ describe("readDemoClaim", () => {
   });
 });
 
-describe("readSignedInAt", () => {
-  it("берёт самую позднюю отметку amr и переводит секунды в миллисекунды", () => {
+describe("readRecoveredAt", () => {
+  it("берёт самую позднюю отметку входа по ссылке и переводит секунды в миллисекунды", () => {
     expect(
-      readSignedInAt([
-        { method: "password", timestamp: 1_790_000_000 },
-        { method: "otp", timestamp: 1_790_000_500 },
+      readRecoveredAt([
+        { method: "otp", timestamp: 1_790_000_000 },
+        { method: "recovery", timestamp: 1_790_000_500 },
       ]),
     ).toBe(1_790_000_500_000);
   });
 
-  it("без пригодной отметки времени входа нет", () => {
-    expect(readSignedInAt(undefined)).toBeNull();
-    expect(readSignedInAt([])).toBeNull();
-    expect(readSignedInAt([{ method: "password", timestamp: "1790000000" }])).toBeNull();
-    expect(readSignedInAt([null, { method: "otp" }])).toBeNull();
+  it("вход паролем восстановлением не считается", () => {
+    // Иначе любая свежая сессия меняла бы пароль без текущего.
+    expect(readRecoveredAt([{ method: "password", timestamp: 1_790_000_000 }])).toBeNull();
+    expect(
+      readRecoveredAt([
+        { method: "password", timestamp: 1_790_000_900 },
+        { method: "otp", timestamp: 1_790_000_000 },
+      ]),
+    ).toBe(1_790_000_000_000);
+  });
+
+  it("без пригодной отметки времени восстановления нет", () => {
+    expect(readRecoveredAt(undefined)).toBeNull();
+    expect(readRecoveredAt([])).toBeNull();
+    expect(readRecoveredAt([{ method: "otp", timestamp: "1790000000" }])).toBeNull();
+    expect(readRecoveredAt([null, { method: "otp" }])).toBeNull();
   });
 });
 

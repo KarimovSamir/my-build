@@ -7,8 +7,9 @@
  */
 
 import {
+  MAX_OFFER_REJECTIONS,
   OFFER_ELIGIBLE_ORDER_STATUSES,
-  RESUBMITTABLE_OFFER_STATUSES,
+  OfferStatus,
 } from '@mybuild/shared';
 
 import type { Prisma } from '../../generated/prisma/client.js';
@@ -16,11 +17,11 @@ import { buildSearchConditions } from '../orders/order-search.js';
 
 /** Списки в `shared/` объявлены `readonly`, а Prisma ждёт изменяемый массив. */
 const ELIGIBLE_ORDER_STATUSES = [...OFFER_ELIGIBLE_ORDER_STATUSES];
-const RESUBMITTABLE_STATUSES = [...RESUBMITTABLE_OFFER_STATUSES];
 
 /**
  * Заказ попадает в ленту, если он ещё ищет исполнителя и у этой компании
- * по нему **нет** предложения либо оно отозвано или отклонено.
+ * по нему **нет** предложения либо оно отозвано или отклонено (отклонённое —
+ * пока клиент не отказал окончательно).
  *
  * Второе условие обязательно: строка `Offer` остаётся в базе из-за
  * уникального ограничения, и без него компания, отозвавшая предложение,
@@ -33,10 +34,22 @@ export function buildAvailableOrdersWhere(
   companyId: string,
   query?: string,
 ): Prisma.OrderWhereInput {
+  // Отклонённое — только пока отказ не окончательный: то же правило, что
+  // `canResubmitOffer` в `shared/` (после `MAX_OFFER_REJECTIONS` отказов
+  // заказ из ленты компании уходит насовсем, решение пользователя).
   const availability: Prisma.OrderWhereInput = {
     OR: [
       { offers: { none: { companyId } } },
-      { offers: { some: { companyId, status: { in: RESUBMITTABLE_STATUSES } } } },
+      { offers: { some: { companyId, status: OfferStatus.WITHDRAWN } } },
+      {
+        offers: {
+          some: {
+            companyId,
+            status: OfferStatus.REJECTED,
+            rejectionCount: { lt: MAX_OFFER_REJECTIONS },
+          },
+        },
+      },
     ],
   };
 

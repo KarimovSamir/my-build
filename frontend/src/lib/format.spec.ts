@@ -4,6 +4,7 @@ import {
   companyInitial,
   formatArea,
   formatDate,
+  formatMoment,
   formatFileSize,
   formatLocation,
   formatMoney,
@@ -156,5 +157,20 @@ describe("formatLocation", () => {
     expect(formatLocation({ city: null, country: null })).toBeNull();
     // Пробелы в колонке — это тоже «не указано», а не город с именем из пробела.
     expect(formatLocation({ city: "  ", country: "" })).toBeNull();
+  });
+});
+
+describe("formatMoment", () => {
+  it("считает день по Баку: ночь по UTC — уже следующее число", () => {
+    // 22:30 UTC 24 декабря — это 02:30 25 декабря в Баку (UTC+4).
+    expect(formatMoment("2025-12-24T22:30:00.000Z")).toBe("25 дек 2025");
+  });
+
+  it("днём совпадает с датой по UTC", () => {
+    expect(formatMoment("2026-09-04T10:00:00.000Z")).toBe("4 сен 2026");
+  });
+
+  it("мусор отдаёт как есть, а не «Invalid Date»", () => {
+    expect(formatMoment("не дата")).toBe("не дата");
   });
 });

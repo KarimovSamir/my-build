@@ -21,7 +21,14 @@ import { WorkCard } from "@/components/orders/work-card";
 import { PageHeader } from "@/components/page-shell";
 import { OrderStatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatArea, formatDate, formatFileSize, formatMoney, personInitial } from "@/lib/format";
+import {
+  formatArea,
+  formatDate,
+  formatFileSize,
+  formatMoment,
+  formatMoney,
+  personInitial,
+} from "@/lib/format";
 import {
   emptyClientFilesMessage,
   resolveOrderClient,
@@ -81,7 +88,7 @@ export function OrderDetailView({
         badge={access.seesRealStatus ? <OrderStatusBadge status={order.status} /> : null}
         description={
           <span className="font-mono text-xs">
-            {orderLabel} · создан {formatDate(order.createdAt)} ·{" "}
+            {orderLabel} · создан {formatMoment(order.createdAt)} ·{" "}
             {objectTypeLabels[order.objectType]}
           </span>
         }
@@ -279,10 +286,10 @@ function ClientCard({ client }: { client: OrderClientCard }) {
             {personInitial(client.name)}
           </span>
           <div className="min-w-0">
-            <p className="font-heading truncate text-[1.0625rem] font-semibold">
+            <p className="font-heading text-[1.0625rem] font-semibold break-words">
               {client.name}
             </p>
-            <p className="text-muted-foreground mt-0.5 truncate text-sm">
+            <p className="text-muted-foreground mt-0.5 text-sm break-words">
               {client.location ?? "Город не указан"}
             </p>
           </div>

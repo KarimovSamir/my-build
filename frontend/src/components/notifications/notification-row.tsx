@@ -25,7 +25,7 @@ import { useUnread } from "@/components/notifications/unread-provider";
 import { Button } from "@/components/ui/button";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { browserApi } from "@/lib/api.client";
-import { formatDate } from "@/lib/format";
+import { formatMoment } from "@/lib/format";
 import { notificationHref } from "@/lib/notification-view";
 import { cn } from "@/lib/utils";
 
@@ -154,7 +154,7 @@ export function NotificationRow({ notification }: { notification: NotificationDt
 
         <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
           <p className="text-muted-foreground font-mono text-xs">
-            {formatDate(notification.createdAt)}
+            {formatMoment(notification.createdAt)}
           </p>
 
           {!isRead ? (

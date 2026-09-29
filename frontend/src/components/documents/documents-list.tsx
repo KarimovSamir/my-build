@@ -117,7 +117,7 @@ function DocumentRow({
       <span className="order-1 flex w-full items-center justify-between gap-3 sm:order-none sm:w-auto sm:justify-end">
         <Link
           href={`/orders/${document.orderId}`}
-          className="hover:text-foreground focus-visible:ring-ring/50 text-secondary-foreground min-w-0 truncate rounded text-sm underline-offset-4 transition-colors hover:underline focus-visible:ring-3 focus-visible:outline-none sm:max-w-3xs"
+          className="hover:text-foreground focus-visible:ring-ring/50 text-secondary-foreground min-w-0 rounded text-sm break-words underline-offset-4 transition-colors hover:underline focus-visible:ring-3 focus-visible:outline-none sm:max-w-3xs"
         >
           {/* Разделитель стоит внутри моноширинного куска: иначе он отрывался бы
               от номера при переносе, а имя ссылки для читалки склеивалось

@@ -34,12 +34,13 @@ beforeEach(() => {
   json.mockClear();
   status.mockClear();
   setHeader.mockClear();
+  vi.mocked(logger.error).mockClear();
 });
 
 const host = {
   switchToHttp: () => ({
     getResponse: () => ({ status, setHeader }),
-    getRequest: () => ({ method: 'GET', url: '/orders' }),
+    getRequest: () => ({ method: 'GET', originalUrl: '/orders?q=Баку, ул. Низами 5' }),
   }),
 } as unknown as ArgumentsHost;
 
@@ -149,5 +150,52 @@ describe('AllExceptionsFilter', () => {
 
     expect(body.message).toBe('Заказ сейчас меняется');
     expect(setHeader).toHaveBeenCalledWith('Retry-After', '2');
+  });
+
+  it('слишком большое тело запроса — 413, а не 500', () => {
+    // Так его бросает body-parser: не `HttpException`, а `http-errors`.
+    const tooLarge = Object.assign(new Error('request entity too large'), {
+      status: 413,
+      statusCode: 413,
+      expose: true,
+      type: 'entity.too.large',
+    });
+
+    const body = caught(tooLarge);
+
+    expect(status).toHaveBeenCalledWith(HttpStatus.PAYLOAD_TOO_LARGE);
+    expect(body).toEqual({
+      statusCode: 413,
+      message: 'Тело запроса слишком большое',
+      error: 'Payload Too Large',
+    });
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('битый JSON — 400 с понятным текстом', () => {
+    const body = caught(
+      Object.assign(new SyntaxError('Unexpected token'), {
+        status: 400,
+        expose: true,
+        type: 'entity.parse.failed',
+      }),
+    );
+
+    expect(body.statusCode).toBe(400);
+    expect(body.message).toBe('Тело запроса — некорректный JSON');
+  });
+
+  it('ошибка со статусом, но без expose, остаётся 500', () => {
+    // `expose: false` — ошибка сервера, её текст клиенту не показывают.
+    const body = caught(Object.assign(new Error('secret'), { status: 400, expose: false }));
+
+    expect(body.statusCode).toBe(500);
+  });
+
+  it('в лог 500-х не попадает строка запроса', () => {
+    caught(new Error('boom'));
+
+    const [line] = vi.mocked(logger.error).mock.calls.at(-1)!;
+    expect(line).toBe('GET /orders → 500');
   });
 });

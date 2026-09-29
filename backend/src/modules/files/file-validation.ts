@@ -10,7 +10,9 @@ import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
 import {
   ALLOWED_FILE_EXTENSIONS_HINT,
   FILE_EXTENSION_MIME,
+  MAX_FILE_NAME_LENGTH,
   MAX_FILE_SIZE_BYTES,
+  cleanFileName,
   fileExtension,
   type AllowedFileMimeType,
   type FileOwnerType,
@@ -77,6 +79,34 @@ const TRANSLIT: Record<string, string> = {
   ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu',
   я: 'ya',
 };
+
+/** Сколько символов длинного имени показывать в тексте отказа. */
+const NAME_PREVIEW_LENGTH = 40;
+
+/**
+ * Имя файла, пригодное для хранения: без управляющих символов и символов
+ * направления текста (`cleanFileName`) и не длиннее `MAX_FILE_NAME_LENGTH`.
+ *
+ * Длинное имя не обрезается молча, а отклоняется: иначе в заказе лежал бы
+ * файл под именем, которого пользователь не давал. В текст отказа идёт только
+ * начало имени — само оно может весить десятки килобайт.
+ */
+export function assertFileName(originalName: string): string {
+  const name = cleanFileName(originalName);
+
+  if (name.length === 0) {
+    throw new BadRequestException('У файла нет имени');
+  }
+
+  if ([...name].length > MAX_FILE_NAME_LENGTH) {
+    throw new BadRequestException(
+      `Имя файла «${[...name].slice(0, NAME_PREVIEW_LENGTH).join('')}…» длиннее ` +
+        `${MAX_FILE_NAME_LENGTH} символов — переименуйте файл`,
+    );
+  }
+
+  return name;
+}
 
 /**
  * Размер файла. Считается по тому, сколько байт реально доехало, а не по

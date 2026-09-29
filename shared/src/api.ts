@@ -37,6 +37,52 @@ export const MAX_PAGE = 100_000;
 /** Лимиты загрузки файлов (ТЗ §5). */
 export const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 
+/**
+ * Самое длинное имя файла, в символах. Длиннее не даёт сохранить ни одна
+ * распространённая файловая система (255 — предел имени у NTFS, ext4, APFS),
+ * а без потолка имя в десятки килобайт уезжало бы в базу, в список файлов
+ * и в текст каждой ошибки о нём.
+ */
+export const MAX_FILE_NAME_LENGTH = 255;
+
+/**
+ * Управляющие символы и символы направления текста — диапазонами кодов.
+ *
+ * Первые в имени файла не значат ничего. Вторые значат слишком много:
+ * U+202E (RIGHT-TO-LEFT OVERRIDE) разворачивает конец строки, и имя
+ * «счёт», U+202E, «fdp.exe» на экране читается как «счётexe.pdf» — видимое
+ * расширение подменено. Настоящую арабскую или ивритскую строку их удаление
+ * не портит: направление букв браузер определяет по самим буквам.
+ *
+ * Числами, а не символами в регулярном выражении: невидимый символ
+ * направления в исходнике — ровно то, от чего эта проверка защищает.
+ */
+const UNSAFE_NAME_CODE_RANGES: readonly (readonly [number, number])[] = [
+  [0x0000, 0x001f], // управляющие C0
+  [0x007f, 0x009f], // DEL и управляющие C1
+  [0x061c, 0x061c], // ARABIC LETTER MARK
+  [0x200e, 0x200f], // LEFT-TO-RIGHT и RIGHT-TO-LEFT MARK
+  [0x202a, 0x202e], // встраивания и переопределения направления
+  [0x2066, 0x2069], // изоляты направления
+];
+
+function isUnsafeNameCharacter(character: string): boolean {
+  const code = character.codePointAt(0) ?? 0;
+  return UNSAFE_NAME_CODE_RANGES.some(([from, to]) => code >= from && code <= to);
+}
+
+/**
+ * Имя файла без управляющих символов и символов направления текста, без
+ * пробелов по краям. Правило одно для формы и для backend: форма по нему
+ * решает, принять ли файл, backend — что записать в `OrderFile.originalName`.
+ */
+export function cleanFileName(name: string): string {
+  return [...name]
+    .filter((character) => !isUnsafeNameCharacter(character))
+    .join('')
+    .trim();
+}
+
 /** Сколько файлов принимается за один запрос: и на форме, и в multer. */
 export const MAX_FILES_PER_REQUEST = 10;
 

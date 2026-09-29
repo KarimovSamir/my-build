@@ -20,7 +20,7 @@ import {
   isEmptyAvailableFilter,
   type AvailableFilter,
 } from "@/lib/available-filter";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatMoment, formatMoney } from "@/lib/format";
 
 /**
  * Лента доступных заказов (ТЗ §4.1, §7).
@@ -105,7 +105,7 @@ function AvailableOrderRow({ order }: { order: AvailableOrderItem }) {
           </Link>
           <p className="text-muted-foreground font-mono mt-1 text-xs">
             {formatOrderNumber(order.orderNumber)} · опубликован{" "}
-            {formatDate(order.createdAt)}
+            {formatMoment(order.createdAt)}
           </p>
         </div>
 
