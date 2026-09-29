@@ -32,7 +32,7 @@ import type { CreateOrderDto } from './dto/create-order.dto.js';
 import type { ListOrdersQueryDto } from './dto/list-orders.dto.js';
 import { orderRef } from './order-notification.js';
 import { buildSearchConditions } from './order-search.js';
-import { OrderTransitionService, TRANSITION_TX_OPTIONS } from './order-transition.service.js';
+import { OrderTransitionService } from './order-transition.service.js';
 import {
   toOrderDetail,
   toOrderListItem,
@@ -250,9 +250,8 @@ export class OrdersService {
 
     const storageKeys = await this.files.listStorageKeys(orderId);
 
-    const notifications = await this.prisma.$transaction(
-      (tx) => this.deleteWithNotices(tx, orderId),
-      TRANSITION_TX_OPTIONS,
+    const notifications = await this.transitions.orderTransaction(orderId, (tx) =>
+      this.deleteWithNotices(tx, orderId),
     );
 
     // После коммита: событие, отправленное изнутри транзакции, ушло бы

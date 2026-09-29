@@ -23,7 +23,6 @@ import {
 } from '@mybuild/shared';
 
 import type { Prisma } from '../../generated/prisma/client.js';
-import { PrismaService } from '../../prisma/prisma.service.js';
 import type { UploadedFileInput } from '../files/file-validation.js';
 import { FilesService } from '../files/files.service.js';
 import type { NotificationTarget } from '../realtime/realtime-events.js';
@@ -35,10 +34,7 @@ import {
   type OrderRef,
 } from './order-notification.js';
 import { OrderEventType } from './order-state-machine.js';
-import {
-  OrderTransitionService,
-  TRANSITION_TX_OPTIONS,
-} from './order-transition.service.js';
+import { OrderTransitionService } from './order-transition.service.js';
 import { OrdersService } from './orders.service.js';
 
 const UPLOAD_FORBIDDEN =
@@ -74,7 +70,6 @@ interface OpenSubmission {
 @Injectable()
 export class OrderWorkflowService {
   constructor(
-    private readonly prisma: PrismaService,
     private readonly transitions: OrderTransitionService,
     private readonly files: FilesService,
     private readonly orders: OrdersService,
@@ -147,7 +142,7 @@ export class OrderWorkflowService {
    * перестала бы совпадать с файлами. Это правило ТЗ прямо не задаёт.
    */
   async submitWork(orderId: string, companyId: string): Promise<OrderDetail> {
-    const applied = await this.prisma.$transaction(async (tx) => {
+    const applied = await this.transitions.orderTransaction(orderId, async (tx) => {
       await this.transitions.lockOrder(tx, orderId);
 
       const open = await this.findOpenSubmission(tx, orderId);
@@ -181,7 +176,7 @@ export class OrderWorkflowService {
       });
 
       return transition;
-    }, TRANSITION_TX_OPTIONS);
+    });
 
     this.realtime.transitionApplied(applied);
 
@@ -218,9 +213,8 @@ export class OrderWorkflowService {
 
     const prepared = await this.files.prepareUploads(params.uploads);
 
-    const submission = await this.prisma.$transaction(
-      (tx) => this.openSubmission(tx, orderId, params.comment),
-      TRANSITION_TX_OPTIONS,
+    const submission = await this.transitions.orderTransaction(orderId, (tx) =>
+      this.openSubmission(tx, orderId, params.comment),
     );
 
     // Уведомление создаётся той же транзакцией, что и строки файлов: отдельным
@@ -269,9 +263,8 @@ export class OrderWorkflowService {
 
     // Все файлы оказались дубликатами: до транзакции вставки дело не дошло,
     // и комментарий — единственное, что этот запрос меняет.
-    created.commentChanged ??= await this.prisma.$transaction(
-      (tx) => this.saveComment(tx, orderId, submission.id, params.comment),
-      TRANSITION_TX_OPTIONS,
+    created.commentChanged ??= await this.transitions.orderTransaction(orderId, (tx) =>
+      this.saveComment(tx, orderId, submission.id, params.comment),
     );
 
     // Рассылка — после коммита: событие изнутри транзакции ушло бы и в случае
@@ -311,7 +304,7 @@ export class OrderWorkflowService {
       throw new ConflictException(AREA_FORBIDDEN);
     }
 
-    const verified = await this.prisma.$transaction(async (tx) => {
+    const verified = await this.transitions.orderTransaction(orderId, async (tx) => {
       const order = await this.transitions.lockOrder(tx, orderId);
 
       // Между снимком guard'а и этой строкой клиент мог принять работу.
@@ -347,7 +340,7 @@ export class OrderWorkflowService {
       });
 
       return { clientId: order.clientId, notification };
-    }, TRANSITION_TX_OPTIONS);
+    });
 
     // Того же числа не было события — не будет и рассылки (ТЗ §8).
     if (verified) {

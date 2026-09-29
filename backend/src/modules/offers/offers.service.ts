@@ -23,10 +23,7 @@ import { isUuid } from '../../common/uuid.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { OrderEventType } from '../orders/order-state-machine.js';
-import {
-  OrderTransitionService,
-  TRANSITION_TX_OPTIONS,
-} from '../orders/order-transition.service.js';
+import { OrderTransitionService } from '../orders/order-transition.service.js';
 import { toAvailableOrderItem, toOfferDto, toOrderListItem } from '../orders/order-view.js';
 import { RealtimeService } from '../realtime/realtime.service.js';
 import { buildAvailableOrdersWhere } from './available-orders.js';
@@ -102,7 +99,8 @@ export class OffersService {
     // отдельным запросом, — и «изменено» получалось бы у каждого предложения.
     const edited = { ...data, editedAt: new Date() };
 
-    const { offer, applied, offerExisted } = await this.prisma.$transaction(
+    const { offer, applied, offerExisted } = await this.transitions.orderTransaction(
+      dto.orderId,
       async (tx) => {
         const order = await this.transitions.lockOrder(tx, dto.orderId);
 
@@ -133,7 +131,6 @@ export class OffersService {
 
         return { offer: created, applied: transition, offerExisted: existing !== null };
       },
-      TRANSITION_TX_OPTIONS,
     );
 
     // Только после коммита: `offer:created` на транзакцию, которая откатилась,

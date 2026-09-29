@@ -10,6 +10,16 @@ import type { Request, Response } from 'express';
 
 import type { ApiError } from '@mybuild/shared';
 
+import { Prisma } from '../../generated/prisma/client.js';
+
+/**
+ * Через сколько секунд повторять запрос, отбитый перегрузкой (503). Очередь
+ * заказа и пул соединений освобождаются за секунды, а не за минуты.
+ */
+const RETRY_AFTER_SECONDS = 2;
+
+const DATABASE_BUSY = 'Сервер сейчас перегружен, повторите через пару секунд';
+
 /**
  * Единый формат ошибок для всего API (ТЗ §5).
  *
@@ -28,7 +38,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const body = this.toApiError(exception);
 
-    if (body.statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    // 503 — это «повторите», и клиенту надо сказать когда (ТЗ §5: формат тела
+    // тот же, срок — стандартным заголовком).
+    if (body.statusCode === HttpStatus.SERVICE_UNAVAILABLE) {
+      response.setHeader('Retry-After', String(RETRY_AFTER_SECONDS));
+    }
+
+    if (body.statusCode === HttpStatus.SERVICE_UNAVAILABLE) {
+      // Перегрузка ожидаема и идёт пачкой: стек на каждый отказ забил бы лог,
+      // а причину (очередь заказа или пул) видно по тексту.
+      this.logger.warn(
+        `${request.method} ${request.url} → ${body.statusCode}: ${
+          exception instanceof Error ? exception.message : String(exception)
+        }`,
+      );
+    } else if (body.statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(
         `${request.method} ${request.url} → ${body.statusCode}`,
         exception instanceof Error ? exception.stack : String(exception),
@@ -58,6 +82,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
         statusCode: status,
         message: typeof payload === 'string' ? payload : exception.message,
         error: statusName(status),
+      };
+    }
+
+    // P2028 — транзакция не получила соединение из пула вовремя (или не успела
+    // закончиться). Это перегрузка, а не поломка: запрос можно повторить,
+    // и ответить надо так, чтобы клиент это понял, а не «внутренней ошибкой».
+    if (
+      exception instanceof Prisma.PrismaClientKnownRequestError &&
+      exception.code === 'P2028'
+    ) {
+      return {
+        statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+        message: DATABASE_BUSY,
+        error: statusName(HttpStatus.SERVICE_UNAVAILABLE),
       };
     }
 

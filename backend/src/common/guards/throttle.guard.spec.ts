@@ -18,19 +18,28 @@ const OFFERS_CONTROLLER = { name: 'OffersController' };
 
 function createContext(options: {
   userId?: string;
+  isDemo?: boolean;
+  sessionId?: string | null;
   ip?: string;
   handler?: string;
   controller?: { name: string };
 }) {
   const headers: Record<string, string> = {};
   const handler = { name: options.handler ?? 'create' };
+  const user = options.userId
+    ? {
+        id: options.userId,
+        isDemo: options.isDemo ?? false,
+        sessionId: options.sessionId ?? null,
+      }
+    : undefined;
 
   return {
     context: {
       getHandler: () => handler,
       getClass: () => options.controller ?? ORDERS_CONTROLLER,
       switchToHttp: () => ({
-        getRequest: () => ({ user: options.userId ? { id: options.userId } : undefined, ip: options.ip }),
+        getRequest: () => ({ user, ip: options.ip }),
         getResponse: () => ({
           setHeader: (name: string, value: string) => {
             headers[name] = value;
@@ -144,6 +153,39 @@ describe('ThrottleGuard', () => {
       expect(guard.canActivate(context)).toBe(true);
     }
 
+    expect(() => guard.canActivate(context)).toThrow(HttpException);
+  });
+
+  it('у демо-учётки лимит на сессию: один посетитель не выбирает его за всех', () => {
+    // Демо-учёткой пользуются все посетители разом. Общий счётчик позволял
+    // одному скрипту выбрать лимит `/profile` — и у остальных падал кабинет.
+    const guard = new ThrottleGuard(reflectorWith({ limit: 1, ttl: 60_000 }));
+    const visitor = (sessionId: string) =>
+      createContext({ userId: 'demo-client', isDemo: true, sessionId }).context;
+
+    expect(guard.canActivate(visitor('session-1'))).toBe(true);
+    expect(() => guard.canActivate(visitor('session-1'))).toThrow(HttpException);
+
+    expect(guard.canActivate(visitor('session-2'))).toBe(true);
+  });
+
+  it('у обычной учётки лимит общий на все её сессии', () => {
+    // Иначе лимит обходился бы повторным входом.
+    const guard = new ThrottleGuard(reflectorWith({ limit: 1, ttl: 60_000 }));
+
+    expect(
+      guard.canActivate(createContext({ userId: 'user-1', sessionId: 'session-1' }).context),
+    ).toBe(true);
+    expect(() =>
+      guard.canActivate(createContext({ userId: 'user-1', sessionId: 'session-2' }).context),
+    ).toThrow(HttpException);
+  });
+
+  it('демо-учётка без session_id в токене считается по пользователю', () => {
+    const guard = new ThrottleGuard(reflectorWith({ limit: 1, ttl: 60_000 }));
+    const context = createContext({ userId: 'demo-client', isDemo: true }).context;
+
+    expect(guard.canActivate(context)).toBe(true);
     expect(() => guard.canActivate(context)).toThrow(HttpException);
   });
 });

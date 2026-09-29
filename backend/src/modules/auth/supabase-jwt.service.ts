@@ -97,6 +97,7 @@ export class SupabaseJwtService implements OnModuleInit {
         emailVerified: readEmailVerified(payload),
         role: this.readRole(payload),
         isDemo: readIsDemo(payload),
+        sessionId: typeof payload.session_id === 'string' ? payload.session_id : null,
       },
       expiresAt: typeof payload.exp === 'number' ? payload.exp * 1000 : null,
     };

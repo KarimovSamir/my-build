@@ -99,6 +99,7 @@ const client: AuthUser = {
   emailVerified: true,
   role: Role.CLIENT,
   isDemo: false,
+  sessionId: null,
 };
 
 const company: AuthUser = {
@@ -107,6 +108,7 @@ const company: AuthUser = {
   emailVerified: true,
   role: Role.COMPANY,
   isDemo: false,
+  sessionId: null,
 };
 
 const waitingOrder: StubOrder = {

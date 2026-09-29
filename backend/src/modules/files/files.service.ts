@@ -24,6 +24,7 @@ import {
 } from '@mybuild/shared';
 
 import type { OrderFile, Prisma } from '../../generated/prisma/client.js';
+import { runInOrderQueue } from '../../common/order-queue.js';
 import { Semaphore } from '../../common/semaphore.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import {
@@ -159,7 +160,9 @@ export class FilesService {
         );
       }
 
-      rows = await this.prisma.$transaction(async (tx) => {
+      // Через очередь заказа: `guard` сдачи работы берёт заказ под блокировку,
+      // и ждать её надо в памяти, а не держа соединение пула.
+      rows = await runInOrderQueue(orderId, () => this.prisma.$transaction(async (tx) => {
         // Проверка вызывающего кода — под той же транзакцией, что и вставка:
         // отдельным запросом она отвечала бы про состояние, которое к моменту
         // вставки уже устарело.
@@ -192,7 +195,7 @@ export class FilesService {
         }
 
         return created;
-      }, ATTACH_TX_OPTIONS);
+      }, ATTACH_TX_OPTIONS));
     } catch (error) {
       // Загруженное без строки в базе — мусор, который уже никто не найдёт.
       // Но убирается не вся пачка, а только осиротевшее: в ключе лежит SHA-256

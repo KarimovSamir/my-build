@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { FileOwnerType, NotificationType, OrderStatus } from '@mybuild/shared';
 
-import type { PrismaService } from '../../prisma/prisma.service.js';
 import type { UploadedFileInput } from '../files/file-validation.js';
 import type { FilesService } from '../files/files.service.js';
 import type { RealtimeService } from '../realtime/realtime.service.js';
@@ -118,6 +117,12 @@ function createStubs(options: StubOptions = {}) {
 
   const transitions = {
     apply: vi.fn(async (_command: unknown, _tx?: unknown) => ({})),
+    // Настоящий метод — очередь заказа поверх `$transaction`; очередь
+    // проверяет свой спек, здесь важна сама транзакция.
+    orderTransaction: vi.fn(
+      async (_orderId: string, fn: (client: typeof tx) => Promise<unknown>) =>
+        prisma.$transaction(fn),
+    ),
     lockOrder: vi.fn(async (_tx: unknown, _orderId: string) => {
       trace.push('lockOrder');
       return order;
@@ -170,7 +175,6 @@ function createStubs(options: StubOptions = {}) {
   };
 
   const service = new OrderWorkflowService(
-    prisma as unknown as PrismaService,
     transitions as unknown as OrderTransitionService,
     files as unknown as FilesService,
     orders as unknown as OrdersService,

@@ -440,6 +440,7 @@ describe('WebSocket-шлюз: истечение токена (e2e)', () => {
     emailVerified: true,
     role: Role.CLIENT,
     isDemo: false,
+    sessionId: null,
   };
 
   let app: INestApplication;

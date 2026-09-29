@@ -13,6 +13,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { EXECUTOR_OFFER_STATUSES, OfferStatus, OrderStatus } from '@mybuild/shared';
 
+import { runInOrderQueue } from '../../common/order-queue.js';
 import { isUuid } from '../../common/uuid.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import type { Notification, Order } from '../../generated/prisma/client.js';
@@ -92,9 +93,9 @@ export interface AppliedTransition {
  * истекают ещё до коммита, и переход падает на ровном месте. Запас важнее
  * пары секунд ожидания.
  *
- * Экспортируется, потому что вызывающий код иногда открывает транзакцию сам
- * (отправка предложения: запись предложения и переход обязаны быть одним
- * коммитом) и должен делать это с теми же запасами.
+ * Вызывающий код, которому нужна своя транзакция по заказу (отправка
+ * предложения: запись предложения и переход обязаны быть одним коммитом),
+ * открывает её через `orderTransaction` — с этими же запасами.
  */
 export const TRANSITION_TX_OPTIONS = { timeout: 15_000, maxWait: 10_000 } as const;
 
@@ -131,10 +132,24 @@ export class OrderTransitionService {
       return this.run(tx, command);
     }
 
-    return this.prisma.$transaction(
-      (inner) => this.run(inner, command),
-      TRANSITION_TX_OPTIONS,
-    );
+    return this.orderTransaction(command.orderId, (inner) => this.run(inner, command));
+  }
+
+  /**
+   * Транзакция, которая берёт заказ под блокировку, — для вызывающего кода,
+   * которому мало одного перехода (отправка предложения, сдача работы,
+   * удаление заказа).
+   *
+   * Идёт через очередь заказа (`common/order-queue.ts`): иначе запросы
+   * к одному заказу ждут блокировку строки, держа соединения пула, и тормозят
+   * весь API. Вложенно не вызывать — вторая транзакция по тому же заказу
+   * ждала бы первую, то есть саму себя.
+   */
+  orderTransaction<T>(
+    orderId: string,
+    fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return runInOrderQueue(orderId, () => this.prisma.$transaction(fn, TRANSITION_TX_OPTIONS));
   }
 
   private async run(

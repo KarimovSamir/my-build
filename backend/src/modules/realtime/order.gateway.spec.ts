@@ -30,6 +30,7 @@ const client: AuthUser = {
   emailVerified: true,
   role: Role.CLIENT,
   isDemo: false,
+  sessionId: null,
 };
 
 /** Час жизни токена — столько же, сколько отводит Supabase. */
@@ -138,7 +139,8 @@ async function authenticate(
   socket: SocketStub,
 ): Promise<string | undefined> {
   const use = vi.fn((_middleware: unknown) => undefined);
-  gateway.afterInit({ use } as unknown as Namespace);
+  const server = { use: vi.fn((_middleware: unknown) => undefined), engine: { on: vi.fn() } };
+  gateway.afterInit({ use, server } as unknown as Namespace);
 
   const middleware = use.mock.calls[0]![0] as (
     socket: GatewaySocket,

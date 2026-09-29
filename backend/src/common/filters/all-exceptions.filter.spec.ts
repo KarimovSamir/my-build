@@ -4,12 +4,14 @@ import {
   HttpException,
   HttpStatus,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import type { ArgumentsHost, Logger } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ApiError } from '@mybuild/shared';
 
+import { Prisma } from '../../generated/prisma/client.js';
 import { AllExceptionsFilter } from './all-exceptions.filter.js';
 
 /**
@@ -21,20 +23,22 @@ import { AllExceptionsFilter } from './all-exceptions.filter.js';
 const filter = new AllExceptionsFilter();
 const json = vi.fn();
 const status = vi.fn(() => ({ json }));
+const setHeader = vi.fn((_name: string, _value: string) => undefined);
 
 // Стек 500-х уходит в Logger — в выводе теста он только мешает.
-vi.spyOn((filter as unknown as { logger: Logger }).logger, 'error').mockImplementation(
-  () => undefined,
-);
+const logger = (filter as unknown as { logger: Logger }).logger;
+vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
 beforeEach(() => {
   json.mockClear();
   status.mockClear();
+  setHeader.mockClear();
 });
 
 const host = {
   switchToHttp: () => ({
-    getResponse: () => ({ status }),
+    getResponse: () => ({ status, setHeader }),
     getRequest: () => ({ method: 'GET', url: '/orders' }),
   }),
 } as unknown as ArgumentsHost;
@@ -110,5 +114,40 @@ describe('AllExceptionsFilter', () => {
 
   it('не спотыкается о брошенную строку', () => {
     expect(caught('что-то пошло не так').statusCode).toBe(500);
+  });
+
+  it('нехватка соединений с базой — 503 с Retry-After, а не 500', () => {
+    // Так Prisma сообщает, что транзакция не дождалась соединения из пула:
+    // это перегрузка, и клиенту надо сказать, что запрос можно повторить.
+    const body = caught(
+      new Prisma.PrismaClientKnownRequestError(
+        'Transaction API error: Unable to start a transaction in the given time.',
+        { code: 'P2028', clientVersion: 'test' },
+      ),
+    );
+
+    expect(status).toHaveBeenCalledWith(HttpStatus.SERVICE_UNAVAILABLE);
+    expect(body.error).toBe('Service Unavailable');
+    expect(JSON.stringify(body)).not.toContain('Transaction API');
+    expect(setHeader).toHaveBeenCalledWith('Retry-After', '2');
+  });
+
+  it('другая ошибка Prisma остаётся 500', () => {
+    const body = caught(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+      }),
+    );
+
+    expect(body.statusCode).toBe(500);
+    expect(setHeader).not.toHaveBeenCalled();
+  });
+
+  it('503 от очереди заказа отдаёт свой текст и Retry-After', () => {
+    const body = caught(new ServiceUnavailableException('Заказ сейчас меняется'));
+
+    expect(body.message).toBe('Заказ сейчас меняется');
+    expect(setHeader).toHaveBeenCalledWith('Retry-After', '2');
   });
 });

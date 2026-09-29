@@ -79,8 +79,25 @@ export class ThrottleGuard implements CanActivate {
  *
  * Для вошедшего пользователя это его идентификатор, а не IP: за одним адресом
  * может сидеть целый офис, и лимит по IP наказал бы всех разом.
+ *
+ * Демо-учётка — исключение: ею одновременно пользуются все посетители, и общий
+ * на всех счётчик позволял бы одному скрипту выбрать лимит `/profile`, без
+ * которого не рисуется ни одна страница кабинета, — и положить кабинет всем
+ * остальным. Посетителя там отличает сессия Supabase: у каждого входа своя.
+ * IP для этого не годится: страницы кабинета рендерит сервер фронта, и почти
+ * все запросы приходят с горстки его адресов.
+ *
+ * Лимит на сессию больше запросов в сумме не даёт: новая сессия — это новый
+ * вход, а частоту входов держит Supabase Auth.
  */
+export function throttleSubject(request: RequestWithUser): string {
+  const user = request.user;
+
+  if (!user) return request.ip ?? 'unknown';
+
+  return user.isDemo && user.sessionId ? `${user.id}/${user.sessionId}` : user.id;
+}
+
 function buildKey(context: ExecutionContext, request: RequestWithUser): string {
-  const who = request.user?.id ?? request.ip ?? 'unknown';
-  return `${who}:${context.getClass().name}#${context.getHandler().name}`;
+  return `${throttleSubject(request)}:${context.getClass().name}#${context.getHandler().name}`;
 }

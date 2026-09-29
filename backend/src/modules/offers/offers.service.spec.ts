@@ -87,6 +87,11 @@ function createStubs(options: { existing?: OfferStatus | null } = {}) {
   };
 
   const transitions = {
+    // Настоящий метод — очередь заказа поверх `$transaction`.
+    orderTransaction: vi.fn(
+      async (_orderId: string, run: (client: typeof tx) => Promise<unknown>) =>
+        prisma.$transaction(run),
+    ),
     lockOrder: vi.fn(async (_tx: unknown, _orderId: string) => {
       trace.push('lock-order');
       return { id: ORDER_ID };

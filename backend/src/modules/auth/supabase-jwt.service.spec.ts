@@ -101,7 +101,12 @@ describe('SupabaseJwtService', () => {
   it('принимает правильно подписанный токен и достаёт из него пользователя', async () => {
     const { service } = createService();
     const token = await sign({
-      payload: { email: 'anna@example.test', user_role: Role.CLIENT, email_verified: true },
+      payload: {
+        email: 'anna@example.test',
+        user_role: Role.CLIENT,
+        email_verified: true,
+        session_id: 'b0000000-0000-4000-8000-000000000002',
+      },
     });
 
     await expect(service.verify(token)).resolves.toEqual({
@@ -110,7 +115,17 @@ describe('SupabaseJwtService', () => {
       emailVerified: true,
       role: Role.CLIENT,
       isDemo: false,
+      sessionId: 'b0000000-0000-4000-8000-000000000002',
     });
+  });
+
+  it('без session_id в токене сессия неизвестна, а не мусор', async () => {
+    const { service } = createService();
+
+    expect((await service.verify(await sign({ payload: {} }))).sessionId).toBeNull();
+    expect(
+      (await service.verify(await sign({ payload: { session_id: 42 } }))).sessionId,
+    ).toBeNull();
   });
 
   it('узнаёт демо-учётку только по app_metadata.demo === true', async () => {

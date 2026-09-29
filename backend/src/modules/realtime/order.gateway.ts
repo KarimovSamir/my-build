@@ -53,6 +53,7 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import type { AuthUser } from '../auth/auth-user.js';
 import { InvalidTokenError, SupabaseJwtService } from '../auth/supabase-jwt.service.js';
 import type { RealtimeMessage, RoomEviction } from './realtime-events.js';
+import { applyServerLimits, CONNECT_TIMEOUT_MS } from './server-limits.js';
 
 /** Списки статусов в `shared/` объявлены `readonly`, а Prisma ждёт изменяемый. */
 const ACTIVE_OFFER_STATUS_LIST = [...ACTIVE_OFFER_STATUSES];
@@ -131,7 +132,12 @@ function corsOrigin(
   callback(null, allowedOrigins.includes(origin));
 }
 
-@WebSocketGateway({ namespace: WS_NAMESPACE, cors: { origin: corsOrigin } })
+@WebSocketGateway({
+  namespace: WS_NAMESPACE,
+  cors: { origin: corsOrigin },
+  // Опция сервера целиком, а не namespace'а: см. `server-limits.ts`.
+  connectTimeout: CONNECT_TIMEOUT_MS,
+})
 export class OrderGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
@@ -154,8 +160,13 @@ export class OrderGateway
    * Проверка токена — middleware namespace'а, а не `handleConnection`:
    * так отказ доезжает до клиента как `connect_error` с внятной причиной,
    * а событие `connection` для неавторизованного сокета не наступает вовсе.
+   *
+   * Здесь же — пределы сервера целиком (`server-limits.ts`): шлюз — единственное
+   * место, где сервер socket.io становится доступен.
    */
   afterInit(namespace: Namespace): void {
+    applyServerLimits(namespace.server);
+
     namespace.use((socket, next) => {
       void this.authenticate(socket as AppSocket).then(
         () => next(),

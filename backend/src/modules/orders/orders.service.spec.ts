@@ -155,11 +155,15 @@ function createFilesStub() {
 }
 
 /**
- * Из `OrderTransitionService` сервису заказов нужна одна `lockOrder`: удаление
- * берёт заказ под блокировку тем же порядком, что и переходы.
+ * Из `OrderTransitionService` сервису заказов нужно удалению: транзакция
+ * по заказу (настоящая идёт через очередь заказа поверх `$transaction`)
+ * и `lockOrder` — заказ под блокировку тем же порядком, что и переходы.
  */
-function createTransitionsStub() {
+function createTransitionsStub(prisma: PrismaStub) {
   return {
+    orderTransaction: vi.fn(
+      async (_orderId: string, fn: (tx: unknown) => Promise<unknown>) => prisma.$transaction(fn),
+    ),
     lockOrder: vi.fn(async (_tx: unknown, _orderId: string) => orderRow()),
   };
 }
@@ -186,7 +190,7 @@ type RealtimeStub = ReturnType<typeof createRealtimeStub>;
 function createService(
   prisma: PrismaStub,
   files: FilesStub,
-  transitions: TransitionsStub = createTransitionsStub(),
+  transitions: TransitionsStub = createTransitionsStub(prisma),
   realtime: RealtimeStub = createRealtimeStub(),
 ): OrdersService {
   return new OrdersService(
@@ -257,7 +261,7 @@ describe('OrdersService.create', () => {
   it('шлёт `order:created` в ленту компаний после создания', async () => {
     const realtime = createRealtimeStub();
 
-    await createService(prisma, files, createTransitionsStub(), realtime).create(
+    await createService(prisma, files, createTransitionsStub(prisma), realtime).create(
       CLIENT_ID,
       dto,
       [upload],
@@ -276,7 +280,7 @@ describe('OrdersService.create', () => {
     files.attachFiles.mockRejectedValueOnce(new Error('хранилище недоступно'));
 
     await expect(
-      createService(prisma, files, createTransitionsStub(), realtime).create(
+      createService(prisma, files, createTransitionsStub(prisma), realtime).create(
         CLIENT_ID,
         dto,
         [upload],
@@ -472,7 +476,7 @@ describe('OrdersService.remove', () => {
   it('берёт заказ под блокировку раньше, чем читает предложения', async () => {
     // Тот же порядок, что и в переходах: сначала заказ. Обратный даёт взаимную
     // блокировку с одновременной отправкой предложения.
-    const transitions = createTransitionsStub();
+    const transitions = createTransitionsStub(prisma);
 
     await createService(prisma, files, transitions).remove(
       ORDER_ID,
@@ -537,7 +541,7 @@ describe('OrdersService.remove', () => {
   it('шлёт `notification:created` теми же строками, что записал', async () => {
     const realtime = createRealtimeStub();
 
-    await createService(prisma, files, createTransitionsStub(), realtime).remove(
+    await createService(prisma, files, createTransitionsStub(prisma), realtime).remove(
       ORDER_ID,
       OrderStatus.WAITING,
     );
@@ -555,7 +559,7 @@ describe('OrdersService.remove', () => {
     prisma.order.deleteMany.mockResolvedValueOnce({ count: 0 });
 
     await expect(
-      createService(prisma, files, createTransitionsStub(), realtime).remove(
+      createService(prisma, files, createTransitionsStub(prisma), realtime).remove(
         ORDER_ID,
         OrderStatus.WAITING,
       ),

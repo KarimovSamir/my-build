@@ -18,6 +18,7 @@ const user: AuthUser = {
   emailVerified: true,
   role: Role.COMPANY,
   isDemo: false,
+  sessionId: null,
 };
 
 describe('NotDemoGuard', () => {
