@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { OfferStatus, Role } from '@mybuild/shared';
+import { DEMO_EMAILS, OfferStatus, Role } from '@mybuild/shared';
 
 import { COMPLETED_OFFERS_FILTER, buildContractorsWhere } from './contractor-search.js';
 
@@ -12,9 +12,18 @@ import { COMPLETED_OFFERS_FILTER, buildContractorsWhere } from './contractor-sea
  * пользователей вместе с их телефонами.
  */
 
+const REAL = { isDemo: false };
+
 describe('buildContractorsWhere', () => {
+  it('показывает клиенту компании только его мира: демо — демо, настоящим — настоящие', () => {
+    const demoEmails = Object.values(DEMO_EMAILS);
+
+    expect(buildContractorsWhere(REAL).email).toEqual({ notIn: demoEmails });
+    expect(buildContractorsWhere({ isDemo: true }, 'Баку').email).toEqual({ in: demoEmails });
+  });
+
   it('берёт только компании с названием', () => {
-    const where = buildContractorsWhere();
+    const where = buildContractorsWhere(REAL);
 
     expect(where.role).toBe(Role.COMPANY);
     expect(where.companyName).toEqual({ not: null });
@@ -22,17 +31,17 @@ describe('buildContractorsWhere', () => {
 
   it('берёт только компании с подтверждённым email', () => {
     // Иначе «компания» на чужой адрес попадала бы в каталог сразу после signUp.
-    expect(buildContractorsWhere().emailVerifiedAt).toEqual({ not: null });
-    expect(buildContractorsWhere('строй').emailVerifiedAt).toEqual({ not: null });
+    expect(buildContractorsWhere(REAL).emailVerifiedAt).toEqual({ not: null });
+    expect(buildContractorsWhere(REAL, 'строй').emailVerifiedAt).toEqual({ not: null });
   });
 
   it('без поиска условий по тексту не добавляет', () => {
-    expect(buildContractorsWhere().OR).toBeUndefined();
-    expect(buildContractorsWhere('').OR).toBeUndefined();
+    expect(buildContractorsWhere(REAL).OR).toBeUndefined();
+    expect(buildContractorsWhere(REAL, '').OR).toBeUndefined();
   });
 
   it('ищет по названию и городу без учёта регистра', () => {
-    expect(buildContractorsWhere('строй').OR).toEqual([
+    expect(buildContractorsWhere(REAL, 'строй').OR).toEqual([
       { companyName: { contains: 'строй', mode: 'insensitive' } },
       { city: { contains: 'строй', mode: 'insensitive' } },
     ]);
@@ -40,11 +49,11 @@ describe('buildContractorsWhere', () => {
 
   it('роль остаётся в условии и при поиске', () => {
     // `OR` не должен подменять отбор: иначе запрос «Анна» нашёл бы клиента.
-    expect(buildContractorsWhere('Анна').role).toBe(Role.COMPANY);
+    expect(buildContractorsWhere(REAL, 'Анна').role).toBe(Role.COMPANY);
   });
 
   it('экранирует подстановочные символы LIKE', () => {
-    const [byName] = buildContractorsWhere('100%_').OR as [
+    const [byName] = buildContractorsWhere(REAL, '100%_').OR as [
       { companyName: { contains: string } },
     ];
 

@@ -21,6 +21,7 @@ import {
 import { apiErrorMessage } from "@/lib/api-errors";
 import { browserApi } from "@/lib/api.client";
 import { formatDate, formatMoney } from "@/lib/format";
+import { acceptOfferBody } from "@/lib/offer-view";
 
 /**
  * Решение клиента по предложению: принять или отклонить (ТЗ §4).
@@ -45,11 +46,20 @@ export function AcceptOfferDialog({
   /** Сколько других предложений уйдёт в «Не выбрано» вместе с этим решением. */
   rivals: number;
 }) {
+  // Условия запоминаются в момент открытия диалога: карточка живая, и пришедшая
+  // посреди решения правка компании иначе подменила бы цену прямо в тексте
+  // подтверждения. Сервер сверяет версию и на расхождение отвечает 409.
+  const [seen, setSeen] = useState(offer);
+
   return (
     <OfferDecision
+      onOpen={() => setSeen(offer)}
       // Принятие возвращает заказ целиком — карточка перерисовывается им сразу.
       request={() =>
-        browserApi.post<OrderDetail>(`/orders/${orderId}/accept-offer/${offer.id}`)
+        browserApi.post<OrderDetail>(
+          `/orders/${orderId}/accept-offer/${seen.id}`,
+          acceptOfferBody(seen),
+        )
       }
       trigger={
         <Button>
@@ -59,11 +69,11 @@ export function AcceptOfferDialog({
       }
       // Название компании в кавычки не берётся: у большинства они уже
       // в самом названии — «ООО «Ремонт Плюс»» читается как опечатка.
-      title={`Принять предложение ${offer.companyName}?`}
+      title={`Принять предложение ${seen.companyName}?`}
       description={
         <>
-          Заказ перейдёт в работу. Цена сделки — {formatMoney(offer.proposedPrice)},
-          срок — {formatDate(offer.proposedDeadline)}.
+          Заказ перейдёт в работу. Цена сделки — {formatMoney(seen.proposedPrice)},
+          срок — {formatDate(seen.proposedDeadline)}.
           {rivals > 0
             ? ` Остальные предложения (${rivals}) получат статус «Не выбрано».`
             : null}
@@ -72,7 +82,7 @@ export function AcceptOfferDialog({
       submitLabel="Принять предложение"
       pendingLabel="Принимаем…"
       successTitle="Предложение принято"
-      successText={`${offer.companyName} приступает к работе`}
+      successText={`${seen.companyName} приступает к работе`}
       errorTitle="Не удалось принять предложение"
     />
   );
@@ -106,6 +116,7 @@ export function RejectOfferDialog({ offer }: { offer: OfferDto }) {
 
 /** Общая обвязка обоих решений: подтверждение, запрос, тост, обновление. */
 function OfferDecision({
+  onOpen,
   request,
   trigger,
   title,
@@ -116,6 +127,8 @@ function OfferDecision({
   successText,
   errorTitle,
 }: {
+  /** Диалог открылся — до того, как человек что-то решил. */
+  onOpen?: () => void;
   /** Свежий заказ из ответа, если маршрут его возвращает; иначе `null`. */
   request: () => Promise<OrderDetail | null>;
   trigger: ReactNode;
@@ -157,7 +170,13 @@ function OfferDecision({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) onOpen?.();
+        setOpen(next);
+      }}
+    >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
 
       <DialogContent>

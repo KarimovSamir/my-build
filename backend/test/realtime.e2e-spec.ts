@@ -349,7 +349,8 @@ describe('WebSocket-шлюз (e2e)', () => {
 
       const accepted = await request(app.getHttpServer())
         .post(`/orders/${order.id}/accept-offer/${winnerOffer.body.id}`)
-        .set('Authorization', `Bearer ${clientToken}`);
+        .set('Authorization', `Bearer ${clientToken}`)
+        .send({ offerEditedAt: null });
 
       expect(accepted.status).toBe(200);
 
@@ -384,7 +385,8 @@ describe('WebSocket-шлюз (e2e)', () => {
 
       const accepted = await request(app.getHttpServer())
         .post(`/orders/${order.id}/accept-offer/${offer.body.id}`)
-        .set('Authorization', `Bearer ${clientToken}`);
+        .set('Authorization', `Bearer ${clientToken}`)
+        .send({ offerEditedAt: null });
 
       expect(accepted.status).toBe(200);
       expect(await left).toEqual({ orderId: order.id });

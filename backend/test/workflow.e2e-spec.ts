@@ -205,6 +205,7 @@ describe('Сделка и приёмка (e2e)', () => {
       const response = await post(
         clientToken,
         `/orders/${order.id}/accept-offer/${executorOfferId}`,
+        { offerEditedAt: null },
       );
 
       expect(response.status).toBe(200);
@@ -245,6 +246,7 @@ describe('Сделка и приёмка (e2e)', () => {
       const response = await post(
         executorToken,
         `/orders/${order.id}/accept-offer/${executorOfferId}`,
+        { offerEditedAt: null },
       );
 
       expect(response.status).toBe(403);
@@ -260,9 +262,54 @@ describe('Сделка и приёмка (e2e)', () => {
       const response = await post(
         clientToken,
         `/orders/${first.order.id}/accept-offer/${second.executorOfferId}`,
+        { offerEditedAt: null },
       );
 
       expect(response.status).toBe(404);
+    });
+
+    it('предложение, изменённое после того, как клиент его открыл, не принимается', async () => {
+      const { order, executorOfferId } = await seedOrderWithOffers('Цена поменялась');
+
+      // Компания переписала цену, а у клиента на экране — прежняя версия.
+      const edited = await prisma.offer.update({
+        where: { id: executorOfferId },
+        data: { proposedPrice: '990000.00', editedAt: new Date() },
+      });
+
+      const stale = await post(
+        clientToken,
+        `/orders/${order.id}/accept-offer/${executorOfferId}`,
+        { offerEditedAt: null },
+      );
+
+      expect(stale.status).toBe(409);
+      expect(stale.body.error).toBe('OfferChanged');
+      const untouched = await orderRow(order.id);
+      expect(untouched.status).toBe(OrderStatus.AWAITING_CONFIRMATION);
+      expect(untouched.price).toBeNull();
+
+      // Увидел новую версию — принимает уже её, по новой цене.
+      const fresh = await post(
+        clientToken,
+        `/orders/${order.id}/accept-offer/${executorOfferId}`,
+        { offerEditedAt: edited.editedAt!.toISOString() },
+      );
+
+      expect(fresh.status).toBe(200);
+      expect(fresh.body.price).toBe('990000');
+    });
+
+    it('без версии предложения — 400, а не принятие вслепую', async () => {
+      const { order, executorOfferId } = await seedOrderWithOffers('Без версии');
+
+      const response = await post(
+        clientToken,
+        `/orders/${order.id}/accept-offer/${executorOfferId}`,
+      );
+
+      expect(response.status).toBe(400);
+      expect((await orderRow(order.id)).status).toBe(OrderStatus.AWAITING_CONFIRMATION);
     });
   });
 

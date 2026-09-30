@@ -7,7 +7,13 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { AuthHeader } from "@/components/auth/auth-header";
 import { Button } from "@/components/ui/button";
 import { resolveAfterAuthHref } from "@/lib/auth-redirect";
-import { callbackPurpose, parseCallbackLink, type CallbackLink } from "@/lib/callback-link";
+import {
+  callbackPurpose,
+  isSignupLink,
+  landingAfterLink,
+  parseCallbackLink,
+  type CallbackLink,
+} from "@/lib/callback-link";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 /** Фрагмент адреса не меняется, пока открыт экран: подписываться не на что. */
@@ -81,7 +87,11 @@ export function CompleteCallback({
     // Токены больше не нужны в адресной строке — они попадают в историю.
     window.history.replaceState(null, "", window.location.pathname);
 
-    router.replace(await resolveAfterAuthHref(next));
+    router.replace(
+      await resolveAfterAuthHref(
+        landingAfterLink({ signupConfirmation: isSignupLink(target) }, next),
+      ),
+    );
     router.refresh();
   }
 

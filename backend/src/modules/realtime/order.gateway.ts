@@ -272,11 +272,15 @@ export class OrderGateway
   @SubscribeMessage(socketMessages.subscribeFeed)
   async subscribeFeed(@ConnectedSocket() socket: AppSocket): Promise<SubscribeAck> {
     return this.handle(socket, socketMessages.subscribeFeed, async () => {
-      if (this.activeUser(socket)?.role !== Role.COMPANY) {
+      const user = this.activeUser(socket);
+
+      if (user?.role !== Role.COMPANY) {
         return { ok: false, error: FEED_FORBIDDEN };
       }
 
-      await socket.join(socketRooms.companyFeed());
+      // Лента своего мира: демо-компании не приходят сигналы о заказах
+      // настоящих клиентов, и наоборот (`common/demo-world.ts`).
+      await socket.join(socketRooms.companyFeed(user.isDemo));
       return { ok: true };
     });
   }
@@ -284,7 +288,8 @@ export class OrderGateway
   @SubscribeMessage(socketMessages.unsubscribeFeed)
   async unsubscribeFeed(@ConnectedSocket() socket: AppSocket): Promise<SubscribeAck> {
     return this.handle(socket, socketMessages.unsubscribeFeed, async () => {
-      await socket.leave(socketRooms.companyFeed());
+      await socket.leave(socketRooms.companyFeed(false));
+      await socket.leave(socketRooms.companyFeed(true));
       return { ok: true };
     });
   }

@@ -18,6 +18,7 @@ import {
   utcCalendarDate,
 } from '@mybuild/shared';
 
+import { isDemoEmail } from '../../common/demo-world.js';
 import { runInOrderQueue } from '../../common/order-queue.js';
 import { isUuid } from '../../common/uuid.js';
 import { Prisma } from '../../generated/prisma/client.js';
@@ -54,7 +55,17 @@ export type OrderTransitionCommand =
     }
   | { type: typeof OrderEventType.OFFER_WITHDRAWN; orderId: string; offerId: string }
   | { type: typeof OrderEventType.OFFER_REJECTED; orderId: string; offerId: string }
-  | { type: typeof OrderEventType.OFFER_ACCEPTED; orderId: string; offerId: string }
+  | {
+      type: typeof OrderEventType.OFFER_ACCEPTED;
+      orderId: string;
+      offerId: string;
+      /**
+       * `editedAt` предложения, которое клиент видел, нажимая «Принять»
+       * (`null` — условия с отправки не меняли). Сверяется под блокировкой
+       * со строкой: разошлись — 409 `OfferChanged`, а не сделка по чужой цене.
+       */
+      seenOfferEditedAt: string | null;
+    }
   | { type: typeof OrderEventType.WORK_SUBMITTED; orderId: string }
   | {
       type: typeof OrderEventType.WORK_CONFIRMED;
@@ -81,6 +92,11 @@ export interface AppliedTransition {
   companyId: string;
   fromStatus: OrderStatus;
   nextStatus: OrderStatus;
+  /**
+   * Клиент заказа — демо-учётка. Нужен рассылке: заказ, покинувший ленту,
+   * сигналит только в ленту своего мира (`common/demo-world.ts`).
+   */
+  clientIsDemo: boolean;
   /**
    * Все затронутые предложения, а не только то, по которому пришло событие:
    * при принятии одного остальные уходят в `NOT_ACCEPTED`, и каждой из этих
@@ -110,8 +126,9 @@ type OfferWithCompany = {
   status: OfferStatus;
   proposedPrice: Prisma.Decimal;
   proposedDeadline: Date;
+  editedAt: Date | null;
   rejectionCount: number;
-  company: { companyName: string | null };
+  company: { companyName: string | null; email: string };
 };
 
 @Injectable()
@@ -164,6 +181,21 @@ export class OrderTransitionService {
   ): Promise<AppliedTransition> {
     const order = await this.lockOrder(tx, command.orderId);
     const offer = await this.resolveOffer(tx, order.id, command);
+    const clientIsDemo = await this.isDemoClient(tx, order.clientId);
+
+    // Исполнителем становится только компания из мира клиента
+    // (`common/demo-world.ts`). Новых предложений через границу не бывает —
+    // их не пускает `OffersService`, — но строки, появившиеся раньше этого
+    // правила, в базе остались, а сброс демо активные предложения
+    // демо-компаний по чужим заказам не трогает. Для клиента такого
+    // предложения нет: 404, как и на любое чужое.
+    if (
+      command.type === OrderEventType.OFFER_ACCEPTED &&
+      clientIsDemo !== isDemoEmail(offer.company.email)
+    ) {
+      throw new NotFoundException('Предложение не найдено');
+    }
+
     const event = await this.buildEvent(tx, command, offer);
 
     const { fromStatus, nextStatus, effects } = this.machine.transition(
@@ -190,6 +222,7 @@ export class OrderTransitionService {
       companyId: offer.companyId,
       fromStatus,
       nextStatus,
+      clientIsDemo,
       offerUpdates,
       notifications,
     };
@@ -246,8 +279,9 @@ export class OrderTransitionService {
       status: true,
       proposedPrice: true,
       proposedDeadline: true,
+      editedAt: true,
       rejectionCount: true,
-      company: { select: { companyName: true } },
+      company: { select: { companyName: true, email: true } },
     } as const;
 
     // Статус предложения здесь не фильтруется: подходит ли он событию,
@@ -276,6 +310,16 @@ export class OrderTransitionService {
     }
 
     return offer;
+  }
+
+  /** Демо-учётка ли клиент заказа — по адресу из базы (`common/demo-world.ts`). */
+  private async isDemoClient(tx: Prisma.TransactionClient, clientId: string): Promise<boolean> {
+    const client = await tx.user.findUnique({
+      where: { id: clientId },
+      select: { email: true },
+    });
+
+    return isDemoEmail(client?.email);
   }
 
   private async buildEvent(
@@ -323,6 +367,8 @@ export class OrderTransitionService {
           proposedPrice: offer.proposedPrice.toString(),
           proposedDeadline: offer.proposedDeadline,
           today: utcCalendarDate(new Date()),
+          offerEditedAt: offer.editedAt?.toISOString() ?? null,
+          seenOfferEditedAt: command.seenOfferEditedAt,
           // Проигравшие нужны поимённо: каждой компании — свой статус
           // и своё уведомление. Читаются под блокировкой строки заказа,
           // то есть параллельный переход их не изменит.

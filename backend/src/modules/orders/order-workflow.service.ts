@@ -79,16 +79,21 @@ export class OrderWorkflowService {
   /**
    * Клиент принимает предложение (ТЗ §4): цена и срок сделки берутся
    * из предложения, остальные предложения уходят в `NOT_ACCEPTED`.
+   * `seenOfferEditedAt` — версия предложения, которую клиент видел.
    */
-  async acceptOffer(
-    orderId: string,
-    offerId: string,
-    clientId: string,
-  ): Promise<OrderDetail> {
+  async acceptOffer(params: {
+    orderId: string;
+    offerId: string;
+    seenOfferEditedAt: string | null;
+    clientId: string;
+  }): Promise<OrderDetail> {
+    const { orderId, clientId } = params;
+
     const applied = await this.transitions.apply({
       type: OrderEventType.OFFER_ACCEPTED,
       orderId,
-      offerId,
+      offerId: params.offerId,
+      seenOfferEditedAt: params.seenOfferEditedAt,
     });
 
     this.realtime.transitionApplied(applied);

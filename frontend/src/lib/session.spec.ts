@@ -6,6 +6,7 @@ import {
   readDemoClaim,
   readEmailVerifiedClaim,
   readRoleClaim,
+  isSignupConfirmation,
   readRecoveredAt,
   toCurrentUser,
 } from "./session";
@@ -94,6 +95,22 @@ describe("readRecoveredAt", () => {
     expect(readRecoveredAt([])).toBeNull();
     expect(readRecoveredAt([{ method: "otp", timestamp: "1790000000" }])).toBeNull();
     expect(readRecoveredAt([null, { method: "otp" }])).toBeNull();
+  });
+});
+
+describe("вход по ссылке подтверждения регистрации", () => {
+  const signup = [{ method: "email/signup", timestamp: 1_790_000_000 }];
+
+  it("открывает форму пароля: после подтверждения пароля у учётки нет", () => {
+    expect(readRecoveredAt(signup)).toBe(1_790_000_000_000);
+    expect(isSignupConfirmation(signup)).toBe(true);
+  });
+
+  it("вход паролем и ссылка восстановления подтверждением регистрации не считаются", () => {
+    expect(isSignupConfirmation([{ method: "password", timestamp: 1 }])).toBe(false);
+    expect(isSignupConfirmation([{ method: "recovery", timestamp: 1 }])).toBe(false);
+    expect(isSignupConfirmation(undefined)).toBe(false);
+    expect(isSignupConfirmation([null])).toBe(false);
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAX_OFFER_REJECTIONS, OfferStatus, OrderStatus } from '@mybuild/shared';
+import { DEMO_EMAILS, MAX_OFFER_REJECTIONS, OfferStatus, OrderStatus } from '@mybuild/shared';
 
 import { buildAvailableOrdersWhere } from './available-orders.js';
 
@@ -14,10 +14,22 @@ import { buildAvailableOrdersWhere } from './available-orders.js';
  */
 
 const COMPANY = '33333333-3333-4333-8333-333333333333';
+const REAL_COMPANY = { id: COMPANY, isDemo: false };
 
 describe('buildAvailableOrdersWhere', () => {
+  it('показывает компании заказы только клиентов её мира (демо или настоящих)', () => {
+    const demoEmails = Object.values(DEMO_EMAILS);
+
+    expect(buildAvailableOrdersWhere(REAL_COMPANY).client).toEqual({
+      email: { notIn: demoEmails },
+    });
+    expect(buildAvailableOrdersWhere({ id: COMPANY, isDemo: true }).client).toEqual({
+      email: { in: demoEmails },
+    });
+  });
+
   it('берёт только заказы, которые ещё ищут исполнителя', () => {
-    const where = buildAvailableOrdersWhere(COMPANY);
+    const where = buildAvailableOrdersWhere(REAL_COMPANY);
 
     expect(where.status).toEqual({
       in: [OrderStatus.WAITING, OrderStatus.AWAITING_CONFIRMATION],
@@ -25,7 +37,7 @@ describe('buildAvailableOrdersWhere', () => {
   });
 
   it('пускает заказ без предложения этой компании и с выбывшим предложением', () => {
-    const [availability] = buildAvailableOrdersWhere(COMPANY).AND as [
+    const [availability] = buildAvailableOrdersWhere(REAL_COMPANY).AND as [
       { OR: unknown[] },
     ];
 
@@ -47,13 +59,13 @@ describe('buildAvailableOrdersWhere', () => {
   });
 
   it('без поиска других условий не добавляет', () => {
-    expect(buildAvailableOrdersWhere(COMPANY).AND).toHaveLength(1);
+    expect(buildAvailableOrdersWhere(REAL_COMPANY).AND).toHaveLength(1);
   });
 
   it('поиск идёт отдельным условием, а не поверх доступности', () => {
     // Оба условия — `OR`. Соседними ключами их не положить: второй затёр бы
     // первый, и лента отдала бы заказы, по которым компания уже работает.
-    const conditions = buildAvailableOrdersWhere(COMPANY, 'кровля').AND as {
+    const conditions = buildAvailableOrdersWhere(REAL_COMPANY, 'кровля').AND as {
       OR: unknown[];
     }[];
 
@@ -64,7 +76,7 @@ describe('buildAvailableOrdersWhere', () => {
   });
 
   it('ищет по номеру заказа так же, как список клиента', () => {
-    const conditions = buildAvailableOrdersWhere(COMPANY, 'ORD-7829').AND as {
+    const conditions = buildAvailableOrdersWhere(REAL_COMPANY, 'ORD-7829').AND as {
       OR: unknown[];
     }[];
 
@@ -72,7 +84,7 @@ describe('buildAvailableOrdersWhere', () => {
   });
 
   it('по названию подрядчика не ищет: у заказа в ленте исполнителя нет', () => {
-    const conditions = buildAvailableOrdersWhere(COMPANY, 'Строймир').AND as {
+    const conditions = buildAvailableOrdersWhere(REAL_COMPANY, 'Строймир').AND as {
       OR: Record<string, unknown>[];
     }[];
 

@@ -133,7 +133,8 @@ describe('Одновременные запросы (e2e)', () => {
         offers.slice(0, 2).map((offer) =>
           request(app.getHttpServer())
             .post(`/orders/${order.id}/accept-offer/${offer.id}`)
-            .set('Authorization', `Bearer ${clientToken}`),
+            .set('Authorization', `Bearer ${clientToken}`)
+            .send({ offerEditedAt: null }),
         ),
       ),
       request(app.getHttpServer())

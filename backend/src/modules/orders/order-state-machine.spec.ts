@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import {
   InvalidOfferStatusError,
   InvalidStateTransitionError,
+  OfferChangedError,
   OfferExpiredError,
   OfferFinallyRejectedError,
   OrderEvent,
@@ -80,6 +81,8 @@ const events: { [T in OrderEventType]: Extract<OrderEvent, { type: T }> } = {
     proposedPrice: '12500.00',
     proposedDeadline: new Date('2026-12-01T00:00:00.000Z'),
     today: '2026-09-29',
+    offerEditedAt: null,
+    seenOfferEditedAt: null,
     otherOffers: [],
   },
   WORK_SUBMITTED: {
@@ -556,6 +559,42 @@ describe('OrderStateMachine — статус предложения', () => {
 
     it('сегодняшним — ещё можно', () => {
       expect(accept('2026-09-29T00:00:00.000Z').nextStatus).toBe(OrderStatus.IN_PROGRESS);
+    });
+  });
+
+  describe('принятие предложения, которое компания могла переписать', () => {
+    const EDITED = '2026-09-29T08:00:00.000Z';
+
+    const accept = (offerEditedAt: string | null, seenOfferEditedAt: string | null) =>
+      machine.transition(contextIn(OrderStatus.AWAITING_CONFIRMATION), {
+        ...events.OFFER_ACCEPTED,
+        offerEditedAt,
+        seenOfferEditedAt,
+      });
+
+    it('клиент видел ту же версию — сделка', () => {
+      expect(accept(null, null).nextStatus).toBe(OrderStatus.IN_PROGRESS);
+      expect(accept(EDITED, EDITED).nextStatus).toBe(OrderStatus.IN_PROGRESS);
+    });
+
+    it('компания изменила предложение после того, как клиент его открыл, — 409', () => {
+      expect(() => accept(EDITED, null)).toThrow(OfferChangedError);
+      expect(() => accept('2026-09-29T09:00:00.000Z', EDITED)).toThrow(OfferChangedError);
+    });
+
+    it('версия новее той, что есть, тоже не проходит: сверка на равенство', () => {
+      expect(() => accept(null, EDITED)).toThrow(OfferChangedError);
+    });
+
+    it('отказ — 409 с понятным текстом', () => {
+      try {
+        accept(EDITED, null);
+        expect.unreachable('переход должен был упасть');
+      } catch (error) {
+        const response = (error as OfferChangedError).getResponse();
+        expect(response).toMatchObject({ statusCode: 409, error: 'OfferChanged' });
+        expect(messageOf(response)).toContain('изменила предложение');
+      }
     });
   });
 

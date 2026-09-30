@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { callbackPurpose, parseCallbackLink, readTokenEmail } from "./callback-link";
+import {
+  SET_PASSWORD_PATH,
+  callbackPurpose,
+  isSignupLink,
+  landingAfterLink,
+  parseCallbackLink,
+  readTokenEmail,
+} from "./callback-link";
 
 /** Access-токен с нужной нагрузкой. Подпись не проверяется — она и не нужна. */
 function tokenWith(claims: Record<string, unknown>): string {
@@ -55,6 +62,30 @@ describe("callbackPurpose", () => {
   it("для сброса пароля говорит о новом пароле", () => {
     expect(callbackPurpose({ kind: "otp", tokenHash: "h", type: "recovery" })).toContain(
       "новый пароль",
+    );
+  });
+});
+
+describe("landingAfterLink", () => {
+  it("подтверждение регистрации ведёт на форму пароля, куда бы ни указывал next", () => {
+    expect(landingAfterLink({ signupConfirmation: true }, "/orders")).toBe(SET_PASSWORD_PATH);
+  });
+
+  it("остальные ссылки ведут туда, куда просили", () => {
+    expect(landingAfterLink({ signupConfirmation: false }, "/orders")).toBe("/orders");
+  });
+
+  it("одноразовая ссылка регистрации узнаётся по типу, остальные — нет", () => {
+    expect(isSignupLink({ kind: "otp", tokenHash: "h", type: "signup" })).toBe(true);
+    expect(isSignupLink({ kind: "otp", tokenHash: "h", type: "recovery" })).toBe(false);
+    expect(
+      isSignupLink({ kind: "session", accessToken: "a", refreshToken: "r", email: null }),
+    ).toBe(false);
+  });
+
+  it("экран подтверждения говорит, что после ссылки будет пароль", () => {
+    expect(callbackPurpose({ kind: "otp", tokenHash: "h", type: "signup" })).toContain(
+      "пароль",
     );
   });
 });

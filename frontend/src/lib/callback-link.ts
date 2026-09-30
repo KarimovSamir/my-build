@@ -83,6 +83,31 @@ export function parseCallbackLink(hash: string, search: URLSearchParams): Callba
   return null;
 }
 
+/** Экран, где задаётся пароль без текущего: по ссылке восстановления и после регистрации. */
+export const SET_PASSWORD_PATH = "/reset-password";
+
+/**
+ * Куда вести после входа по ссылке из письма.
+ *
+ * Подтверждение регистрации оставляет учётку без пароля: база стирает тот,
+ * что задали до подтверждения (`on_auth_user_signup_confirmed` — иначе
+ * адрес можно было занять заранее со своим паролем). Поэтому такая ссылка
+ * ведёт прямо на форму пароля, куда бы ни указывал `next`. Признак — тип
+ * одноразовой ссылки или способ входа `email/signup` в токене после обмена
+ * кода (`isSignupConfirmation` в `lib/session.ts`).
+ */
+export function landingAfterLink(
+  link: { signupConfirmation: boolean },
+  next: string,
+): string {
+  return link.signupConfirmation ? SET_PASSWORD_PATH : next;
+}
+
+/** Ссылка — подтверждение регистрации одноразовым `token_hash`. */
+export function isSignupLink(link: CallbackLink): boolean {
+  return link.kind === "otp" && link.type === "signup";
+}
+
 /** Что сделает ссылка — для текста экрана подтверждения. */
 export function callbackPurpose(link: CallbackLink): string {
   if (link.kind === "session") {
@@ -92,6 +117,8 @@ export function callbackPurpose(link: CallbackLink): string {
   }
 
   switch (link.type) {
+    case "signup":
+      return "Ссылка подтвердит адрес почты, после чего вы зададите пароль для входа.";
     case "recovery":
       return "Ссылка откроет вашу учётную запись, чтобы задать новый пароль.";
     case "email_change":

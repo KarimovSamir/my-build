@@ -143,6 +143,7 @@ describe('OrderTransitionService (e2e)', () => {
       type: OrderEventType.OFFER_ACCEPTED,
       orderId: order.id,
       offerId: offerA.id,
+      seenOfferEditedAt: null,
     });
     expect(accepted.order.status).toBe(OrderStatus.IN_PROGRESS);
     expect(accepted.order.price?.toString()).toBe('9500');
@@ -233,6 +234,7 @@ describe('OrderTransitionService (e2e)', () => {
       type: OrderEventType.OFFER_ACCEPTED,
       orderId: order.id,
       offerId: offerA.id,
+      seenOfferEditedAt: null,
     });
     await transitions.apply({ type: OrderEventType.WORK_SUBMITTED, orderId: order.id });
     await transitions.apply({ type: OrderEventType.WORK_CONFIRMED, orderId: order.id });

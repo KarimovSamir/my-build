@@ -18,12 +18,14 @@ import {
 import {
   FileOwnerType,
   Role,
+  UPLOAD_REQUEST_OVERHEAD_BYTES,
   companySeesTaskFiles,
   isExecutorOffer,
   type OrderFileDto,
 } from '@mybuild/shared';
 
 import type { OrderFile, Prisma } from '../../generated/prisma/client.js';
+import { isDemoEmail } from '../../common/demo-world.js';
 import { runInOrderQueue } from '../../common/order-queue.js';
 import { Semaphore } from '../../common/semaphore.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -52,6 +54,8 @@ import { StorageService } from './storage.service.js';
 export interface FileViewer {
   id: string;
   role: Role | null;
+  /** Демо-учётка: заказы другого мира ей закрыты (`common/demo-world.ts`). */
+  isDemo: boolean;
 }
 
 /**
@@ -302,7 +306,9 @@ export class FilesService {
    * и считает цену (`companySeesTaskFiles`). Сдачи компании так не открываются
    * никогда — они остаются сторонам сделки (ТЗ §4.1).
    *
-   * Связь с заказом проверяется по идентификатору, а не по роли: роль в токене
+   * Компании из другого мира (демо против настоящих) не открыто ничего.
+ *
+ * Связь с заказом проверяется по идентификатору, а не по роли: роль в токене
    * живёт час и может устареть, связь — нет. Роль всё же нужна в одном месте:
    * «любая компания» — это именно компания, иначе задание одного клиента
    * скачал бы другой.
@@ -317,6 +323,7 @@ export class FilesService {
       select: {
         clientId: true,
         status: true,
+        client: { select: { email: true } },
         offers: {
           where: { companyId: viewer.id },
           select: { status: true },
@@ -335,8 +342,11 @@ export class FilesService {
 
     const ownOffer = order.offers[0] ?? null;
 
+    // Компании чужого мира файлы заказа закрыты целиком — то же правило, что
+    // у карточки заказа в `OwnershipGuard`.
     const allowed =
       viewer.role === Role.COMPANY &&
+      isDemoEmail(order.client.email) === viewer.isDemo &&
       (ownerType === FileOwnerType.CLIENT
         ? companySeesTaskFiles(order.status, ownOffer?.status ?? null)
         : ownOffer !== null && isExecutorOffer(ownOffer.status));
@@ -375,6 +385,42 @@ export class FilesService {
   }
 
   /**
+   * Помещаются ли файлы запроса — по объявленной длине, **до** разбора тела.
+   *
+   * Настоящая проверка квоты идёт по размерам файлов, то есть после того, как
+   * multer записал их на диск и посчитал хеши. Запрос, который заведомо
+   * не поместится, отбивается здесь, не записав ни байта: из объявленной
+   * длины вычитается запас на поля формы (`UPLOAD_REQUEST_OVERHEAD_BYTES`),
+   * и если даже остаток не влезает в квоту — файлов в нём больше, чем места.
+   * Запросу у самой границы это проверку не заменяет: его отсеет обычная.
+   *
+   * `orderId: null` — заказ создаётся этим же запросом, и места в нём ещё
+   * ничего не занимает; заказчик тогда — тот, кто создаёт.
+   */
+  async assertRoomForUpload(params: {
+    orderId: string | null;
+    clientId: string;
+    uploader: FileOwnerType;
+    declaredBytes: number;
+  }): Promise<void> {
+    const files = Math.max(0, params.declaredBytes - UPLOAD_REQUEST_OVERHEAD_BYTES);
+    const target = params.orderId
+      ? { orderId: params.orderId }
+      : { clientId: params.clientId };
+
+    const { usage, clientId } = await readStorageUsage(this.prisma, target);
+
+    this.refuseOverQuota(
+      params.orderId ?? 'новый заказ',
+      checkStorageQuota(
+        addUsage(usage, reservations.pending(params.orderId ?? '', clientId)),
+        files,
+        params.uploader,
+      ),
+    );
+  }
+
+  /**
    * Новые файлы должны уложиться во все три квоты хранилища: заказа,
    * заказчика и сервиса целиком (`file-quota.ts`).
    *
@@ -401,7 +447,7 @@ export class FilesService {
     adding: PreparedFile[],
   ): Promise<() => void> {
     const incoming = sumSizes(adding);
-    const { usage, clientId } = await readStorageUsage(this.prisma, orderId);
+    const { usage, clientId } = await readStorageUsage(this.prisma, { orderId });
 
     this.refuseOverQuota(
       orderId,
@@ -418,7 +464,7 @@ export class FilesService {
     uploader: FileOwnerType,
     adding: PreparedFile[],
   ): Promise<void> {
-    const { usage } = await readStorageUsage(client, orderId);
+    const { usage } = await readStorageUsage(client, { orderId });
 
     this.refuseOverQuota(orderId, checkStorageQuota(usage, sumSizes(adding), uploader));
   }
@@ -503,15 +549,21 @@ export class FilesService {
  * Сколько места уже занято: файлы заказа, все файлы его заказчика и все
  * файлы сервиса. Заказчик берётся из заказа, а не из запроса: грузить
  * в заказ может и исполнитель, а место всё равно заказчика.
+ *
+ * `{ clientId }` без заказа — заказ ещё только создаётся: занятого им места
+ * нет, считаются заказчик и сервис.
  */
 async function readStorageUsage(
   client: Pick<PrismaService, 'order' | 'orderFile'> | Prisma.TransactionClient,
-  orderId: string,
+  target: { orderId: string } | { clientId: string },
 ): Promise<{ usage: StorageUsage; clientId: string }> {
-  const order = await client.order.findUnique({
-    where: { id: orderId },
-    select: { clientId: true },
-  });
+  const order =
+    'orderId' in target
+      ? await client.order.findUnique({
+          where: { id: target.orderId },
+          select: { clientId: true },
+        })
+      : { clientId: target.clientId };
 
   if (!order) {
     throw new NotFoundException('Заказ не найден');
@@ -528,7 +580,7 @@ async function readStorageUsage(
 
   return {
     usage: {
-      order: await sum({ orderId }),
+      order: 'orderId' in target ? await sum({ orderId: target.orderId }) : 0,
       client: await sum({ order: { clientId: order.clientId } }),
       total: await sum({}),
     },

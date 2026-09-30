@@ -108,6 +108,14 @@ export type OrderEvent =
        */
       today: string;
       /**
+       * `Offer.editedAt` сейчас, под блокировкой, и тот, что видел клиент,
+       * нажимая «Принять» (ISO-строка или `null` — условия с отправки
+       * не меняли). Не совпали — компания переписала предложение, пока клиент
+       * на него смотрел, и сделка закрылась бы не на тех условиях.
+       */
+      offerEditedAt: string | null;
+      seenOfferEditedAt: string | null;
+      /**
        * Остальные предложения заказа в статусе SENT: они проигрывают выбор.
        * Список, а не счётчик, — каждой компании нужно и сменить статус,
        * и отправить уведомление (ТЗ §8).
@@ -217,6 +225,23 @@ export class OfferExpiredError extends ConflictException {
       message:
         'Срок выполнения в этом предложении уже прошёл. Принять его нельзя — ' +
         'компания может обновить предложение с новым сроком.',
+    });
+  }
+}
+
+/**
+ * 409 на принятие предложения, которое компания изменила после того, как
+ * клиент его открыл: цена и срок сделки берутся из строки в момент принятия,
+ * и без этой проверки клиент соглашался бы на условия, которых не видел.
+ */
+export class OfferChangedError extends ConflictException {
+  constructor() {
+    super({
+      statusCode: 409,
+      error: 'OfferChanged',
+      message:
+        'Компания изменила предложение, пока вы его смотрели. ' +
+        'Проверьте новые условия и примите заново.',
     });
   }
 }
@@ -531,6 +556,7 @@ export class OrderStateMachine {
    * @throws InvalidOfferStatusError если событию не подходит статус предложения.
    * @throws OfferFinallyRejectedError если клиент отказал этой компании окончательно.
    * @throws OfferExpiredError если принимается предложение с прошедшим сроком.
+   * @throws OfferChangedError если предложение изменили после того, как клиент его открыл.
    */
   transition(context: OrderStateContext, event: OrderEvent): OrderTransitionResult {
     const handler = handlerFor(context.status, event.type);
@@ -566,6 +592,13 @@ export class OrderStateMachine {
       isOfferExpired(event.proposedDeadline.toISOString(), event.today)
     ) {
       throw new OfferExpiredError();
+    }
+
+    if (
+      event.type === OrderEventType.OFFER_ACCEPTED &&
+      event.offerEditedAt !== event.seenOfferEditedAt
+    ) {
+      throw new OfferChangedError();
     }
 
     return { fromStatus: context.status, ...handler(context, event) };

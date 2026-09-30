@@ -10,6 +10,7 @@ import { OrderWorkflowController } from './order-workflow.controller.js';
 import { OrderWorkflowService } from './order-workflow.service.js';
 import { OrdersController } from './orders.controller.js';
 import { OrdersService } from './orders.service.js';
+import { UploadAdmissionGuard } from './upload-admission.guard.js';
 
 /**
  * Заказы: CRUD клиента (ТЗ §5) плюс ядро переходов, которым в Фазе 4
@@ -18,7 +19,8 @@ import { OrdersService } from './orders.service.js';
  * `OwnershipGuard` и `ThrottleGuard` объявлены провайдерами: они висят
  * на отдельных маршрутах через `@UseGuards`, и Nest берёт их экземпляры
  * из этого модуля. Экземпляр один на модуль — счётчик частоты запросов
- * общий для всех маршрутов контроллера, как и должно быть.
+ * общий для всех маршрутов контроллера, как и должно быть. Так же объявлен
+ * `UploadAdmissionGuard`: ему нужен `FilesService` из этого модуля.
  */
 @Module({
   imports: [FilesModule, RealtimeModule],
@@ -30,6 +32,7 @@ import { OrdersService } from './orders.service.js';
     OrderWorkflowService,
     OwnershipGuard,
     ThrottleGuard,
+    UploadAdmissionGuard,
   ],
   exports: [OrderStateMachine, OrderTransitionService],
 })

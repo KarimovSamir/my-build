@@ -35,10 +35,12 @@ import { UploadSizeGuard } from '../../common/guards/upload-size.guard.js';
 import { TempUploadCleanupInterceptor } from '../../common/interceptors/temp-upload-cleanup.interceptor.js';
 import type { AuthUser } from '../auth/auth-user.js';
 import { UPLOAD_MULTER_OPTIONS, toUploads, type MulterFile } from './multer-file.js';
+import { AcceptOfferDto } from './dto/accept-offer.dto.js';
 import { ConfirmOrderDto, DisputeOrderDto } from './dto/completion.dto.js';
 import { SubmitFilesDto } from './dto/submit-files.dto.js';
 import { VerifiedAreaDto } from './dto/verified-area.dto.js';
 import { OrderWorkflowService } from './order-workflow.service.js';
+import { UploadAdmissionGuard } from './upload-admission.guard.js';
 
 /**
  * Сделка и приёмка: путь заказа от выбора исполнителя до завершения (ТЗ §5).
@@ -67,8 +69,14 @@ export class OrderWorkflowController {
     @CurrentUser() user: AuthUser,
     @OrderAccessCtx() access: OrderAccessContext,
     @Param('offerId') offerId: string,
+    @Body() dto: AcceptOfferDto,
   ): Promise<OrderDetail> {
-    return this.workflow.acceptOffer(access.orderId, offerId, user.id);
+    return this.workflow.acceptOffer({
+      orderId: access.orderId,
+      offerId,
+      seenOfferEditedAt: dto.offerEditedAt,
+      clientId: user.id,
+    });
   }
 
   /** Клиент подтверждает выполнение: заказ завершён (ТЗ §4). */
@@ -119,13 +127,15 @@ export class OrderWorkflowController {
    * Файлы сдачи вместе с обязательным комментарием (ТЗ §4.1).
    *
    * Обвязка та же, что и у создания заказа: `UploadSizeGuard` отбивает
-   * заведомо неподъёмный запрос по `Content-Length`, а
+   * заведомо неподъёмный запрос по `Content-Length`, `UploadAdmissionGuard` —
+   * не влезающий в квоту и лишний сверх предела одновременных загрузок, а
    * `TempUploadCleanupInterceptor` идёт первым — иначе отказ валидации DTO
    * оставил бы временные файлы на диске.
    */
   @Post(':id/files')
   @Roles(Role.COMPANY)
-  @UseGuards(ThrottleGuard, UploadSizeGuard, OwnershipGuard)
+  // `UploadAdmissionGuard` последним: квоте нужен заказ из `OwnershipGuard`.
+  @UseGuards(ThrottleGuard, UploadSizeGuard, OwnershipGuard, UploadAdmissionGuard)
   @OrderAccess(OrderAccessMode.EXECUTOR)
   @Throttle({ limit: 20, ttl: 60_000 })
   @UseInterceptors(

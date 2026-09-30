@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { landingAfterLink } from "@/lib/callback-link";
 import { safeNextPath } from "@/lib/redirects";
+import { isSignupConfirmation } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
@@ -39,7 +41,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(new URL(next, request.url));
+      // После подтверждения регистрации пароля у учётки нет — его стирает
+      // база (`on_auth_user_signup_confirmed`), и первым делом его надо задать.
+      const { data } = await supabase.auth.getClaims();
+      const signupConfirmation = isSignupConfirmation(data?.claims?.amr);
+
+      return NextResponse.redirect(
+        new URL(landingAfterLink({ signupConfirmation }, next), request.url),
+      );
     }
   } else if (!searchParams.has("error")) {
     // `token_hash` — или параметров нет вовсе, и токены, возможно, во

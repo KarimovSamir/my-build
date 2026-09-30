@@ -200,12 +200,20 @@ describe('OrderWorkflowService: действия клиента', () => {
   it('принимает предложение и отдаёт карточку глазами клиента', async () => {
     const { service, transitions, orders } = createStubs();
 
-    await service.acceptOffer(ORDER_ID, OFFER_ID, CLIENT_ID);
+    await service.acceptOffer({
+      orderId: ORDER_ID,
+      offerId: OFFER_ID,
+      seenOfferEditedAt: '2026-09-29T08:00:00.000Z',
+      clientId: CLIENT_ID,
+    });
 
+    // Версия, которую видел клиент, доходит до перехода как есть: сверяет её
+    // машина под блокировкой, а не сервис до неё.
     expect(transitions.apply.mock.calls[0]![0]).toEqual({
       type: OrderEventType.OFFER_ACCEPTED,
       orderId: ORDER_ID,
       offerId: OFFER_ID,
+      seenOfferEditedAt: '2026-09-29T08:00:00.000Z',
     });
     expect(orders.getDetail).toHaveBeenCalledWith(ORDER_ID, { id: CLIENT_ID });
   });

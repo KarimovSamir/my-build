@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { isPendingOffer, MAX_OFFER_REJECTIONS, OfferStatus } from "@/lib/types";
 
-import { offerDate, offerHint } from "./offer-view";
+import { acceptOfferBody, offerDate, offerHint } from "./offer-view";
 
 const ORDER_ID = "9f1f3f4e-0000-4000-8000-000000000002";
 
@@ -88,5 +88,20 @@ describe("offerDate", () => {
       label: "Обновлено",
       iso: EDITED,
     });
+  });
+});
+
+describe("acceptOfferBody", () => {
+  it("передаёт версию предложения, которую видел клиент", () => {
+    expect(acceptOfferBody({ editedAt: "2026-09-30T10:15:00.000Z" })).toEqual({
+      offerEditedAt: "2026-09-30T10:15:00.000Z",
+    });
+  });
+
+  it("у неизменённого предложения передаёт null явно, а не опускает поле", () => {
+    const body = acceptOfferBody({ editedAt: null });
+
+    expect(body).toEqual({ offerEditedAt: null });
+    expect(JSON.stringify(body)).toBe('{"offerEditedAt":null}');
   });
 });

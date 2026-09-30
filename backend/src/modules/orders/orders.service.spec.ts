@@ -35,6 +35,8 @@ import { OrdersService } from './orders.service.js';
 const ORDER_ID = '11111111-1111-4111-8111-111111111111';
 const CLIENT_ID = '22222222-2222-4222-8222-222222222222';
 const COMPANY_ID = '44444444-4444-4444-8444-444444444444';
+const CLIENT = { id: CLIENT_ID, isDemo: false };
+const REAL = { isDemo: false };
 
 const dto: CreateOrderDto = {
   title: 'Ремонт квартиры',
@@ -213,7 +215,7 @@ describe('OrdersService.create', () => {
   it('проверяет файлы до создания заказа', async () => {
     // Порядок — смысл правки 3-Н4: отказ по типу файла не должен требовать
     // отката уже созданной строки.
-    await createService(prisma, files).create(CLIENT_ID, dto, [upload]);
+    await createService(prisma, files).create(CLIENT, dto, [upload]);
 
     expect(files.prepareUploads.mock.invocationCallOrder[0]!).toBeLessThan(
       prisma.order.create.mock.invocationCallOrder[0]!,
@@ -224,14 +226,14 @@ describe('OrdersService.create', () => {
     files.prepareUploads.mockRejectedValueOnce(new Error('недопустимый тип файла'));
 
     await expect(
-      createService(prisma, files).create(CLIENT_ID, dto, [upload]),
+      createService(prisma, files).create(CLIENT, dto, [upload]),
     ).rejects.toThrow('недопустимый тип файла');
 
     expect(prisma.order.create).not.toHaveBeenCalled();
   });
 
   it('прикладывает файлы клиента к нулевой сдаче', async () => {
-    await createService(prisma, files).create(CLIENT_ID, dto, [upload]);
+    await createService(prisma, files).create(CLIENT, dto, [upload]);
 
     expect(files.attachFiles.mock.calls[0]![0]).toMatchObject({
       orderId: ORDER_ID,
@@ -241,7 +243,7 @@ describe('OrdersService.create', () => {
   });
 
   it('без файлов в хранилище не ходит вовсе', async () => {
-    await createService(prisma, files).create(CLIENT_ID, dto, []);
+    await createService(prisma, files).create(CLIENT, dto, []);
 
     expect(files.prepareUploads).not.toHaveBeenCalled();
     expect(files.attachFiles).not.toHaveBeenCalled();
@@ -252,7 +254,7 @@ describe('OrdersService.create', () => {
     files.attachFiles.mockRejectedValueOnce(new Error('хранилище недоступно'));
 
     await expect(
-      createService(prisma, files).create(CLIENT_ID, dto, [upload]),
+      createService(prisma, files).create(CLIENT, dto, [upload]),
     ).rejects.toThrow('хранилище недоступно');
 
     expect(prisma.order.delete).toHaveBeenCalledWith({ where: { id: ORDER_ID } });
@@ -262,12 +264,12 @@ describe('OrdersService.create', () => {
     const realtime = createRealtimeStub();
 
     await createService(prisma, files, createTransitionsStub(prisma), realtime).create(
-      CLIENT_ID,
+      CLIENT,
       dto,
       [upload],
     );
 
-    expect(realtime.orderCreated).toHaveBeenCalledWith(ORDER_ID);
+    expect(realtime.orderCreated).toHaveBeenCalledWith(ORDER_ID, false);
     // После файлов, а не до: заказ с неприложенными файлами компаниям
     // показывать нечего, а откат снёс бы его целиком.
     expect(files.attachFiles.mock.invocationCallOrder[0]!).toBeLessThan(
@@ -281,7 +283,7 @@ describe('OrdersService.create', () => {
 
     await expect(
       createService(prisma, files, createTransitionsStub(prisma), realtime).create(
-        CLIENT_ID,
+        CLIENT,
         dto,
         [upload],
       ),
@@ -298,7 +300,7 @@ describe('OrdersService.create', () => {
     const logged = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
 
     await expect(
-      createService(prisma, files).create(CLIENT_ID, dto, [upload]),
+      createService(prisma, files).create(CLIENT, dto, [upload]),
     ).rejects.toThrow('хранилище недоступно');
 
     expect(logged).toHaveBeenCalledTimes(1);
@@ -306,7 +308,7 @@ describe('OrdersService.create', () => {
   });
 
   it('отдаёт карточку заказа глазами его владельца', async () => {
-    const detail = await createService(prisma, files).create(CLIENT_ID, dto, []);
+    const detail = await createService(prisma, files).create(CLIENT, dto, []);
 
     expect(detail).toMatchObject({ id: ORDER_ID, title: dto.title });
     // Владелец видит себя: у постороннего это поле было бы `null`.
@@ -421,7 +423,7 @@ describe('OrdersService.remove', () => {
   });
 
   it('удаляет заказ и убирает объекты из бакета после удаления строки', async () => {
-    await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING);
+    await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING, REAL);
 
     // Ключи нужно прочитать до удаления: строки `OrderFile` уходят каскадом,
     // и после этого узнать их неоткуда.
@@ -435,7 +437,7 @@ describe('OrdersService.remove', () => {
   });
 
   it('удаляет только из статусов, где это разрешено', async () => {
-    await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING);
+    await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING, REAL);
 
     // Условие в самом `DELETE` — вторая проверка статуса: снимок guard'а
     // мог устареть, пока запрос доходил до сервиса (находка 3-С2).
@@ -453,7 +455,7 @@ describe('OrdersService.remove', () => {
     OrderStatus.COMPLETED,
   ])('заказ в статусе %s не удаляет и в базу не ходит', async (status) => {
     await expect(
-      createService(prisma, files).remove(ORDER_ID, status),
+      createService(prisma, files).remove(ORDER_ID, status, REAL),
     ).rejects.toThrow(ConflictException);
 
     expect(prisma.order.deleteMany).not.toHaveBeenCalled();
@@ -466,7 +468,7 @@ describe('OrdersService.remove', () => {
     prisma.order.deleteMany.mockResolvedValueOnce({ count: 0 });
 
     await expect(
-      createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING),
+      createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING, REAL),
     ).rejects.toThrow(ConflictException);
 
     // Заказ остался жив — его файлы трогать нельзя.
@@ -481,6 +483,7 @@ describe('OrdersService.remove', () => {
     await createService(prisma, files, transitions).remove(
       ORDER_ID,
       OrderStatus.WAITING,
+      REAL,
     );
 
     expect(transitions.lockOrder.mock.invocationCallOrder[0]!).toBeLessThan(
@@ -489,7 +492,7 @@ describe('OrdersService.remove', () => {
   });
 
   it('уведомляет компании, чьи предложения были в игре', async () => {
-    await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING);
+    await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING, REAL);
 
     expect(prisma.offer.findMany.mock.calls[0]![0].where).toEqual({
       orderId: ORDER_ID,
@@ -513,7 +516,7 @@ describe('OrdersService.remove', () => {
 
     prisma.offer.findMany.mockResolvedValueOnce([]);
 
-    await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING);
+    await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING, REAL);
 
     expect(prisma.notification.createManyAndReturn).not.toHaveBeenCalled();
   });
@@ -521,7 +524,7 @@ describe('OrdersService.remove', () => {
   it('пишет уведомления после удаления заказа, а не до', async () => {
     // Наоборот нельзя: внешний ключ Notification.orderId ещё указывал бы
     // на живой заказ, и SetNull обнулил бы его тем же удалением.
-    await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING);
+    await createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING, REAL);
 
     expect(prisma.order.deleteMany.mock.invocationCallOrder[0]!).toBeLessThan(
       prisma.notification.createManyAndReturn.mock.invocationCallOrder[0]!,
@@ -532,7 +535,7 @@ describe('OrdersService.remove', () => {
     prisma.order.deleteMany.mockResolvedValueOnce({ count: 0 });
 
     await expect(
-      createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING),
+      createService(prisma, files).remove(ORDER_ID, OrderStatus.WAITING, REAL),
     ).rejects.toThrow(ConflictException);
 
     expect(prisma.notification.createManyAndReturn).not.toHaveBeenCalled();
@@ -544,6 +547,7 @@ describe('OrdersService.remove', () => {
     await createService(prisma, files, createTransitionsStub(prisma), realtime).remove(
       ORDER_ID,
       OrderStatus.WAITING,
+      REAL,
     );
 
     expect(realtime.orderDeleted.mock.calls[0]![0]).toBe(ORDER_ID);
@@ -562,6 +566,7 @@ describe('OrdersService.remove', () => {
       createService(prisma, files, createTransitionsStub(prisma), realtime).remove(
         ORDER_ID,
         OrderStatus.WAITING,
+        REAL,
       ),
     ).rejects.toThrow(ConflictException);
 

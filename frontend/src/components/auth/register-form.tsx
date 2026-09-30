@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Field, FormError, FormSuccess } from "@/components/form-parts";
-import { PasswordInput } from "@/components/password-input";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -15,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { getHomeHref } from "@/lib/navigation";
-import { MIN_PASSWORD_LENGTH, validateNewPassword } from "@/lib/password-form";
+import { throwawaySignupPassword } from "@/lib/password-form";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   isValidPhone,
@@ -37,8 +36,9 @@ import {
  * на слишком длинное значение исключением. Здесь они стоят, чтобы человек
  * упёрся в границу поля, а не в ошибку регистрации.
  *
- * Требования к паролю — общие со сбросом и настройками
- * (`lib/password-form.ts`).
+ * Пароля в форме нет: его задают по ссылке из письма, после подтверждения
+ * адреса (`throwawaySignupPassword` — почему). `/callback` ведёт такую ссылку
+ * прямо на форму пароля.
  */
 
 export function RegisterForm() {
@@ -54,7 +54,6 @@ export function RegisterForm() {
 
     const form = new FormData(event.currentTarget);
     const email = String(form.get("email")).trim();
-    const password = String(form.get("password"));
     const phone = text(form, "phone") ?? "";
 
     // Тот же формат проверяет `PATCH /profile`: правило одно, в `shared/`.
@@ -63,18 +62,11 @@ export function RegisterForm() {
       return;
     }
 
-    const issue = validateNewPassword(password, String(form.get("passwordConfirm")));
-
-    if (issue) {
-      setError(issue.message);
-      return;
-    }
-
     setPending(true);
 
     const { data, error: authError } = await getSupabaseBrowserClient().auth.signUp({
       email,
-      password,
+      password: throwawaySignupPassword(),
       options: {
         // Ссылка из письма приведёт сюда, а обработчик обменяет её на сессию.
         emailRedirectTo: `${window.location.origin}/callback`,
@@ -96,7 +88,9 @@ export function RegisterForm() {
       return;
     }
 
-    // Сессия приходит сразу, только если подтверждение email выключено.
+    // Сессия приходит сразу, только если подтверждение email в проекте
+    // выключено (у нас оно включено: ТЗ §5). Пароля человек тогда не знает —
+    // зайти снова он сможет через «Забыли пароль».
     if (data.session) {
       router.replace(getHomeHref(role));
       router.refresh();
@@ -111,7 +105,7 @@ export function RegisterForm() {
     return (
       <FormSuccess>
         Мы отправили письмо на <strong>{emailSent}</strong>. Перейдите по ссылке из
-        письма, чтобы подтвердить адрес и войти.
+        письма: она подтвердит адрес, и вы сразу зададите пароль для входа.
       </FormSuccess>
     );
   }
@@ -201,26 +195,6 @@ export function RegisterForm() {
         placeholder="you@example.com"
         required
       />
-
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field
-          id="password"
-          name="password"
-          label="Пароль"
-          inputAs={PasswordInput}
-          autoComplete="new-password"
-          hint={`Минимум ${MIN_PASSWORD_LENGTH} символов`}
-          required
-        />
-        <Field
-          id="passwordConfirm"
-          name="passwordConfirm"
-          label="Пароль ещё раз"
-          inputAs={PasswordInput}
-          autoComplete="new-password"
-          required
-        />
-      </div>
 
       {error ? <FormError>{error}</FormError> : null}
 

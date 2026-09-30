@@ -13,6 +13,7 @@ import {
   OfferStatus,
   OrderStatus,
   Role,
+  UPLOAD_REQUEST_OVERHEAD_BYTES,
 } from '@mybuild/shared';
 
 import {
@@ -153,6 +154,7 @@ function createPrismaStub(overrides: {
         return {
           clientId: order.clientId,
           status: order.status ?? OrderStatus.IN_PROGRESS,
+          client: { email: 'client@example.test' },
           offers: order.offers
             .filter((offer) => offer.companyId === filter.companyId)
             .map((offer) => ({ status: offer.status })),
@@ -614,6 +616,66 @@ describe('FilesService.attachFiles', () => {
   });
 });
 
+describe('FilesService.assertRoomForUpload', () => {
+  const MB = 1024 * 1024;
+
+  function check(
+    usage: { usedBytes?: number; clientBytes?: number; totalBytes?: number },
+    params: { orderId: string | null; declaredBytes: number },
+  ) {
+    const prisma = createPrismaStub(usage);
+
+    return {
+      prisma,
+      result: createService(prisma, createStorageStub()).assertRoomForUpload({
+        clientId: CLIENT_ID,
+        uploader: FileOwnerType.COMPANY,
+        ...params,
+      }),
+    };
+  }
+
+  it('запрос, файлы которого заведомо не влезут в остаток заказа, отбивается до разбора тела', async () => {
+    const { result } = check(
+      { usedBytes: 45 * MB },
+      { orderId: ORDER_ID, declaredBytes: 10 * MB + UPLOAD_REQUEST_OVERHEAD_BYTES },
+    );
+
+    await expect(result).rejects.toThrow(BadRequestException);
+  });
+
+  it('запас на поля формы из длины вычитается: запрос у самой границы проходит', async () => {
+    // Сколько в нём файлов, станет известно только после разбора — проверит
+    // обычная квота.
+    const { result } = check(
+      { usedBytes: 45 * MB },
+      { orderId: ORDER_ID, declaredBytes: 5 * MB + UPLOAD_REQUEST_OVERHEAD_BYTES },
+    );
+
+    await expect(result).resolves.toBeUndefined();
+  });
+
+  it('новый заказ считается пустым, но квоту заказчика и сервиса проверяет', async () => {
+    const { result, prisma } = check(
+      { usedBytes: 0, clientBytes: MAX_CLIENT_FILES_BYTES - MB, totalBytes: 0 },
+      { orderId: null, declaredBytes: 5 * MB + UPLOAD_REQUEST_OVERHEAD_BYTES },
+    );
+
+    await expect(result).rejects.toThrow(BadRequestException);
+    // Заказа ещё нет — искать его незачем.
+    expect(prisma.order.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('заполненный сервис — 507, как и у обычной проверки', async () => {
+    const { result } = check(
+      { usedBytes: 0, clientBytes: 0, totalBytes: MAX_TOTAL_FILES_BYTES },
+      { orderId: ORDER_ID, declaredBytes: 2 * MB + UPLOAD_REQUEST_OVERHEAD_BYTES },
+    );
+
+    await expect(result).rejects.toMatchObject({ status: HttpStatus.INSUFFICIENT_STORAGE });
+  });
+});
+
 describe('FilesService.prepareUploads', () => {
   it('не пропускает пачку, если хоть один файл не прошёл проверку', async () => {
     const storage = createStorageStub();
@@ -644,9 +706,17 @@ describe('FilesService.assertFileAccess', () => {
   const accepted = { companyId: COMPANY_ID, status: OfferStatus.ACCEPTED };
 
   /** Компания и посторонний клиент — разница между ними только в роли. */
-  const company = { id: COMPANY_ID, role: Role.COMPANY };
-  const stranger = { id: STRANGER_ID, role: Role.COMPANY };
-  const client = { id: CLIENT_ID, role: Role.CLIENT };
+  const company = { id: COMPANY_ID, role: Role.COMPANY, isDemo: false };
+  const stranger = { id: STRANGER_ID, role: Role.COMPANY, isDemo: false };
+  const client = { id: CLIENT_ID, role: Role.CLIENT, isDemo: false };
+
+  it('демо-компании не открыто задание настоящего клиента, даже пока заказ ищет исполнителя', async () => {
+    const service = serviceFor({ clientId: CLIENT_ID, status: OrderStatus.WAITING, offers: [] });
+
+    await expect(
+      service.assertFileAccess(ORDER_ID, { ...stranger, isDemo: true }, FileOwnerType.CLIENT),
+    ).rejects.toThrow(ForbiddenException);
+  });
 
   it('пускает клиента заказа к любому файлу', async () => {
     const service = serviceFor({ clientId: CLIENT_ID, offers: [] });
@@ -721,7 +791,7 @@ describe('FilesService.assertFileAccess', () => {
         offers: [],
       }).assertFileAccess(
         ORDER_ID,
-        { id: STRANGER_ID, role: Role.CLIENT },
+        { id: STRANGER_ID, role: Role.CLIENT, isDemo: false },
         FileOwnerType.CLIENT,
       ),
     ).rejects.toThrow(ForbiddenException);
@@ -736,7 +806,7 @@ describe('FilesService.assertFileAccess', () => {
         offers: [],
       }).assertFileAccess(
         ORDER_ID,
-        { id: STRANGER_ID, role: null },
+        { id: STRANGER_ID, role: null, isDemo: false },
         FileOwnerType.CLIENT,
       ),
     ).rejects.toThrow(ForbiddenException);

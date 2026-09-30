@@ -35,6 +35,19 @@ export function offerDate(offer: Pick<OfferDto, "createdAt" | "editedAt">): Offe
     : { label: "Обновлено", iso: offer.editedAt };
 }
 
+/**
+ * Тело `POST /orders/:id/accept-offer/:offerId`: какую версию предложения
+ * клиент принимает. Сервер сверяет её со строкой под блокировкой и на правку,
+ * пришедшую посреди решения, отвечает 409 — вместо сделки по цене, которой
+ * клиент не видел. `null` значит «условия не меняли с отправки» и тоже
+ * сверяется, а не пропускает проверку.
+ */
+export function acceptOfferBody(offer: Pick<OfferDto, "editedAt">): {
+  offerEditedAt: IsoDateString | null;
+} {
+  return { offerEditedAt: offer.editedAt };
+}
+
 export interface OfferHint {
   text: string;
   link?: { href: string; label: string };

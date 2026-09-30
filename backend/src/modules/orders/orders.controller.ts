@@ -45,6 +45,7 @@ import {
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { ListOrdersQueryDto } from './dto/list-orders.dto.js';
 import { OrdersService } from './orders.service.js';
+import { UploadAdmissionGuard } from './upload-admission.guard.js';
 
 /**
  * Заказы (ТЗ §5).
@@ -67,9 +68,10 @@ export class OrdersController {
    */
   @Post()
   @Roles(Role.CLIENT)
-  // `UploadSizeGuard` — до интерсепторов: заведомо неподъёмный запрос
-  // отбивается по Content-Length, не записав ни байта.
-  @UseGuards(ThrottleGuard, UploadSizeGuard)
+  // `UploadSizeGuard` и `UploadAdmissionGuard` — до интерсепторов: заведомо
+  // неподъёмный запрос, не влезающий в квоту или пришедший, когда приём
+  // занят, отбивается по Content-Length, не записав ни байта.
+  @UseGuards(ThrottleGuard, UploadSizeGuard, UploadAdmissionGuard)
   @Throttle({ limit: 20, ttl: 60_000 })
   @UseInterceptors(
     TempUploadCleanupInterceptor,
@@ -80,7 +82,7 @@ export class OrdersController {
     @Body() dto: CreateOrderDto,
     @UploadedFiles() files: MulterFile[] | undefined,
   ): Promise<OrderDetail> {
-    return this.orders.create(user.id, dto, toUploads(files));
+    return this.orders.create(user, dto, toUploads(files));
   }
 
   /** Свои заказы: фильтр по статусу, поиск, пагинация (ТЗ §4.1). */
@@ -122,7 +124,11 @@ export class OrdersController {
   @OrderAccess(OrderAccessMode.OWNER)
   @Throttle({ limit: 30, ttl: 60_000 })
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@OrderAccessCtx() access: OrderAccessContext): Promise<void> {
-    return this.orders.remove(access.orderId, access.status);
+  remove(
+    @CurrentUser() user: AuthUser,
+    @OrderAccessCtx() access: OrderAccessContext,
+  ): Promise<void> {
+    // Удалить может только владелец, поэтому мир заказа — мир того, кто удаляет.
+    return this.orders.remove(access.orderId, access.status, user);
   }
 }

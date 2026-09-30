@@ -180,6 +180,7 @@ describe('FilesService (e2e)', () => {
     const { url, originalName } = await files.getDownloadUrl(file.id, {
       id: clientId,
       role: Role.CLIENT,
+      isDemo: false,
     });
     expect(originalName).toBe('План квартиры.pdf');
 
@@ -201,8 +202,8 @@ describe('FilesService (e2e)', () => {
   });
 
   it('исполнитель получает всё, посторонняя компания — только задание клиента', async () => {
-    const executor = { id: executorId, role: Role.COMPANY };
-    const outsider = { id: outsiderId, role: Role.COMPANY };
+    const executor = { id: executorId, role: Role.COMPANY, isDemo: false };
+    const outsider = { id: outsiderId, role: Role.COMPANY, isDemo: false };
 
     const task = await prisma.orderFile.findFirstOrThrow({
       where: { orderId, ownerType: FileOwnerType.CLIENT },
@@ -250,7 +251,7 @@ describe('FilesService (e2e)', () => {
     });
 
     await expect(
-      files.getDownloadUrl(task.id, { id: outsiderId, role: Role.CLIENT }),
+      files.getDownloadUrl(task.id, { id: outsiderId, role: Role.CLIENT, isDemo: false }),
     ).rejects.toMatchObject({ status: 403 });
   });
 
@@ -259,6 +260,7 @@ describe('FilesService (e2e)', () => {
       files.getDownloadUrl('00000000-0000-0000-0000-000000000000', {
         id: clientId,
         role: Role.CLIENT,
+        isDemo: false,
       }),
     ).rejects.toMatchObject({ status: 404 });
   });

@@ -7,10 +7,12 @@ import {
   type Paginated,
 } from '@mybuild/shared';
 
+import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import { Throttle } from '../../common/decorators/throttle.decorator.js';
 import { SearchQueryDto } from '../../common/dto/pagination.dto.js';
 import { ThrottleGuard } from '../../common/guards/throttle.guard.js';
+import type { AuthUser } from '../auth/auth-user.js';
 import { ContractorsService } from './contractors.service.js';
 
 /**
@@ -34,13 +36,19 @@ export class ContractorsController {
 
   /** Список компаний с поиском по названию и городу — без контактов. */
   @Get()
-  list(@Query() query: SearchQueryDto): Promise<Paginated<ContractorListItem>> {
-    return this.contractors.list(query);
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query() query: SearchQueryDto,
+  ): Promise<Paginated<ContractorListItem>> {
+    return this.contractors.list(user, query);
   }
 
   /** Карточка компании: название, город, контакты, число завершённых заказов. */
   @Get(':id')
-  getById(@Param('id') contractorId: string): Promise<ContractorCard> {
-    return this.contractors.getById(contractorId);
+  getById(
+    @CurrentUser() user: AuthUser,
+    @Param('id') contractorId: string,
+  ): Promise<ContractorCard> {
+    return this.contractors.getById(user, contractorId);
   }
 }

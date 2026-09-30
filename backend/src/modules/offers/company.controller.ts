@@ -41,7 +41,7 @@ export class CompanyController {
     @CurrentUser() user: AuthUser,
     @Query() query: SearchQueryDto,
   ): Promise<Paginated<AvailableOrderItem>> {
-    return this.offers.listAvailableOrders(user.id, query);
+    return this.offers.listAvailableOrders(user, query);
   }
 
   /** Свои предложения по статусам. */

@@ -10,6 +10,7 @@ import { Reflector } from '@nestjs/core';
 import { Role, isExecutorOffer, type OfferStatus, type OrderStatus } from '@mybuild/shared';
 
 import type { RequestWithUser } from '../../modules/auth/auth-user.js';
+import { isDemoEmail } from '../demo-world.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import {
   ORDER_ACCESS_KEY,
@@ -79,6 +80,7 @@ export class OwnershipGuard implements CanActivate {
       select: {
         clientId: true,
         status: true,
+        client: { select: { email: true } },
         offers: {
           where: { companyId: request.user.id },
           select: { id: true, status: true },
@@ -102,10 +104,18 @@ export class OwnershipGuard implements CanActivate {
     // `EXECUTOR` — единственный режим, куда владелец заказа не проходит:
     // сдавать работу и уточнять площадь может только та компания, чьё
     // предложение приняли.
+    //
+    // Чужому миру заказ не показывается вовсе, в любом режиме: демо-компания
+    // не видит заказов настоящих клиентов, настоящая — демо-клиента
+    // (`common/demo-world.ts`). Своё предложение этого не меняет — такие
+    // строки остались только с тех пор, когда границы не было.
+    const sameWorld = isDemoEmail(order.client.email) === request.user.isDemo;
+
     const allowed =
       mode === OrderAccessMode.EXECUTOR
-        ? ownOffer !== null && isExecutorOffer(ownOffer.status)
-        : isOwner || (mode === OrderAccessMode.VIEWER && request.user.role === Role.COMPANY);
+        ? sameWorld && ownOffer !== null && isExecutorOffer(ownOffer.status)
+        : isOwner ||
+          (sameWorld && mode === OrderAccessMode.VIEWER && request.user.role === Role.COMPANY);
 
     if (!allowed) {
       throw new NotFoundException('Заказ не найден');

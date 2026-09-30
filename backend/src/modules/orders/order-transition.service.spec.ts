@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  DEMO_EMAILS,
   EXECUTOR_OFFER_STATUSES,
   NotificationType,
   OfferStatus,
@@ -11,6 +12,7 @@ import {
 import { Prisma } from '../../generated/prisma/client.js';
 import type { PrismaService } from '../../prisma/prisma.service.js';
 import {
+  OfferChangedError,
   OfferExpiredError,
   OfferFinallyRejectedError,
   OrderEventType,
@@ -47,6 +49,10 @@ interface StubOffer {
   rejectionCount?: number;
   /** Срок в предложении. По умолчанию — заведомо будущий `DEADLINE`. */
   proposedDeadline?: Date;
+  /** Когда компания переписала условия. По умолчанию — не переписывала. */
+  editedAt?: Date;
+  /** Адрес компании. По умолчанию — не демо. */
+  companyEmail?: string;
 }
 
 function orderRow(status: OrderStatus) {
@@ -88,6 +94,8 @@ function matches(offer: StubOffer, where: OfferWhere): boolean {
 function createPrismaStub(options: {
   order?: ReturnType<typeof orderRow> | null;
   offers?: StubOffer[];
+  /** Адрес клиента заказа. По умолчанию — не демо. */
+  clientEmail?: string;
 }) {
   const order = options.order === undefined ? orderRow(OrderStatus.WAITING) : options.order;
   const offers = options.offers ?? [];
@@ -98,8 +106,12 @@ function createPrismaStub(options: {
     status: offer.status,
     proposedPrice: new Prisma.Decimal(offer.proposedPrice),
     proposedDeadline: offer.proposedDeadline ?? DEADLINE,
+    editedAt: offer.editedAt ?? null,
     rejectionCount: offer.rejectionCount ?? 0,
-    company: { companyName: offer.companyName ?? 'ООО «Тест»' },
+    company: {
+      companyName: offer.companyName ?? 'ООО «Тест»',
+      email: offer.companyEmail ?? 'company@example.test',
+    },
   });
 
   const tx = {
@@ -124,6 +136,11 @@ function createPrismaStub(options: {
           offers.filter((offer) => matches(offer, where)).length,
       ),
       updateMany: vi.fn(async (_args: { where: unknown; data: unknown }) => ({ count: 1 })),
+    },
+    user: {
+      findUnique: vi.fn(async (_args: unknown) => ({
+        email: options.clientEmail ?? 'client@example.test',
+      })),
     },
     notification: {
       deleteMany: vi.fn(async (_args: unknown) => ({ count: 0 })),
@@ -196,6 +213,7 @@ describe('OrderTransitionService: поиск заказа и предложен�
         type: OrderEventType.OFFER_ACCEPTED,
         orderId: ORDER_ID,
         offerId: 'not-a-uuid',
+        seenOfferEditedAt: null,
       }),
     ).rejects.toThrow(NotFoundException);
 
@@ -209,6 +227,7 @@ describe('OrderTransitionService: поиск заказа и предложен�
       type: OrderEventType.OFFER_ACCEPTED,
       orderId: ORDER_ID,
       offerId: OFFER_A,
+      seenOfferEditedAt: null,
     });
 
     // FOR UPDATE обязан идти первым: иначе два одновременных перехода
@@ -327,6 +346,7 @@ describe('OrderTransitionService: поиск заказа и предложен�
       type: OrderEventType.OFFER_ACCEPTED,
       orderId: ORDER_ID,
       offerId: OFFER_A,
+      seenOfferEditedAt: null,
     });
 
     expect(prisma.tx.offer.findFirst.mock.calls[0]![0].where).not.toHaveProperty('status');
@@ -339,6 +359,7 @@ describe('OrderTransitionService: поиск заказа и предложен�
       type: OrderEventType.OFFER_ACCEPTED,
       orderId: ORDER_ID,
       offerId: OFFER_A,
+      seenOfferEditedAt: null,
     });
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
@@ -358,6 +379,7 @@ describe('OrderTransitionService: запись эффектов', () => {
       type: OrderEventType.OFFER_ACCEPTED,
       orderId: ORDER_ID,
       offerId: OFFER_A,
+      seenOfferEditedAt: null,
     });
 
     expect(applied.nextStatus).toBe(OrderStatus.IN_PROGRESS);
@@ -385,6 +407,7 @@ describe('OrderTransitionService: запись эффектов', () => {
       type: OrderEventType.OFFER_ACCEPTED,
       orderId: ORDER_ID,
       offerId: OFFER_A,
+      seenOfferEditedAt: null,
     });
 
     expect(prisma.tx.notification.createManyAndReturn).toHaveBeenCalledTimes(1);
@@ -407,6 +430,7 @@ describe('OrderTransitionService: запись эффектов', () => {
       type: OrderEventType.OFFER_ACCEPTED,
       orderId: ORDER_ID,
       offerId: OFFER_A,
+      seenOfferEditedAt: null,
     });
 
     expect(applied.offerUpdates).toEqual([
@@ -764,8 +788,105 @@ describe('OrderTransitionService: статус предложения до за�
         type: OrderEventType.OFFER_ACCEPTED,
         orderId: ORDER_ID,
         offerId: OFFER_A,
+        seenOfferEditedAt: null,
       }),
     ).rejects.toBeInstanceOf(OfferExpiredError);
     expect(prisma.tx.order.update).not.toHaveBeenCalled();
+  });
+
+  describe('принятие предложения, изменённого после того, как клиент его открыл', () => {
+    const EDITED = new Date('2026-09-29T08:00:00.000Z');
+
+    const stub = () =>
+      createPrismaStub({
+        order: orderRow(OrderStatus.AWAITING_CONFIRMATION),
+        offers: [
+          {
+            id: OFFER_A,
+            companyId: COMPANY_A,
+            status: OfferStatus.SENT,
+            proposedPrice: '9500.00',
+            editedAt: EDITED,
+          },
+        ],
+      });
+
+    it('версия из запроса сверяется со строкой под блокировкой: разошлись — 409', async () => {
+      const prisma = stub();
+
+      await expect(
+        createService(prisma).apply({
+          type: OrderEventType.OFFER_ACCEPTED,
+          orderId: ORDER_ID,
+          offerId: OFFER_A,
+          seenOfferEditedAt: null,
+        }),
+      ).rejects.toBeInstanceOf(OfferChangedError);
+      expect(prisma.tx.order.update).not.toHaveBeenCalled();
+      expect(prisma.tx.offer.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('та же версия — сделка по цене из строки', async () => {
+      const prisma = stub();
+
+      const applied = await createService(prisma).apply({
+        type: OrderEventType.OFFER_ACCEPTED,
+        orderId: ORDER_ID,
+        offerId: OFFER_A,
+        seenOfferEditedAt: EDITED.toISOString(),
+      });
+
+      expect(applied.nextStatus).toBe(OrderStatus.IN_PROGRESS);
+    });
+  });
+
+  describe('принятие через границу демо', () => {
+    const acceptWith = (clientEmail: string, companyEmail: string) => {
+      const prisma = createPrismaStub({
+        order: orderRow(OrderStatus.AWAITING_CONFIRMATION),
+        clientEmail,
+        offers: [
+          {
+            id: OFFER_A,
+            companyId: COMPANY_A,
+            status: OfferStatus.SENT,
+            proposedPrice: '9500.00',
+            companyEmail,
+          },
+        ],
+      });
+
+      const result = createService(prisma).apply({
+        type: OrderEventType.OFFER_ACCEPTED,
+        orderId: ORDER_ID,
+        offerId: OFFER_A,
+        seenOfferEditedAt: null,
+      });
+
+      return { prisma, result };
+    };
+
+    it('настоящий клиент не принимает предложение демо-компании — 404 и ни одной записи', async () => {
+      const { prisma, result } = acceptWith('owner@example.test', DEMO_EMAILS.stroygrad);
+
+      await expect(result).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.tx.order.update).not.toHaveBeenCalled();
+      expect(prisma.tx.offer.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('демо-клиент не принимает предложение настоящей компании', async () => {
+      const { result } = acceptWith(DEMO_EMAILS.client, 'real@company.test');
+
+      await expect(result).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('внутри одного мира сделка проходит — и у демо, и у настоящих', async () => {
+      await expect(
+        acceptWith(DEMO_EMAILS.client, DEMO_EMAILS.remont).result,
+      ).resolves.toMatchObject({ nextStatus: OrderStatus.IN_PROGRESS });
+      await expect(
+        acceptWith('owner@example.test', 'real@company.test').result,
+      ).resolves.toMatchObject({ nextStatus: OrderStatus.IN_PROGRESS });
+    });
   });
 });

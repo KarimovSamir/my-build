@@ -7,9 +7,11 @@ import {
   FILE_EXTENSION_MIME,
   MAX_FILES_PER_REQUEST,
   MAX_FILE_SIZE_BYTES,
+  MAX_ORDER_FILES_BYTES,
   MAX_PAGE,
   MAX_PAGE_SIZE,
   MAX_UPLOAD_REQUEST_BYTES,
+  UPLOAD_REQUEST_OVERHEAD_BYTES,
   cleanFileName,
   fileExtension,
 } from './api.js';
@@ -77,11 +79,11 @@ describe('таблица расширений', () => {
 });
 
 describe('лимиты', () => {
-  it('потолок запроса не меньше пачки файлов предельного размера', () => {
-    // Иначе `UploadSizeGuard` отбивал бы запрос, разрешённый правилами ТЗ.
-    expect(MAX_UPLOAD_REQUEST_BYTES).toBeGreaterThanOrEqual(
-      MAX_FILES_PER_REQUEST * MAX_FILE_SIZE_BYTES,
-    );
+  it('потолок запроса пропускает всю квоту заказа, но не больше неё', () => {
+    // Меньше — `UploadSizeGuard` отбивал бы законную загрузку в пустой заказ;
+    // больше — временный диск принимал бы то, что квота всё равно отклонит.
+    expect(MAX_UPLOAD_REQUEST_BYTES).toBe(MAX_ORDER_FILES_BYTES + UPLOAD_REQUEST_OVERHEAD_BYTES);
+    expect(MAX_UPLOAD_REQUEST_BYTES).toBeLessThan(MAX_FILES_PER_REQUEST * MAX_FILE_SIZE_BYTES);
   });
 
   it('размер страницы по умолчанию не больше потолка', () => {
