@@ -33,13 +33,28 @@ export function AuthSwitch({ children }: { children: ReactNode }) {
 }
 
 /** Ссылка на соседний экран группы — терракотой и полужирным, как на макете. */
+const AUTH_LINK_CLASS =
+  "text-primary focus-visible:ring-ring rounded-sm font-semibold hover:underline focus-visible:ring-2 focus-visible:outline-none";
+
 export function AuthLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Link
-      href={href}
-      className="text-primary focus-visible:ring-ring rounded-sm font-semibold hover:underline focus-visible:ring-2 focus-visible:outline-none"
-    >
+    <Link href={href} className={AUTH_LINK_CLASS}>
       {children}
     </Link>
+  );
+}
+
+/** Выглядит как `AuthLink`, но никуда не ведёт — только действие на месте. */
+export function AuthLinkButton({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button type="button" onClick={onClick} className={AUTH_LINK_CLASS}>
+      {children}
+    </button>
   );
 }

@@ -5,7 +5,6 @@ import {
   PASSWORD_CHANGE_WINDOW_MINUTES,
   canChangePasswordNow,
   emptyPasswordForm,
-  throwawaySignupPassword,
   validateNewPassword,
   validatePasswordForm,
 } from "./password-form";
@@ -93,23 +92,5 @@ describe("canChangePasswordNow", () => {
 
   it("время входа неизвестно — нельзя", () => {
     expect(canChangePasswordNow(null, now)).toBe(false);
-  });
-});
-
-describe("throwawaySignupPassword", () => {
-  it("длинный, из безопасного алфавита и не длиннее, чем принимает Supabase", () => {
-    const password = throwawaySignupPassword();
-
-    expect(password).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(password.length).toBeGreaterThanOrEqual(MIN_PASSWORD_LENGTH);
-    // bcrypt, которым GoTrue хеширует пароль, учитывает только первые 72 байта.
-    expect(password.length).toBeLessThanOrEqual(72);
-  });
-
-  it("каждый раз новый: берётся из криптографического генератора", () => {
-    expect(throwawaySignupPassword()).not.toBe(throwawaySignupPassword());
-
-    const fixed = throwawaySignupPassword((bytes) => bytes.fill(255));
-    expect(fixed).toBe("_".repeat(42) + "8");
   });
 });

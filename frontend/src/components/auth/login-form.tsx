@@ -2,16 +2,18 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 import { DEMO_PASSWORD, type DemoAccount } from "@/lib/types";
 
-import { AuthLink, AuthSwitch } from "@/components/auth/auth-header";
+import { AuthLink, AuthLinkButton, AuthSwitch } from "@/components/auth/auth-header";
 import { DemoAccounts } from "@/components/auth/demo-accounts";
 import { Field, FormError } from "@/components/form-parts";
 import { PasswordInput } from "@/components/password-input";
 import { Button } from "@/components/ui/button";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { resolveAfterAuthHref } from "@/lib/auth-redirect";
+import { PASSWORD_RECOVERY_UNAVAILABLE } from "@/lib/demo";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 /**
@@ -86,7 +88,9 @@ export function LoginForm({ next }: { next: string }) {
             id="password"
             name="password"
             label="Пароль"
-            labelAside={<AuthLink href="/forgot-password">Забыли пароль?</AuthLink>}
+            labelAside={
+              <AuthLinkButton onClick={showRecoveryUnavailable}>Забыли пароль?</AuthLinkButton>
+            }
             inputAs={PasswordInput}
             autoComplete="current-password"
             value={password}
@@ -110,4 +114,18 @@ export function LoginForm({ next }: { next: string }) {
       <DemoAccounts onPick={handleDemo} pending={pending} />
     </div>
   );
+}
+
+/**
+ * Вместо перехода на «Забыли пароль» — плашка, что в демо это недоступно
+ * (`PASSWORD_RECOVERY_UNAVAILABLE`). Закрывается крестиком или сама.
+ * Постоянный `id`: повторные нажатия обновляют ту же плашку, а не копят стопку.
+ */
+function showRecoveryUnavailable(): void {
+  toast.info(PASSWORD_RECOVERY_UNAVAILABLE.title, {
+    id: "password-recovery-unavailable",
+    description: PASSWORD_RECOVERY_UNAVAILABLE.description,
+    duration: PASSWORD_RECOVERY_UNAVAILABLE.durationMs,
+    closeButton: true,
+  });
 }

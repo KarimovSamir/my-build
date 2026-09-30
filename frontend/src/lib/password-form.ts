@@ -1,8 +1,7 @@
 /**
- * Правила нового пароля — одни на оба места, где его вводят: установка
- * по ссылке из письма (после регистрации и при восстановлении) и смена
- * в настройках (ТЗ §5). Регистрация пароль не спрашивает — см.
- * `throwawaySignupPassword`.
+ * Правила нового пароля — одни на все три места, где его вводят:
+ * регистрация, восстановление по ссылке из письма и смена в настройках
+ * (ТЗ §5).
  *
  * Пароли проверяет и хранит Supabase Auth, backend о них не знает вовсе.
  * Здесь только то, что видит пользователь до отправки: длина, совпадение
@@ -33,29 +32,6 @@ export function canChangePasswordNow(signedInAt: number | null, now: number): bo
   return (
     signedInAt !== null && now - signedInAt < PASSWORD_CHANGE_WINDOW_MINUTES * 60_000
   );
-}
-
-/**
- * Пароль, с которым уходит `signUp`, — случайный и никому не известный.
- *
- * GoTrue без пароля регистрацию по email не принимает, но пароль, заданный
- * до подтверждения адреса, база всё равно стирает в момент подтверждения
- * (триггер `on_auth_user_signup_confirmed`): кто его задал, неизвестно —
- * адрес ещё никто не доказал, и так чужой адрес занимали заранее со своим
- * паролем. Спрашивать пароль в форме регистрации поэтому незачем: человек
- * задаёт его по ссылке из письма.
- *
- * 32 случайных байта в base64url — буквы обоих регистров, цифры и `-`/`_`,
- * заведомо длиннее `MIN_PASSWORD_LENGTH`.
- */
-export function throwawaySignupPassword(
-  random: (bytes: Uint8Array<ArrayBuffer>) => Uint8Array<ArrayBuffer> = (bytes) =>
-    crypto.getRandomValues(bytes),
-): string {
-  const bytes = random(new Uint8Array(32));
-  const base64 = btoa(String.fromCharCode(...bytes));
-
-  return base64.replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
 /** Поле, в котором ошибка, и текст для человека. */
