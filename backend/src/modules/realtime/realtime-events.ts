@@ -78,16 +78,13 @@ export interface RealtimeBroadcast {
   messages: RealtimeMessage[];
 }
 
-/**
- * Новый заказ — в ленту компаний (ТЗ §8), причём только мира его клиента:
- * `demo` — заказ демо-клиента. Записей в БД событие не создаёт.
- */
-export function orderCreatedBroadcast(orderId: string, demo: boolean): RealtimeBroadcast {
+/** Новый заказ — в ленту компаний (ТЗ §8). Записей в БД событие не создаёт. */
+export function orderCreatedBroadcast(orderId: string): RealtimeBroadcast {
   return {
     evictions: [],
     messages: [
       {
-        rooms: [socketRooms.companyFeed(demo)],
+        rooms: [socketRooms.companyFeed()],
         event: socketEvents.orderCreated,
         payload: { orderId },
       },
@@ -139,7 +136,7 @@ export function transitionBroadcast(
     // при ближайшем перечитывании, а без события строка висела бы до него,
     // и предложение по ней давало бы 409.
     if (acceptsOffers(applied.fromStatus) !== acceptsOffers(applied.nextStatus)) {
-      rooms.push(socketRooms.companyFeed(applied.clientIsDemo));
+      rooms.push(socketRooms.companyFeed());
     }
 
     messages.push({ rooms, event: socketEvents.orderStatusChanged, payload: { orderId } });
@@ -202,7 +199,6 @@ export function orderUpdateBroadcast(
 export function orderDeletedBroadcast(
   orderId: string,
   notifications: NotificationTarget[],
-  demo: boolean,
 ): RealtimeBroadcast {
   const room = socketRooms.order(orderId);
 
@@ -210,7 +206,7 @@ export function orderDeletedBroadcast(
     evictions: [{ members: room, room }],
     messages: [
       {
-        rooms: [socketRooms.companyFeed(demo)],
+        rooms: [socketRooms.companyFeed()],
         event: socketEvents.orderStatusChanged,
         payload: { orderId },
       },

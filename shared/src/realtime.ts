@@ -20,12 +20,8 @@ export const socketRooms = {
   user: (userId: string) => `user:${userId}`,
   /** Участники конкретного заказа. */
   order: (orderId: string) => `order:${orderId}`,
-  /**
-   * Компании, подписанные на ленту доступных заказов. У демо-компаний лента
-   * своя: заказы демо-клиента и настоящих клиентов друг другу не показываются
-   * (`backend/src/common/demo-world.ts`), и сигналы о них тоже не смешиваются.
-   */
-  companyFeed: (demo: boolean) => (demo ? 'company-feed:demo' : 'company-feed'),
+  /** Компании, подписанные на ленту доступных заказов. */
+  companyFeed: () => 'company-feed',
 } as const;
 
 /** События, которые эмитит backend (ТЗ §8). */

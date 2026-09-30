@@ -25,7 +25,6 @@ import {
 } from '@mybuild/shared';
 
 import type { OrderFile, Prisma } from '../../generated/prisma/client.js';
-import { isDemoEmail } from '../../common/demo-world.js';
 import { runInOrderQueue } from '../../common/order-queue.js';
 import { Semaphore } from '../../common/semaphore.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -54,8 +53,6 @@ import { StorageService } from './storage.service.js';
 export interface FileViewer {
   id: string;
   role: Role | null;
-  /** Демо-учётка: заказы другого мира ей закрыты (`common/demo-world.ts`). */
-  isDemo: boolean;
 }
 
 /**
@@ -306,9 +303,7 @@ export class FilesService {
    * и считает цену (`companySeesTaskFiles`). Сдачи компании так не открываются
    * никогда — они остаются сторонам сделки (ТЗ §4.1).
    *
-   * Компании из другого мира (демо против настоящих) не открыто ничего.
- *
- * Связь с заказом проверяется по идентификатору, а не по роли: роль в токене
+   * Связь с заказом проверяется по идентификатору, а не по роли: роль в токене
    * живёт час и может устареть, связь — нет. Роль всё же нужна в одном месте:
    * «любая компания» — это именно компания, иначе задание одного клиента
    * скачал бы другой.
@@ -323,7 +318,6 @@ export class FilesService {
       select: {
         clientId: true,
         status: true,
-        client: { select: { email: true } },
         offers: {
           where: { companyId: viewer.id },
           select: { status: true },
@@ -342,11 +336,8 @@ export class FilesService {
 
     const ownOffer = order.offers[0] ?? null;
 
-    // Компании чужого мира файлы заказа закрыты целиком — то же правило, что
-    // у карточки заказа в `OwnershipGuard`.
     const allowed =
       viewer.role === Role.COMPANY &&
-      isDemoEmail(order.client.email) === viewer.isDemo &&
       (ownerType === FileOwnerType.CLIENT
         ? companySeesTaskFiles(order.status, ownOffer?.status ?? null)
         : ownOffer !== null && isExecutorOffer(ownOffer.status));

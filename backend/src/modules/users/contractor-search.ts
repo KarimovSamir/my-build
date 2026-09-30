@@ -7,7 +7,6 @@
 
 import { OfferStatus, Role } from '@mybuild/shared';
 
-import { sameWorldUser } from '../../common/demo-world.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { escapeLike } from '../orders/order-search.js';
 
@@ -28,20 +27,12 @@ import { escapeLike } from '../orders/order-search.js';
  * карточка показывает именно эти два поля (ТЗ §7), и «найти подрядчика
  * в своём городе» — первое, зачем каталог открывают. Контакты в поиск
  * не входят: адресами и телефонами компании не ищут.
- *
- * Компании — только мира смотрящего (`common/demo-world.ts`): настоящему
- * клиенту витринные демо-компании с выдуманными контактами ни к чему,
- * а демо-клиенту, которым может войти кто угодно, — контакты настоящих.
  */
-export function buildContractorsWhere(
-  viewer: { isDemo: boolean },
-  query?: string,
-): Prisma.UserWhereInput {
+export function buildContractorsWhere(query?: string): Prisma.UserWhereInput {
   const where: Prisma.UserWhereInput = {
     role: Role.COMPANY,
     companyName: { not: null },
     emailVerifiedAt: { not: null },
-    ...sameWorldUser(viewer.isDemo),
   };
 
   if (query) {

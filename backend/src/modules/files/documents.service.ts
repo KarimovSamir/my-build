@@ -34,12 +34,11 @@ export class DocumentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(
-    user: { id: string; isDemo: boolean },
+    userId: string,
     query: ListDocumentsQueryDto,
   ): Promise<Paginated<DocumentListItem>> {
     const where = buildDocumentsWhere({
-      userId: user.id,
-      isDemo: user.isDemo,
+      userId,
       ownerType: query.ownerType,
       orderId: query.orderId,
     });

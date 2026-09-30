@@ -2,7 +2,7 @@ import { ExecutionContext, NotFoundException, UnauthorizedException } from '@nes
 import { Reflector } from '@nestjs/core';
 import { describe, expect, it, vi } from 'vitest';
 
-import { DEMO_EMAILS, OfferStatus, OrderStatus, Role } from '@mybuild/shared';
+import { OfferStatus, OrderStatus, Role } from '@mybuild/shared';
 
 import type { AuthUser, RequestWithUser } from '../../modules/auth/auth-user.js';
 import type { PrismaService } from '../../prisma/prisma.service.js';
@@ -42,8 +42,6 @@ type RouteName = keyof TestRoutes;
 /** Заказ в подставной базе — ровно те поля, которые выбирает guard. */
 interface StubOrder {
   clientId: string;
-  /** Адрес клиента: по нему решается мир заказа. По умолчанию — не демо. */
-  clientEmail?: string;
   status: OrderStatus;
   offers: { id: string; status: OfferStatus; companyId: string }[];
 }
@@ -67,7 +65,6 @@ function createPrismaStub(order: StubOrder | null) {
         return {
           clientId: order.clientId,
           status: order.status,
-          client: { email: order.clientEmail ?? 'client@e2e.test' },
           offers: order.offers
             .filter((offer) => offer.companyId === args.select.offers.where.companyId)
             .slice(0, 1)
@@ -322,47 +319,5 @@ describe('OwnershipGuard', () => {
     await expect(
       guardWith(createPrismaStub(waitingOrder)).canActivate(context),
     ).rejects.toThrow(NotFoundException);
-  });
-
-  describe('граница демо', () => {
-    const demoCompany: AuthUser = { ...company, email: DEMO_EMAILS.remont, isDemo: true };
-    const demoOrder: StubOrder = { ...waitingOrder, clientEmail: DEMO_EMAILS.client };
-
-    it('демо-компания не видит заказ настоящего клиента — 404', async () => {
-      const { context } = contextFor('viewer', requestFor(demoCompany));
-
-      await expect(
-        guardWith(createPrismaStub(waitingOrder)).canActivate(context),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('настоящая компания не видит заказ демо-клиента', async () => {
-      const { context } = contextFor('viewer', requestFor(company));
-
-      await expect(
-        guardWith(createPrismaStub(demoOrder)).canActivate(context),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('даже с принятым предложением, оставшимся с тех пор, когда границы не было', async () => {
-      const legacy: StubOrder = {
-        ...waitingOrder,
-        status: OrderStatus.IN_PROGRESS,
-        offers: [{ id: 'offer', status: OfferStatus.ACCEPTED, companyId: COMPANY_ID }],
-      };
-      const { context } = contextFor('executor', requestFor(demoCompany));
-
-      await expect(guardWith(createPrismaStub(legacy)).canActivate(context)).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('демо-компания видит заказ демо-клиента', async () => {
-      const { context } = contextFor('viewer', requestFor(demoCompany));
-
-      await expect(guardWith(createPrismaStub(demoOrder)).canActivate(context)).resolves.toBe(
-        true,
-      );
-    });
   });
 });

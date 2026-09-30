@@ -17,7 +17,6 @@ import {
   type Paginated,
 } from '@mybuild/shared';
 
-import { isDemoEmail } from '../../common/demo-world.js';
 import type { SearchQueryDto } from '../../common/dto/pagination.dto.js';
 import { pageRequest, toPage } from '../../common/pagination.js';
 import { isUuid } from '../../common/uuid.js';
@@ -85,11 +84,7 @@ export class OffersService {
    * переход берёт те же две строки именно в таком порядке, и обратный
    * порядок здесь дал бы взаимную блокировку с принятием чужого предложения.
    */
-  async submit(
-    company: { id: string; isDemo: boolean },
-    dto: CreateOfferDto,
-  ): Promise<OfferDto> {
-    const companyId = company.id;
+  async submit(companyId: string, dto: CreateOfferDto): Promise<OfferDto> {
     const key = { orderId_companyId: { orderId: dto.orderId, companyId } };
 
     const data = {
@@ -108,18 +103,6 @@ export class OffersService {
       dto.orderId,
       async (tx) => {
         const order = await this.transitions.lockOrder(tx, dto.orderId);
-
-        // Заказ клиента из другого мира для компании не существует — тот же
-        // ответ, что у ленты и карточки (`common/demo-world.ts`). Проверка
-        // до записи предложения: откатывать было бы нечего, но и писать незачем.
-        const client = await tx.user.findUnique({
-          where: { id: order.clientId },
-          select: { email: true },
-        });
-
-        if (isDemoEmail(client?.email) !== company.isDemo) {
-          throw new NotFoundException('Заказ не найден');
-        }
 
         // Статус читается до записи: upsert перепишет его в `SENT`, и проверка
         // предусловия в машине, узнай она статус после, всегда видела бы `SENT`
@@ -249,11 +232,10 @@ export class OffersService {
    * открывается его ценой и сроком — как на карточке заказа.
    */
   async listAvailableOrders(
-    company: { id: string; isDemo: boolean },
+    companyId: string,
     query: SearchQueryDto,
   ): Promise<Paginated<AvailableOrderItem>> {
-    const companyId = company.id;
-    const where = buildAvailableOrdersWhere(company, query.q);
+    const where = buildAvailableOrdersWhere(companyId, query.q);
     const request = pageRequest(query);
 
     const [total, rows] = await Promise.all([

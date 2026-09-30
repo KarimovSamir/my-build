@@ -82,7 +82,7 @@ export class OrdersController {
     @Body() dto: CreateOrderDto,
     @UploadedFiles() files: MulterFile[] | undefined,
   ): Promise<OrderDetail> {
-    return this.orders.create(user, dto, toUploads(files));
+    return this.orders.create(user.id, dto, toUploads(files));
   }
 
   /** Свои заказы: фильтр по статусу, поиск, пагинация (ТЗ §4.1). */
@@ -124,11 +124,7 @@ export class OrdersController {
   @OrderAccess(OrderAccessMode.OWNER)
   @Throttle({ limit: 30, ttl: 60_000 })
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(
-    @CurrentUser() user: AuthUser,
-    @OrderAccessCtx() access: OrderAccessContext,
-  ): Promise<void> {
-    // Удалить может только владелец, поэтому мир заказа — мир того, кто удаляет.
-    return this.orders.remove(access.orderId, access.status, user);
+  remove(@OrderAccessCtx() access: OrderAccessContext): Promise<void> {
+    return this.orders.remove(access.orderId, access.status);
   }
 }

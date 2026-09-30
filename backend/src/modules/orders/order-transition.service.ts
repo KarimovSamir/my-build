@@ -18,7 +18,6 @@ import {
   utcCalendarDate,
 } from '@mybuild/shared';
 
-import { isDemoEmail } from '../../common/demo-world.js';
 import { runInOrderQueue } from '../../common/order-queue.js';
 import { isUuid } from '../../common/uuid.js';
 import { Prisma } from '../../generated/prisma/client.js';
@@ -93,11 +92,6 @@ export interface AppliedTransition {
   fromStatus: OrderStatus;
   nextStatus: OrderStatus;
   /**
-   * Клиент заказа — демо-учётка. Нужен рассылке: заказ, покинувший ленту,
-   * сигналит только в ленту своего мира (`common/demo-world.ts`).
-   */
-  clientIsDemo: boolean;
-  /**
    * Все затронутые предложения, а не только то, по которому пришло событие:
    * при принятии одного остальные уходят в `NOT_ACCEPTED`, и каждой из этих
    * компаний адресовано своё `offer:status_changed`.
@@ -128,7 +122,7 @@ type OfferWithCompany = {
   proposedDeadline: Date;
   editedAt: Date | null;
   rejectionCount: number;
-  company: { companyName: string | null; email: string };
+  company: { companyName: string | null };
 };
 
 @Injectable()
@@ -181,21 +175,6 @@ export class OrderTransitionService {
   ): Promise<AppliedTransition> {
     const order = await this.lockOrder(tx, command.orderId);
     const offer = await this.resolveOffer(tx, order.id, command);
-    const clientIsDemo = await this.isDemoClient(tx, order.clientId);
-
-    // Исполнителем становится только компания из мира клиента
-    // (`common/demo-world.ts`). Новых предложений через границу не бывает —
-    // их не пускает `OffersService`, — но строки, появившиеся раньше этого
-    // правила, в базе остались, а сброс демо активные предложения
-    // демо-компаний по чужим заказам не трогает. Для клиента такого
-    // предложения нет: 404, как и на любое чужое.
-    if (
-      command.type === OrderEventType.OFFER_ACCEPTED &&
-      clientIsDemo !== isDemoEmail(offer.company.email)
-    ) {
-      throw new NotFoundException('Предложение не найдено');
-    }
-
     const event = await this.buildEvent(tx, command, offer);
 
     const { fromStatus, nextStatus, effects } = this.machine.transition(
@@ -222,7 +201,6 @@ export class OrderTransitionService {
       companyId: offer.companyId,
       fromStatus,
       nextStatus,
-      clientIsDemo,
       offerUpdates,
       notifications,
     };
@@ -281,7 +259,7 @@ export class OrderTransitionService {
       proposedDeadline: true,
       editedAt: true,
       rejectionCount: true,
-      company: { select: { companyName: true, email: true } },
+      company: { select: { companyName: true } },
     } as const;
 
     // Статус предложения здесь не фильтруется: подходит ли он событию,
@@ -310,16 +288,6 @@ export class OrderTransitionService {
     }
 
     return offer;
-  }
-
-  /** Демо-учётка ли клиент заказа — по адресу из базы (`common/demo-world.ts`). */
-  private async isDemoClient(tx: Prisma.TransactionClient, clientId: string): Promise<boolean> {
-    const client = await tx.user.findUnique({
-      where: { id: clientId },
-      select: { email: true },
-    });
-
-    return isDemoEmail(client?.email);
   }
 
   private async buildEvent(

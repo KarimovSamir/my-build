@@ -50,7 +50,7 @@ export class DocumentsController {
     @CurrentUser() user: AuthUser,
     @Query() query: ListDocumentsQueryDto,
   ): Promise<Paginated<DocumentListItem>> {
-    return this.documents.list(user, query);
+    return this.documents.list(user.id, query);
   }
 
   /**
@@ -66,10 +66,6 @@ export class DocumentsController {
     @Param('id', new ParseUUIDPipe({ exceptionFactory: () => new NotFoundException('Файл не найден') }))
     fileId: string,
   ): Promise<DownloadLink> {
-    return this.files.getDownloadUrl(fileId, {
-      id: user.id,
-      role: user.role,
-      isDemo: user.isDemo,
-    });
+    return this.files.getDownloadUrl(fileId, { id: user.id, role: user.role });
   }
 }

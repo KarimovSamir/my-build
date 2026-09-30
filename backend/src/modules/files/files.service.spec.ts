@@ -154,7 +154,6 @@ function createPrismaStub(overrides: {
         return {
           clientId: order.clientId,
           status: order.status ?? OrderStatus.IN_PROGRESS,
-          client: { email: 'client@example.test' },
           offers: order.offers
             .filter((offer) => offer.companyId === filter.companyId)
             .map((offer) => ({ status: offer.status })),
@@ -706,17 +705,9 @@ describe('FilesService.assertFileAccess', () => {
   const accepted = { companyId: COMPANY_ID, status: OfferStatus.ACCEPTED };
 
   /** Компания и посторонний клиент — разница между ними только в роли. */
-  const company = { id: COMPANY_ID, role: Role.COMPANY, isDemo: false };
-  const stranger = { id: STRANGER_ID, role: Role.COMPANY, isDemo: false };
-  const client = { id: CLIENT_ID, role: Role.CLIENT, isDemo: false };
-
-  it('демо-компании не открыто задание настоящего клиента, даже пока заказ ищет исполнителя', async () => {
-    const service = serviceFor({ clientId: CLIENT_ID, status: OrderStatus.WAITING, offers: [] });
-
-    await expect(
-      service.assertFileAccess(ORDER_ID, { ...stranger, isDemo: true }, FileOwnerType.CLIENT),
-    ).rejects.toThrow(ForbiddenException);
-  });
+  const company = { id: COMPANY_ID, role: Role.COMPANY };
+  const stranger = { id: STRANGER_ID, role: Role.COMPANY };
+  const client = { id: CLIENT_ID, role: Role.CLIENT };
 
   it('пускает клиента заказа к любому файлу', async () => {
     const service = serviceFor({ clientId: CLIENT_ID, offers: [] });
@@ -791,7 +782,7 @@ describe('FilesService.assertFileAccess', () => {
         offers: [],
       }).assertFileAccess(
         ORDER_ID,
-        { id: STRANGER_ID, role: Role.CLIENT, isDemo: false },
+        { id: STRANGER_ID, role: Role.CLIENT },
         FileOwnerType.CLIENT,
       ),
     ).rejects.toThrow(ForbiddenException);
@@ -806,7 +797,7 @@ describe('FilesService.assertFileAccess', () => {
         offers: [],
       }).assertFileAccess(
         ORDER_ID,
-        { id: STRANGER_ID, role: null, isDemo: false },
+        { id: STRANGER_ID, role: null },
         FileOwnerType.CLIENT,
       ),
     ).rejects.toThrow(ForbiddenException);

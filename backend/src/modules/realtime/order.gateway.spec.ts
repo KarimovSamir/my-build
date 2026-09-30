@@ -379,7 +379,7 @@ describe('OrderGateway: комнаты', () => {
     await expect(gateway.subscribeFeed(asSocket(companySocket))).resolves.toEqual({
       ok: true,
     });
-    expect(companySocket.join).toHaveBeenCalledWith(socketRooms.companyFeed(false));
+    expect(companySocket.join).toHaveBeenCalledWith(socketRooms.companyFeed());
   });
 
   it('отписка выводит из комнаты', async () => {
@@ -390,9 +390,7 @@ describe('OrderGateway: комнаты', () => {
     await gateway.unsubscribeFeed(asSocket(socket));
 
     expect(socket.leave).toHaveBeenNthCalledWith(1, socketRooms.order(ORDER_ID));
-    // Из лент обоих миров: какой из них у сокета, отписке знать незачем.
-    expect(socket.leave).toHaveBeenNthCalledWith(2, socketRooms.companyFeed(false));
-    expect(socket.leave).toHaveBeenNthCalledWith(3, socketRooms.companyFeed(true));
+    expect(socket.leave).toHaveBeenNthCalledWith(2, socketRooms.companyFeed());
   });
 });
 

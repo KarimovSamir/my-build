@@ -22,7 +22,7 @@ function orderConditions(where: ReturnType<typeof buildDocumentsWhere>) {
 
 describe('buildDocumentsWhere', () => {
   it('пускает файлы своих заказов и заказов, где пользователь — исполнитель', () => {
-    expect(orderConditions(buildDocumentsWhere({ userId: USER, isDemo: false }))).toEqual([
+    expect(orderConditions(buildDocumentsWhere({ userId: USER }))).toEqual([
       { clientId: USER },
       {
         offers: {
@@ -43,7 +43,7 @@ describe('buildDocumentsWhere', () => {
   });
 
   it('оставляет исполнителю доступ после завершения заказа', () => {
-    const [, executor] = orderConditions(buildDocumentsWhere({ userId: USER, isDemo: false })) as [
+    const [, executor] = orderConditions(buildDocumentsWhere({ userId: USER })) as [
       unknown,
       { offers: { some: { status: { in: OfferStatus[] } } } },
     ];
@@ -53,7 +53,7 @@ describe('buildDocumentsWhere', () => {
   });
 
   it('не пускает заказ, по которому предложение только отправлено', () => {
-    const [, executor] = orderConditions(buildDocumentsWhere({ userId: USER, isDemo: false })) as [
+    const [, executor] = orderConditions(buildDocumentsWhere({ userId: USER })) as [
       unknown,
       { offers: { some: { status: { in: OfferStatus[] } } } },
     ];
@@ -66,7 +66,7 @@ describe('buildDocumentsWhere', () => {
   });
 
   it('без фильтров других условий не добавляет', () => {
-    const where = buildDocumentsWhere({ userId: USER, isDemo: false });
+    const where = buildDocumentsWhere({ userId: USER });
 
     expect(where.ownerType).toBeUndefined();
     expect(where.orderId).toBeUndefined();
@@ -75,7 +75,6 @@ describe('buildDocumentsWhere', () => {
   it('фильтры сужают выборку, но не заменяют условие доступа', () => {
     const where = buildDocumentsWhere({
       userId: USER,
-      isDemo: false,
       ownerType: FileOwnerType.COMPANY,
       orderId: ORDER,
     });

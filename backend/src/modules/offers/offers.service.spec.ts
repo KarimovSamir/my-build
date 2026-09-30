@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DEMO_EMAILS, EXECUTOR_OFFER_STATUSES, OfferStatus } from '@mybuild/shared';
+import { EXECUTOR_OFFER_STATUSES, OfferStatus } from '@mybuild/shared';
 
 import { Prisma } from '../../generated/prisma/client.js';
 import type { PrismaService } from '../../prisma/prisma.service.js';
@@ -27,7 +27,6 @@ const ORDER_ID = '11111111-1111-4111-8111-111111111111';
 const OFFER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const COMPANY_ID = '33333333-3333-4333-8333-333333333333';
 const CLIENT_ID = '22222222-2222-4222-8222-222222222222';
-const COMPANY = { id: COMPANY_ID, isDemo: false };
 
 const DEADLINE = '2027-03-01';
 
@@ -50,17 +49,10 @@ function offerRow(status: OfferStatus = OfferStatus.SENT) {
 /** Что и в каком порядке сервис сделал внутри транзакции. */
 type Trace = string[];
 
-function createStubs(
-  options: { existing?: OfferStatus | null; clientEmail?: string } = {},
-) {
+function createStubs(options: { existing?: OfferStatus | null } = {}) {
   const trace: Trace = [];
 
   const tx = {
-    user: {
-      findUnique: vi.fn(async (_args: unknown) => ({
-        email: options.clientEmail ?? 'client@example.test',
-      })),
-    },
     offer: {
       findUnique: vi.fn(async () => {
         trace.push('read-status');
@@ -102,7 +94,7 @@ function createStubs(
     ),
     lockOrder: vi.fn(async (_tx: unknown, _orderId: string) => {
       trace.push('lock-order');
-      return { id: ORDER_ID, clientId: CLIENT_ID };
+      return { id: ORDER_ID };
     }),
     apply: vi.fn(async (_command: OrderTransitionCommand, _tx?: unknown) => {
       trace.push('apply');
@@ -126,24 +118,10 @@ function createStubs(
 }
 
 describe('OffersService.submit', () => {
-  it('на заказ клиента из другого мира — 404, и предложение не пишется', async () => {
-    const demoClient = createStubs({ clientEmail: DEMO_EMAILS.client });
-    const dto = { orderId: ORDER_ID, proposedPrice: '150000.50', proposedDeadline: DEADLINE };
-
-    await expect(demoClient.service.submit(COMPANY, dto)).rejects.toThrow(NotFoundException);
-    expect(demoClient.trace).not.toContain('upsert');
-
-    const realClient = createStubs();
-    await expect(
-      realClient.service.submit({ id: COMPANY_ID, isDemo: true }, dto),
-    ).rejects.toThrow(NotFoundException);
-    expect(realClient.trace).not.toContain('upsert');
-  });
-
   it('блокирует заказ до записи предложения и переходит после неё', async () => {
     const { service, trace } = createStubs();
 
-    await service.submit(COMPANY, {
+    await service.submit(COMPANY_ID, {
       orderId: ORDER_ID,
       proposedPrice: '150000.50',
       proposedDeadline: DEADLINE,
@@ -160,7 +138,7 @@ describe('OffersService.submit', () => {
     // `updatedAt` — Prisma, и переход бьёт его ещё раз, записывая `SENT`.
     const { service, tx } = createStubs();
 
-    await service.submit(COMPANY, {
+    await service.submit(COMPANY_ID, {
       orderId: ORDER_ID,
       proposedPrice: '150000.50',
       proposedDeadline: DEADLINE,
@@ -175,7 +153,7 @@ describe('OffersService.submit', () => {
   it('переход идёт той же транзакцией, что и запись предложения', async () => {
     const { service, prisma, transitions } = createStubs();
 
-    await service.submit(COMPANY, {
+    await service.submit(COMPANY_ID, {
       orderId: ORDER_ID,
       proposedPrice: '150000.50',
       proposedDeadline: DEADLINE,
@@ -190,7 +168,7 @@ describe('OffersService.submit', () => {
   it('передаёт машине статус предложения до записи, а не после', async () => {
     const { service, transitions } = createStubs({ existing: OfferStatus.WITHDRAWN });
 
-    await service.submit(COMPANY, {
+    await service.submit(COMPANY_ID, {
       orderId: ORDER_ID,
       proposedPrice: '150000.50',
       proposedDeadline: DEADLINE,
@@ -207,7 +185,7 @@ describe('OffersService.submit', () => {
   it('у первого предложения статуса «до» нет', async () => {
     const { service, transitions } = createStubs({ existing: null });
 
-    await service.submit(COMPANY, {
+    await service.submit(COMPANY_ID, {
       orderId: ORDER_ID,
       proposedPrice: '150000.50',
       proposedDeadline: DEADLINE,
@@ -230,8 +208,8 @@ describe('OffersService.submit', () => {
       proposedDeadline: DEADLINE,
     };
 
-    await first.service.submit(COMPANY, dto);
-    await again.service.submit(COMPANY, dto);
+    await first.service.submit(COMPANY_ID, dto);
+    await again.service.submit(COMPANY_ID, dto);
 
     expect(first.realtime.transitionApplied.mock.calls[0]![1]).toBe(false);
     expect(again.realtime.transitionApplied.mock.calls[0]![1]).toBe(true);
@@ -244,7 +222,7 @@ describe('OffersService.submit', () => {
     transitions.apply.mockRejectedValueOnce(new Error('переход невозможен'));
 
     await expect(
-      service.submit(COMPANY, {
+      service.submit(COMPANY_ID, {
         orderId: ORDER_ID,
         proposedPrice: '150000.50',
         proposedDeadline: DEADLINE,
@@ -257,7 +235,7 @@ describe('OffersService.submit', () => {
   it('отдаёт предложение в виде контракта API: суммы и даты строками', async () => {
     const { service } = createStubs();
 
-    const offer = await service.submit(COMPANY, {
+    const offer = await service.submit(COMPANY_ID, {
       orderId: ORDER_ID,
       proposedPrice: '150000.50',
       proposedDeadline: DEADLINE,

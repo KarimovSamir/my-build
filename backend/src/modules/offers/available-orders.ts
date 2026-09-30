@@ -12,7 +12,6 @@ import {
   OfferStatus,
 } from '@mybuild/shared';
 
-import { sameWorldUser } from '../../common/demo-world.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { buildSearchConditions } from '../orders/order-search.js';
 
@@ -30,16 +29,11 @@ const ELIGIBLE_ORDER_STATUSES = [...OFFER_ELIGIBLE_ORDER_STATUSES];
  *
  * Поиск ищет по номеру и названию заказа, но не по подрядчику: у заказа
  * в ленте исполнителя нет по определению.
- *
- * И только заказы клиентов своего мира: демо-компания видит заказы
- * демо-клиента, настоящая — настоящих (`common/demo-world.ts`).
  */
 export function buildAvailableOrdersWhere(
-  company: { id: string; isDemo: boolean },
+  companyId: string,
   query?: string,
 ): Prisma.OrderWhereInput {
-  const companyId = company.id;
-
   // Отклонённое — только пока отказ не окончательный: то же правило, что
   // `canResubmitOffer` в `shared/` (после `MAX_OFFER_REJECTIONS` отказов
   // заказ из ленты компании уходит насовсем, решение пользователя).
@@ -63,7 +57,6 @@ export function buildAvailableOrdersWhere(
   // и поиск — это `OR`, и один просто затёр бы другой.
   return {
     status: { in: ELIGIBLE_ORDER_STATUSES },
-    client: sameWorldUser(company.isDemo),
     AND: query
       ? [availability, { OR: buildSearchConditions(query, { includeContractor: false }) }]
       : [availability],

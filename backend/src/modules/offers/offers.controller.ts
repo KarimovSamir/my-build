@@ -44,7 +44,7 @@ export class OffersController {
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateOfferDto,
   ): Promise<OfferDto> {
-    return this.offers.submit(user, dto);
+    return this.offers.submit(user.id, dto);
   }
 
   /** Компания отзывает своё предложение. */

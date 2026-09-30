@@ -65,7 +65,6 @@ function applied(overrides: Partial<AppliedTransition> = {}): AppliedTransition 
     companyId: WINNER_ID,
     fromStatus: OrderStatus.AWAITING_CONFIRMATION,
     nextStatus: OrderStatus.IN_PROGRESS,
-    clientIsDemo: false,
     offerUpdates: [],
     notifications: [],
     ...overrides,
@@ -79,12 +78,12 @@ function messagesOf(messages: RealtimeMessage[], event: string): RealtimeMessage
 
 describe('orderCreatedBroadcast', () => {
   it('уходит только в ленту компаний', () => {
-    const { messages, evictions } = orderCreatedBroadcast(ORDER_ID, false);
+    const { messages, evictions } = orderCreatedBroadcast(ORDER_ID);
 
     expect(evictions).toEqual([]);
     expect(messages).toEqual([
       {
-        rooms: [socketRooms.companyFeed(false)],
+        rooms: [socketRooms.companyFeed()],
         event: socketEvents.orderCreated,
         payload: { orderId: ORDER_ID },
       },
@@ -117,7 +116,7 @@ describe('transitionBroadcast', () => {
 
     expect(messagesOf(messages, socketEvents.orderStatusChanged)).toEqual([
       {
-        rooms: [orderRoom, clientRoom, socketRooms.companyFeed(false)],
+        rooms: [orderRoom, clientRoom, socketRooms.companyFeed()],
         event: socketEvents.orderStatusChanged,
         payload: { orderId: ORDER_ID },
       },
@@ -132,7 +131,7 @@ describe('transitionBroadcast', () => {
     );
     const rooms = messages.flatMap((message) => message.rooms);
 
-    expect(rooms).not.toContain(socketRooms.companyFeed(false));
+    expect(rooms).not.toContain(socketRooms.companyFeed());
   });
 
   it('без смены статуса события о ней нет', () => {
@@ -334,37 +333,14 @@ describe('orderUpdateBroadcast', () => {
   });
 });
 
-function roomsOf(broadcast: { messages: RealtimeMessage[] }): string[] {
-  return broadcast.messages.flatMap((message) => message.rooms);
-}
-
-describe('лента своего мира', () => {
-  it('заказ демо-клиента сигналит только в ленту демо-компаний', () => {
-    expect(roomsOf(orderCreatedBroadcast(ORDER_ID, true))).toEqual([
-      socketRooms.companyFeed(true),
-    ]);
-    expect(roomsOf(transitionBroadcast(applied({ clientIsDemo: true })))).toContain(
-      socketRooms.companyFeed(true),
-    );
-    expect(roomsOf(transitionBroadcast(applied({ clientIsDemo: true })))).not.toContain(
-      socketRooms.companyFeed(false),
-    );
-    expect(roomsOf(orderDeletedBroadcast(ORDER_ID, [], true))).toEqual([
-      socketRooms.companyFeed(true),
-    ]);
-  });
-});
-
 describe('orderDeletedBroadcast', () => {
   it('убирает заказ из ленты и уведомляет компании с предложением', () => {
-    const { messages } = orderDeletedBroadcast(
-      ORDER_ID,
-      [notification(LOSER_ID, NotificationType.ORDER_DELETED)],
-      false,
-    );
+    const { messages } = orderDeletedBroadcast(ORDER_ID, [
+      notification(LOSER_ID, NotificationType.ORDER_DELETED),
+    ]);
 
     expect(messages.map(({ rooms, event }) => ({ rooms, event }))).toEqual([
-      { rooms: [socketRooms.companyFeed(false)], event: socketEvents.orderStatusChanged },
+      { rooms: [socketRooms.companyFeed()], event: socketEvents.orderStatusChanged },
       { rooms: [socketRooms.user(LOSER_ID)], event: socketEvents.notificationCreated },
     ]);
   });
@@ -380,7 +356,7 @@ describe('orderDeletedBroadcast', () => {
   });
 
   it('распускает комнату удалённого заказа', () => {
-    const { evictions } = orderDeletedBroadcast(ORDER_ID, [], false);
+    const { evictions } = orderDeletedBroadcast(ORDER_ID, []);
 
     // Без этого участники остались бы в комнате несуществующего заказа
     // до самого отключения.

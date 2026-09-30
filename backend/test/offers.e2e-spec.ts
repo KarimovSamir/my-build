@@ -6,9 +6,6 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
-  DEMO_ACCOUNTS,
-  DEMO_EMAILS,
-  DEMO_PASSWORD,
   NotificationType,
   ObjectType,
   OfferStatus,
@@ -685,86 +682,6 @@ describe('Предложения (e2e)', () => {
         .set('Authorization', `Bearer ${clientToken}`);
 
       expect(forClient.body.offers).toHaveLength(2);
-    });
-  });
-
-  /**
-   * Демо-учётки общие: под демо-компанией сидит любой посетитель. До настоящих
-   * клиентов она не дотягивается, а настоящие компании не видят заказов
-   * демо-клиента (`common/demo-world.ts`). Демо-учётки берутся живые — те, что
-   * на экране входа; всё созданное здесь за ними убирается в `finally`.
-   */
-  describe('Граница демо', () => {
-    async function demoUser(email: string): Promise<{ id: string; token: string }> {
-      const { id } = await prisma.user.findUniqueOrThrow({
-        where: { email },
-        select: { id: true },
-      });
-
-      return { id, token: await signInE2eUser({ id, email, password: DEMO_PASSWORD }) };
-    }
-
-    it('демо-компания не видит заказ настоящего клиента и не шлёт по нему предложение', async () => {
-      const demoCompany = await demoUser(DEMO_EMAILS.remont);
-      const order = await seedOrder('Заказ настоящего клиента');
-
-      expect(await availableIds(demoCompany.token, order.orderNumber)).not.toContain(order.id);
-
-      const detail = await request(app.getHttpServer())
-        .get(`/orders/${order.id}`)
-        .set('Authorization', `Bearer ${demoCompany.token}`);
-      expect(detail.status).toBe(404);
-
-      const offer = await postOffer(demoCompany.token, order.id);
-      expect(offer.status).toBe(404);
-      expect(await prisma.offer.count({ where: { orderId: order.id } })).toBe(0);
-      expect(await orderStatus(order.id)).toBe(OrderStatus.WAITING);
-    });
-
-    it('настоящая компания не видит заказ демо-клиента', async () => {
-      const demoClient = await demoUser(DEMO_EMAILS.client);
-      const order = await prisma.order.create({
-        data: {
-          clientId: demoClient.id,
-          title: 'Заказ демо-клиента из e2e',
-          category: OrderCategory.PLAN_IMPLEMENTATION,
-          objectType: ObjectType.APARTMENT,
-          description: 'Проверка границы демо',
-          address: 'Баку, ул. Тестовая, 2',
-          squareMeters: 40,
-        },
-      });
-
-      try {
-        expect(await availableIds(alphaToken, order.orderNumber)).not.toContain(order.id);
-
-        const detail = await request(app.getHttpServer())
-          .get(`/orders/${order.id}`)
-          .set('Authorization', `Bearer ${alphaToken}`);
-        expect(detail.status).toBe(404);
-
-        expect((await postOffer(alphaToken, order.id)).status).toBe(404);
-      } finally {
-        await prisma.order.delete({ where: { id: order.id } });
-      }
-    });
-
-    it('каталог подрядчиков настоящему клиенту демо-компаний не показывает', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/contractors')
-        .query({ pageSize: 100 })
-        .set('Authorization', `Bearer ${clientToken}`);
-
-      expect(response.status).toBe(200);
-      const names: string[] = response.body.items.map(
-        (item: { companyName: string }) => item.companyName,
-      );
-      const demoCompanies = DEMO_ACCOUNTS.filter((account) => account.role === Role.COMPANY);
-
-      expect(demoCompanies.length).toBeGreaterThan(0);
-      for (const account of demoCompanies) {
-        expect(names).not.toContain(account.title);
-      }
     });
   });
 });

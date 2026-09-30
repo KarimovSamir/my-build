@@ -8,7 +8,6 @@
 
 import { EXECUTOR_OFFER_STATUSES, type FileOwnerType } from '@mybuild/shared';
 
-import { sameWorldUser } from '../../common/demo-world.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 
 /** Списки в `shared/` объявлены `readonly`, а Prisma ждёт изменяемый массив. */
@@ -16,8 +15,6 @@ const EXECUTOR_STATUSES = [...EXECUTOR_OFFER_STATUSES];
 
 export interface DocumentScope {
   userId: string;
-  /** Демо-учётка: заказы другого мира в раздел не попадают (`common/demo-world.ts`). */
-  isDemo: boolean;
   /** Фильтр «чьи файлы»: задание клиента или сдачи исполнителя. */
   ownerType?: FileOwnerType;
   /** Фильтр по конкретному заказу. Чужой заказ просто ничего не найдёт. */
@@ -45,10 +42,6 @@ export interface DocumentScope {
 export function buildDocumentsWhere(scope: DocumentScope): Prisma.OrderFileWhereInput {
   const where: Prisma.OrderFileWhereInput = {
     order: {
-      // Свои заказы клиента в его мире по определению, а у исполнителя это
-      // то же правило, что у скачивания (`assertFileAccess`): показанное
-      // обязано скачиваться.
-      client: sameWorldUser(scope.isDemo),
       OR: [
         { clientId: scope.userId },
         {

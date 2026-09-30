@@ -54,11 +54,8 @@ const ORDER_BY: Prisma.UserOrderByWithRelationInput[] = [
 export class ContractorsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(
-    viewer: { isDemo: boolean },
-    query: SearchQueryDto,
-  ): Promise<Paginated<ContractorListItem>> {
-    const where = buildContractorsWhere(viewer, query.q);
+  async list(query: SearchQueryDto): Promise<Paginated<ContractorListItem>> {
+    const where = buildContractorsWhere(query.q);
     const request = pageRequest(query);
 
     const [total, rows] = await Promise.all([
@@ -81,7 +78,7 @@ export class ContractorsService {
    * открыт целиком, и скрывать здесь нечего — 404 означает ровно то, что
    * компании с таким идентификатором нет.
    */
-  async getById(viewer: { isDemo: boolean }, contractorId: string): Promise<ContractorCard> {
+  async getById(contractorId: string): Promise<ContractorCard> {
     // Колонка `User.id` объявлена как `uuid`: мусор в пути упал бы в Postgres,
     // то есть ушёл бы наружу как 500 вместо 404.
     if (!isUuid(contractorId)) {
@@ -91,7 +88,7 @@ export class ContractorsService {
     const [row] = await this.prisma.user.findMany({
       // Условие каталога целиком, а не только `id`: по этому адресу нельзя
       // прочитать профиль клиента, подставив его идентификатор.
-      where: { ...buildContractorsWhere(viewer), id: contractorId },
+      where: { ...buildContractorsWhere(), id: contractorId },
       select: CONTRACTOR_CARD_SELECT,
       take: 1,
     });

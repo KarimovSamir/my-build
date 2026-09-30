@@ -31,9 +31,9 @@ export class RealtimeService {
 
   constructor(private readonly gateway: OrderGateway) {}
 
-  /** Новый заказ — в ленту компаний его мира (ТЗ §8); `demo` — заказ демо-клиента. */
-  orderCreated(orderId: string, demo: boolean): void {
-    this.dispatch(orderCreatedBroadcast(orderId, demo));
+  /** Новый заказ — в ленту компаний (ТЗ §8). */
+  orderCreated(orderId: string): void {
+    this.dispatch(orderCreatedBroadcast(orderId));
   }
 
   /**
@@ -79,8 +79,8 @@ export class RealtimeService {
    * комнаты — сокеты участников иначе остались бы в комнате несуществующего
    * заказа до отключения.
    */
-  orderDeleted(orderId: string, notifications: NotificationTarget[], demo: boolean): void {
-    this.dispatch(orderDeletedBroadcast(orderId, notifications, demo));
+  orderDeleted(orderId: string, notifications: NotificationTarget[]): void {
+    this.dispatch(orderDeletedBroadcast(orderId, notifications));
   }
 
   private dispatch(broadcast: RealtimeBroadcast): void {

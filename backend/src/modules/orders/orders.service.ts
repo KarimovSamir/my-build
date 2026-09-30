@@ -114,11 +114,10 @@ export class OrdersService {
    * с пропусками — это нормально для autoincrement и пользователю не видно.
    */
   async create(
-    client: { id: string; isDemo: boolean },
+    clientId: string,
     dto: CreateOrderDto,
     uploads: UploadedFileInput[],
   ): Promise<OrderDetail> {
-    const clientId = client.id;
     const files = uploads.length > 0 ? await this.files.prepareUploads(uploads) : [];
 
     const order = await this.prisma.order.create({
@@ -163,7 +162,7 @@ export class OrdersService {
 
     // Заказ появляется сразу в `WAITING`, то есть уже виден в ленте компаний
     // (ТЗ §8). Записи в БД это событие не создаёт — оно broadcast.
-    this.realtime.orderCreated(order.id, client.isDemo);
+    this.realtime.orderCreated(order.id);
 
     return this.getDetail(order.id, { id: clientId });
   }
@@ -244,11 +243,7 @@ export class OrdersService {
    * компания успела бы отправить предложение между чтением списка адресатов
    * и удалением, и её предложение исчезло бы молча.
    */
-  async remove(
-    orderId: string,
-    status: OrderStatus,
-    owner: { isDemo: boolean },
-  ): Promise<void> {
+  async remove(orderId: string, status: OrderStatus): Promise<void> {
     if (!canDeleteOrder(status)) {
       throw new ConflictException(ORDER_NOT_DELETABLE);
     }
@@ -262,7 +257,7 @@ export class OrdersService {
     // После коммита: событие, отправленное изнутри транзакции, ушло бы
     // и в случае отката. Заказ уходит из ленты компаний, а его комната
     // распускается: сокеты сидели бы в ней до отключения.
-    this.realtime.orderDeleted(orderId, notifications, owner.isDemo);
+    this.realtime.orderDeleted(orderId, notifications);
 
     await this.files.removeStorageObjects(storageKeys);
   }
