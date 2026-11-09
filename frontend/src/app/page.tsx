@@ -142,7 +142,7 @@ export default async function LandingPage() {
               </div>
 
               <p className="text-muted-foreground font-mono mt-5 text-sm text-balance">
-                Демо открыто — на странице входа готовые аккаунты {demoAccountsSummary()}
+                Публичная демоверсия — на странице входа готовые аккаунты {demoAccountsSummary()}
               </p>
             </div>
 
@@ -161,6 +161,11 @@ export default async function LandingPage() {
               <h2 className="font-heading mt-4 text-3xl font-medium tracking-tight sm:text-[2.625rem] sm:leading-[1.12]">
                 Начните с одного заказа
               </h2>
+              <p className="text-brand-ink-muted mt-3.5 max-w-2xl leading-relaxed text-pretty">
+                MyBuild разработан по реальному заказу клиента. Здесь представлена отдельная
+                публичная демоверсия, показывающая основные возможности и технические решения
+                проекта. Оригинальная клиентская версия не публикуется из-за договорных ограничений.
+              </p>
               <p className="text-brand-ink-muted mt-3.5 max-w-2xl leading-relaxed text-pretty">
                 На странице входа есть готовые аккаунты {demoAccountsSummary()} — можно
                 пройти сделку целиком, от публикации заказа до приёмки работы.

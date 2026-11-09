@@ -2,7 +2,7 @@
   "name": "mybuild",
   "version": "0.1.0",
   "private": true,
-  "description": "MyBuild — двусторонний маркетплейс для строительства",
+  "description": "MyBuild — публичная демоверсия маркетплейса для строительства, разработанного по заказу клиента",
   "workspaces": [
     "shared",
     "backend",
