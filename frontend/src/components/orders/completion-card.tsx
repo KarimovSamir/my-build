@@ -61,10 +61,10 @@ export function CompletionCard({
         {actions.canConfirmWork || actions.canDisputeWork ? (
           <div className="flex flex-wrap gap-2">
             {actions.canConfirmWork ? (
-              <ConfirmWorkDialog orderId={order.id} orderLabel={orderLabel} />
+              <ConfirmWorkDialog orderId={order.id} orderLabel={orderLabel} round={order.submissions.at(-1)?.round ?? 0} />
             ) : null}
             {actions.canDisputeWork ? (
-              <DisputeWorkDialog orderId={order.id} orderLabel={orderLabel} />
+              <DisputeWorkDialog orderId={order.id} orderLabel={orderLabel} round={order.submissions.at(-1)?.round ?? 0} />
             ) : null}
           </div>
         ) : null}

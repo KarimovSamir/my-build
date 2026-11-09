@@ -24,7 +24,7 @@ function notification(overrides: Partial<NotificationDto> = {}): NotificationDto
 
 describe("notificationHref", () => {
   it("ведёт к заказу", () => {
-    expect(notificationHref(notification())).toBe("/orders/order-1");
+    expect(notificationHref(notification())).toBe("/orders/view/?id=order-1");
   });
 
   /**

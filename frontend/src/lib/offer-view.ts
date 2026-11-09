@@ -77,7 +77,7 @@ export function offerHint(
   orderId: string,
   canResubmit = false,
 ): OfferHint | null {
-  const openOrder = { href: `/orders/${orderId}`, label: "Открыть заказ" };
+  const openOrder = { href: `/orders/view/?id=${encodeURIComponent(orderId)}`, label: "Открыть заказ" };
   const toFeed = { href: "/available", label: "К ленте заказов" };
 
   switch (status) {

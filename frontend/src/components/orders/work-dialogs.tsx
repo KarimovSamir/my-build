@@ -72,6 +72,7 @@ export function AddWorkFilesDialog({
 }) {
   const sync = useOrderSync();
   const [open, setOpen] = useState(false);
+  const [seenRound, setSeenRound] = useState(round);
   const [values, setValues] = useState<WorkFilesFormValues>(emptyWorkFilesForm);
   const [errors, setErrors] = useState<WorkFilesFormErrors>({});
   const [formError, setFormError] = useState<string[] | null>(null);
@@ -81,6 +82,7 @@ export function AddWorkFilesDialog({
   function handleOpenChange(next: boolean) {
     if (next) {
       setValues(emptyWorkFilesForm);
+      setSeenRound(round);
       setErrors({});
       setFormError(null);
     }
@@ -103,10 +105,9 @@ export function AddWorkFilesDialog({
     setPending(true);
 
     try {
-      const detail = await browserApi.post<OrderDetail>(
-        `/orders/${orderId}/files`,
-        toWorkFilesFormData(values),
-      );
+      const body = toWorkFilesFormData(values);
+      body.set("seenRound", String(seenRound));
+      const detail = await browserApi.post<OrderDetail>(`/orders/${orderId}/files`, body);
 
       // Считаем по ответу, а не по числу выбранных файлов: те, что уже есть
       // в этой сдаче, backend отбрасывает и уведомление клиенту не создаёт.
@@ -232,13 +233,14 @@ export function SubmitWorkDialog({
 }) {
   const sync = useOrderSync();
   const [open, setOpen] = useState(false);
+  const [seenRound, setSeenRound] = useState(round);
   const [pending, setPending] = useState(false);
 
   async function handleSubmit() {
     setPending(true);
 
     try {
-      const detail = await browserApi.post<OrderDetail>(`/orders/${orderId}/submit`);
+      const detail = await browserApi.post<OrderDetail>(`/orders/${orderId}/submit`, { seenRound });
 
       toast.success("Работа сдана", {
         description: `${orderLabel} · сдача №${round} ушла клиенту на подтверждение`,
@@ -259,7 +261,7 @@ export function SubmitWorkDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(next) => { if (next) setSeenRound(round); setOpen(next); }}>
       <DialogTrigger asChild>
         <Button>
           <SendHorizonal className="size-4" aria-hidden />

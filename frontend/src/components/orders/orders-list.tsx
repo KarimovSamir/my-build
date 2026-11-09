@@ -2,7 +2,6 @@ import { ChevronRight, Plus } from "lucide-react";
 import Link from "next/link";
 
 import {
-  DEFAULT_PAGE_SIZE,
   formatOrderNumber,
   objectTypeLabels,
   type OrderListItem,
@@ -21,33 +20,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { serverApi } from "@/lib/api.server";
+import { orderHref } from "@/lib/demo/operations";
 import { companyInitial, formatDate, formatMoney } from "@/lib/format";
 import { isEmptyFilter, ordersHref, type OrdersFilter } from "@/lib/orders-filter";
 
 /**
  * Список заказов клиента (ТЗ §7, раздел «Все заказы»).
  *
- * Данные берутся на сервере: страница приезжает уже заполненной, а фильтр
- * читается из адреса. Компонент асинхронный и живёт под `<Suspense>` — пока
- * идёт запрос, на его месте показывается скелет, а шапка с поиском и вкладками
- * остаётся на экране и не теряет фокус ввода.
+ * Данные передаёт локальный слой демо.
  *
  * На десктопе — таблица, на мобильном — карточки (ТЗ §7, «Адаптивность»).
  * Это эталон списка: остальные разделы строятся по нему.
  */
-export async function OrdersList({ filter }: { filter: OrdersFilter }) {
-  const page = await serverApi.get<Paginated<OrderListItem>>("/orders", {
-    query: {
-      status: filter.status,
-      q: filter.q,
-      page: filter.page,
-      // Размер страницы задаётся явно, а не берётся из умолчания backend:
-      // иначе смена умолчания на сервере молча меняла бы вид экрана.
-      pageSize: DEFAULT_PAGE_SIZE,
-    },
-  });
-
+export function OrdersList({ filter, page }: { filter: OrdersFilter; page: Paginated<OrderListItem> }) {
   if (page.total === 0) {
     return <EmptyState filter={filter} />;
   }
@@ -109,7 +94,7 @@ function OrdersTable({ items }: { items: OrderListItem[] }) {
           <TableRow key={order.id} className="relative">
             <TableCell className="px-5 py-4 whitespace-normal">
               <Link
-                href={`/orders/${order.id}`}
+                href={orderHref(order.id)}
                 className="focus-visible:ring-ring/50 font-heading text-base font-semibold after:absolute after:inset-0 focus-visible:ring-3 focus-visible:outline-none"
               >
                 {order.title}
@@ -141,7 +126,7 @@ function OrderCard({ order }: { order: OrderListItem }) {
   return (
     <li>
       <Link
-        href={`/orders/${order.id}`}
+        href={orderHref(order.id)}
         className="hover:bg-brand-surface focus-visible:ring-ring/50 flex flex-col gap-3.5 px-5 py-5 transition-colors focus-visible:ring-3 focus-visible:outline-none"
       >
         <div className="flex items-start justify-between gap-3">

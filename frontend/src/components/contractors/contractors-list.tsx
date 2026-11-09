@@ -1,13 +1,12 @@
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 
-import { DEFAULT_PAGE_SIZE, type ContractorListItem, type Paginated } from "@/lib/types";
+import { type ContractorListItem, type Paginated } from "@/lib/types";
 
 import { EmptyCard, OutOfRange, PaginationBar } from "@/components/list-parts";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { serverApi } from "@/lib/api.server";
 import { completedOrdersText } from "@/lib/contractor-view";
 import { contractorsHref, isEmptyContractorsFilter } from "@/lib/contractors-filter";
 import type { ContractorsFilter } from "@/lib/contractors-filter";
@@ -21,16 +20,7 @@ import { companyInitial, formatLocation } from "@/lib/format";
  * `GET /contractors` их не отдаёт вовсе (`ContractorListItem`), поэтому почта
  * и телефон всех компаний не уезжают в браузер на каждый запрос списка.
  */
-export async function ContractorsList({ filter }: { filter: ContractorsFilter }) {
-  const page = await serverApi.get<Paginated<ContractorListItem>>("/contractors", {
-    query: {
-      q: filter.q,
-      page: filter.page,
-      // Размер страницы задаётся явно, а не берётся из умолчания backend:
-      // иначе смена умолчания на сервере молча меняла бы вид экрана.
-      pageSize: DEFAULT_PAGE_SIZE,
-    },
-  });
+export function ContractorsList({ filter, page }: { filter: ContractorsFilter; page: Paginated<ContractorListItem> }) {
 
   if (page.total === 0) {
     return isEmptyContractorsFilter(filter) ? (
@@ -86,7 +76,7 @@ function ContractorRow({ contractor }: { contractor: ContractorListItem }) {
         в одно место, и кликать в неё удобнее — особенно пальцем.
       */}
       <Link
-        href={`/contractors/${contractor.id}`}
+        href={`/contractors/view/?id=${encodeURIComponent(contractor.id)}`}
         className="hover:bg-brand-surface focus-visible:ring-ring/50 flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-4.5 transition-colors focus-visible:ring-3 focus-visible:outline-none"
       >
         <Avatar className="size-11 shrink-0">

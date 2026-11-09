@@ -1,3 +1,4 @@
+import { DEMO_FEATURES } from "@/lib/demo/features";
 import type { OfferDto } from "@/lib/types";
 
 import {
@@ -82,7 +83,7 @@ export function OrderOffersCard({
                         rivals={count - 1}
                       />
                     ) : null}
-                    {canReject ? <RejectOfferDialog offer={offer} /> : null}
+                    {DEMO_FEATURES.rejectOffer && canReject ? <RejectOfferDialog offer={offer} /> : null}
                   </div>
                 ) : null}
               </li>

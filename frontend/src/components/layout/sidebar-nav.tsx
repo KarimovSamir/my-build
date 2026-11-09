@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { useUnread } from "@/components/notifications/unread-provider";
 import type { Role } from "@/lib/types";
 import { getNavigation, isNavItemActive } from "@/lib/navigation";
+import { useUnread } from "@/components/notifications/unread-provider";
 import { formatUnreadCount } from "@/lib/notification-view";
 import { cn } from "@/lib/utils";
 
@@ -29,8 +29,7 @@ export function SidebarNav({
 }) {
   const pathname = usePathname();
   const sections = getNavigation(role);
-  const { count } = useUnread();
-  const unread = formatUnreadCount(count);
+  const unread = formatUnreadCount(useUnread().count);
 
   return (
     <nav className="flex flex-col gap-1.5">

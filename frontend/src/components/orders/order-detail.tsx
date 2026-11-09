@@ -1,8 +1,8 @@
+import { DEMO_FEATURES } from "@/lib/demo/features";
 import { Mail, Phone } from "lucide-react";
 import type { ReactNode } from "react";
 
 import {
-  MAX_ORDER_FILES_BYTES,
   canDeleteOrder,
   formatOrderNumber,
   objectTypeLabels,
@@ -93,7 +93,7 @@ export function OrderDetailView({
           </span>
         }
         action={
-          access.isOwner && canDeleteOrder(order.status) ? (
+          DEMO_FEATURES.deleteOrder && access.isOwner && canDeleteOrder(order.status) ? (
             <DeleteOrderDialog orderId={order.id} orderLabel={orderLabel} />
           ) : null
         }
@@ -103,7 +103,7 @@ export function OrderDetailView({
         <div className={cn("flex min-w-0 flex-col gap-6", hasAside && "lg:col-span-2")}>
           <TaskCard order={order} />
 
-          <ClientFilesCard access={access} filesSizeBytes={order.filesSizeBytes} />
+          {DEMO_FEATURES.files && <ClientFilesCard access={access} filesSizeBytes={order.filesSizeBytes} />}
 
           {access.isOwner ? <OrderOffersCard orderId={order.id} actions={actions} /> : null}
 
@@ -121,9 +121,9 @@ export function OrderDetailView({
             <SubmitOfferCard order={order} />
           ) : null}
 
-          <WorkCard order={order} actions={company} submissions={submissions} />
+          {DEMO_FEATURES.workflow && <WorkCard order={order} actions={company} submissions={submissions} />}
 
-          {access.isParty ? (
+          {DEMO_FEATURES.workflow && access.isParty ? (
             <>
               <CompletionCard order={order} actions={actions} isOwner={access.isOwner} />
 
@@ -143,7 +143,7 @@ export function OrderDetailView({
 
             {client ? <ClientCard client={client} /> : null}
 
-            {company.isExecutor ? <AreaCard order={order} /> : null}
+            {DEMO_FEATURES.workflow && company.isExecutor ? <AreaCard order={order} /> : null}
           </div>
         ) : null}
       </div>
@@ -383,8 +383,7 @@ function ClientFilesCard({
         */}
         {filesSizeBytes === null ? null : (
           <span className="text-muted-foreground font-mono text-xs">
-            по заказу занято {formatFileSize(filesSizeBytes)} из{" "}
-            {formatFileSize(MAX_ORDER_FILES_BYTES)}
+            файлы по заказу: {formatFileSize(filesSizeBytes)}
           </span>
         )}
       </CardHeader>

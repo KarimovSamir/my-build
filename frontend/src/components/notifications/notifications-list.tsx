@@ -1,12 +1,11 @@
 import Link from "next/link";
 
-import { DEFAULT_PAGE_SIZE, type NotificationDto, type Paginated } from "@/lib/types";
+import { type NotificationDto, type Paginated } from "@/lib/types";
 
 import { EmptyCard, OutOfRange, PaginationBar } from "@/components/list-parts";
 import { NotificationRow } from "@/components/notifications/notification-row";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { serverApi } from "@/lib/api.server";
 import {
   notificationsHref,
   type NotificationsFilter,
@@ -19,18 +18,7 @@ import {
  * backend: список постраничный, и сортировка на фронте оставила бы
  * непрочитанное со второй страницы внизу.
  */
-export async function NotificationsList({ filter }: { filter: NotificationsFilter }) {
-  const page = await serverApi.get<Paginated<NotificationDto>>("/notifications", {
-    query: {
-      // Параметра нет вовсе — значит «все»: `unread=false` на backend означает
-      // «только прочитанные».
-      unread: filter.unread ? "true" : undefined,
-      page: filter.page,
-      // Размер страницы задаётся явно, а не берётся из умолчания backend:
-      // иначе смена умолчания на сервере молча меняла бы вид экрана.
-      pageSize: DEFAULT_PAGE_SIZE,
-    },
-  });
+export function NotificationsList({ filter, page }: { filter: NotificationsFilter; page: Paginated<NotificationDto> }) {
 
   if (page.total === 0) {
     return filter.unread ? (

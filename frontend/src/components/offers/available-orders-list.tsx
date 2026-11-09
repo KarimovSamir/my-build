@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import {
-  DEFAULT_PAGE_SIZE,
   formatOrderNumber,
   objectTypeLabels,
   orderCategoryLabels,
@@ -14,7 +13,6 @@ import { OfferDialog } from "@/components/offers/offer-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { serverApi } from "@/lib/api.server";
 import {
   availableHref,
   isEmptyAvailableFilter,
@@ -33,16 +31,7 @@ import { formatMoment, formatMoney } from "@/lib/format";
  * Не таблица, а карточки: у каждой строки своя кнопка действия, а бюджет —
  * то, ради чего компания сюда и смотрит.
  */
-export async function AvailableOrdersList({ filter }: { filter: AvailableFilter }) {
-  const page = await serverApi.get<Paginated<AvailableOrderItem>>("/company/orders/available", {
-    query: {
-      q: filter.q,
-      page: filter.page,
-      // Размер страницы задаётся явно, а не берётся из умолчания backend:
-      // иначе смена умолчания на сервере молча меняла бы вид экрана.
-      pageSize: DEFAULT_PAGE_SIZE,
-    },
-  });
+export function AvailableOrdersList({ filter, page }: { filter: AvailableFilter; page: Paginated<AvailableOrderItem> }) {
 
   if (page.total === 0) {
     return isEmptyAvailableFilter(filter) ? (
@@ -98,7 +87,7 @@ function AvailableOrderRow({ order }: { order: AvailableOrderItem }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link
-            href={`/orders/${order.id}`}
+            href={`/orders/view/?id=${encodeURIComponent(order.id)}`}
             className="focus-visible:ring-ring/50 font-heading text-base font-semibold hover:underline focus-visible:ring-3 focus-visible:outline-none"
           >
             {order.title}
@@ -133,7 +122,7 @@ function AvailableOrderRow({ order }: { order: AvailableOrderItem }) {
 
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" asChild>
-            <Link href={`/orders/${order.id}`}>Подробнее</Link>
+            <Link href={`/orders/view/?id=${encodeURIComponent(order.id)}`}>Подробнее</Link>
           </Button>
           {/*
             Прежнее предложение передаётся и здесь: заказ попадает в ленту

@@ -3,7 +3,7 @@
 import { ArrowRight, ArrowUpFromLine, ClipboardList, Info } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import {
@@ -23,6 +23,8 @@ import {
   FormErrors,
   FormSection,
 } from "@/components/form-parts";
+import { DEMO_FEATURES } from "@/lib/demo/features";
+import { orderHref } from "@/lib/demo/operations";
 import { FileDropzone } from "@/components/orders/file-dropzone";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -56,8 +58,7 @@ import {
  * заполняет форму до того, как хоть раз видел сделку, и без них непонятно,
  * чем отличается его бюджет от цены, которую он потом увидит в заказе.
  *
- * Форма отправляется из браузера, а не серверным действием: файлы уходят
- * в API напрямую, без лишнего перекладывания через процесс Next.js.
+ * В автономном демо форма сохраняет заказ через локальный адаптер.
  */
 export function NewOrderForm() {
   const router = useRouter();
@@ -66,6 +67,7 @@ export function NewOrderForm() {
   const [errors, setErrors] = useState<OrderFormErrors>({});
   const [formError, setFormError] = useState<string[] | null>(null);
   const [pending, setPending] = useState(false);
+  const submitting = useRef(false);
 
   /** Правка поля убирает его ошибку: сообщение о старом значении только мешает. */
   function update(field: OrderFormField, value: string) {
@@ -75,6 +77,7 @@ export function NewOrderForm() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting.current) return;
     setFormError(null);
 
     const found = validateOrderForm(values);
@@ -85,6 +88,7 @@ export function NewOrderForm() {
       return;
     }
 
+    submitting.current = true;
     setPending(true);
 
     try {
@@ -94,13 +98,10 @@ export function NewOrderForm() {
       );
 
       toast.success("Заказ опубликован", {
-        description: "Компании увидят его в ленте и пришлют предложения",
+        description: "Переключитесь на компанию, чтобы предложить условия",
       });
 
-      router.push(`/orders/${order.id}`);
-      // Список заказов рендерится на сервере — без этого он остался бы в кэше
-      // роутера без только что созданной строки.
-      router.refresh();
+      router.push(orderHref(order.id));
     } catch (error) {
       // Сообщения валидации приходят списком строк без имени поля, поэтому
       // показать их под конкретным полем нельзя — и не нужно: то же самое
@@ -109,10 +110,11 @@ export function NewOrderForm() {
       setFormError(
         apiErrorMessages(
           error,
-          "Не удалось отправить заказ. Проверьте соединение и попробуйте ещё раз",
+          "Не удалось сохранить заказ. Попробуйте ещё раз",
         ),
       );
       setPending(false);
+      submitting.current = false;
     }
   }
 
@@ -261,8 +263,8 @@ export function NewOrderForm() {
             <Label htmlFor="files" className="sr-only">
               Файлы проекта
             </Label>
-            <FileDropzone id="files" files={files} onChange={setFiles} disabled={pending} />
-            <FieldMessage hint="Планы, чертежи и фотографии помогут компаниям точнее оценить работу" />
+            {DEMO_FEATURES.files ? <FileDropzone id="files" files={files} onChange={setFiles} disabled={pending} /> : <p className="text-muted-foreground text-sm">В этой версии демо заказ создаётся без файлов.</p>}
+            {DEMO_FEATURES.files && <FieldMessage hint="Планы, чертежи и фотографии помогут компаниям точнее оценить работу" />}
           </div>
         </FormSection>
 

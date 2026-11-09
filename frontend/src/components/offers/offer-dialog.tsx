@@ -64,6 +64,7 @@ export function OfferDialog({
 }) {
   const sync = useOrderSync();
   const [open, setOpen] = useState(false);
+  const [seenUpdatedAt, setSeenUpdatedAt] = useState(offer?.updatedAt ?? null);
   const [values, setValues] = useState<OfferFormValues>(() => offerFormValues(offer));
   const [errors, setErrors] = useState<OfferFormErrors>({});
   const [formError, setFormError] = useState<string[] | null>(null);
@@ -86,6 +87,7 @@ export function OfferDialog({
   function handleOpenChange(next: boolean) {
     if (next) {
       setValues(offerFormValues(offer));
+      setSeenUpdatedAt(offer?.updatedAt ?? null);
       setErrors({});
       setFormError(null);
     }
@@ -108,7 +110,7 @@ export function OfferDialog({
     setPending(true);
 
     try {
-      await browserApi.post<OfferDto>("/offers", toOfferBody(order.id, values));
+      await browserApi.post<OfferDto>("/offers", { ...toOfferBody(order.id, values), seenUpdatedAt });
 
       toast.success(isUpdate ? "Предложение обновлено" : "Предложение отправлено", {
         description: `${orderLabel} · ${order.title}`,

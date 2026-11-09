@@ -14,7 +14,6 @@ import {
   ALLOWED_FILE_EXTENSIONS_HINT,
   MAX_FILE_NAME_LENGTH,
   MAX_FILES_PER_REQUEST,
-  MAX_FILE_SIZE_BYTES,
   MAX_ORDER_FILES_BYTES,
   MONEY_PATTERN,
   ORDER_LIMITS,
@@ -25,6 +24,7 @@ import {
 } from "@/lib/types";
 
 import { isCalendarDate, isPastDate, normalizeNumber } from "./form-input";
+import { DEMO_FILE_BYTES as MAX_FILE_SIZE_BYTES } from "./demo/limits";
 import { formatFileSize } from "./format";
 
 /** Значения полей формы. Всё строками — так их отдаёт браузер. */

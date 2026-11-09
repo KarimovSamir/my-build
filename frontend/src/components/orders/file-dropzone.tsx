@@ -1,4 +1,6 @@
 "use client";
+import { DEMO_FILE_BYTES as MAX_FILE_SIZE_BYTES, DEMO_TOTAL_BYTES as MAX_ORDER_FILES_BYTES } from "@/lib/demo/limits";
+
 
 import { FileText, Image as ImageIcon, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
@@ -7,10 +9,9 @@ import {
   ALLOWED_FILE_EXTENSIONS,
   ALLOWED_FILE_EXTENSIONS_HINT,
   MAX_FILES_PER_REQUEST,
-  MAX_FILE_SIZE_BYTES,
-  MAX_ORDER_FILES_BYTES,
 } from "@/lib/types";
 
+import { useDemo } from "@/components/demo/provider";
 import { Button } from "@/components/ui/button";
 import { isImageFileName } from "@/lib/file-kind";
 import { formatFileSize } from "@/lib/format";
@@ -30,7 +31,6 @@ export function FileDropzone({
   files,
   onChange,
   disabled,
-  usedBytes = 0,
   takenNames,
 }: {
   /** Идентификатор области выбора: на неё указывает подпись поля. */
@@ -55,6 +55,8 @@ export function FileDropzone({
 
   // Занятое вместе с тем, что уже выбрано, но ещё не отправлено: счётчик
   // отвечает на вопрос «сколько останется, если я нажму загрузить».
+  const { state } = useDemo();
+  const usedBytes = state?.orders.flatMap((o) => o.files).reduce((total, f) => total + (f.blob?.size ?? 0), 0) ?? 0;
   const occupied = usedBytes + files.reduce((total, file) => total + file.size, 0);
 
   function accept(incoming: FileList | null) {
@@ -103,11 +105,11 @@ export function FileDropzone({
           <span className="text-secondary-foreground"> или перетащите сюда</span>
         </span>
         <span className="text-muted-foreground font-mono text-xs">
-          {ALLOWED_FILE_EXTENSIONS_HINT} · до {MAX_FILE_SIZE_BYTES / 1024 / 1024} МБ ·
-          не больше {MAX_FILES_PER_REQUEST} за раз
+          {ALLOWED_FILE_EXTENSIONS_HINT} · до {MAX_FILE_SIZE_BYTES / 1024 / 1024} МиБ ·
+          не больше {MAX_FILES_PER_REQUEST} за раз. В демо — 50 МиБ на все заказы
         </span>
         <span className="text-muted-foreground font-mono text-xs">
-          файлы заказа: {formatFileSize(occupied)} из{" "}
+          пользовательские файлы демо: {formatFileSize(occupied)} из{" "}
           {formatFileSize(MAX_ORDER_FILES_BYTES)}
         </span>
       </button>

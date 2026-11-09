@@ -1,8 +1,8 @@
+import { DEMO_FILE_BYTES as MAX_FILE_SIZE_BYTES } from "./demo/limits";
 import { describe, expect, it } from "vitest";
 
 import {
   MAX_FILES_PER_REQUEST,
-  MAX_FILE_SIZE_BYTES,
   MAX_ORDER_FILES_BYTES,
   ObjectType,
   OrderCategory,

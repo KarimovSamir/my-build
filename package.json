@@ -27,7 +27,11 @@
     "db:studio": "npm run db:studio -w backend",
     "db:seed": "npm run db:seed -w backend",
     "db:wipe": "npm run db:wipe -w backend",
-    "db:reset": "npm run db:reset -w backend"
+    "db:reset": "npm run db:reset -w backend",
+    "build:demo": "npm run build -w shared && node scripts/build-demo.mjs",
+    "preview:demo": "node scripts/preview-demo.mjs",
+    "verify:demo": "node scripts/verify-demo.mjs",
+    "install:demo": "npm ci --ignore-scripts --workspace shared --workspace frontend --include-workspace-root"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

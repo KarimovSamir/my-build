@@ -16,7 +16,7 @@ import type { NotificationDto } from "@/lib/types";
 export function notificationHref(
   notification: Pick<NotificationDto, "orderId">,
 ): string | null {
-  return notification.orderId ? `/orders/${notification.orderId}` : null;
+  return notification.orderId ? `/orders/view/?id=${encodeURIComponent(notification.orderId)}` : null;
 }
 
 /** Больше этого числа колокольчик показывает «99+», а не настоящее значение. */

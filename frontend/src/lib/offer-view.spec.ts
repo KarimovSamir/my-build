@@ -31,7 +31,7 @@ describe("offerHint", () => {
     OfferStatus.BACK_FOR_OVERRIDE,
     OfferStatus.COMPLETED,
   ])("из статуса исполнителя (%s) ведёт на страницу заказа", (status) => {
-    expect(offerHint(offerIn(status), ORDER_ID)?.link?.href).toBe(`/orders/${ORDER_ID}`);
+    expect(offerHint(offerIn(status), ORDER_ID)?.link?.href).toBe(`/orders/view/?id=${ORDER_ID}`);
   });
 
   it.each([OfferStatus.REJECTED, OfferStatus.WITHDRAWN])(

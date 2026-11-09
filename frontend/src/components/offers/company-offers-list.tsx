@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import {
-  DEFAULT_PAGE_SIZE,
   formatOrderNumber,
   isPendingOffer,
   offerStatusLabels,
@@ -15,7 +14,6 @@ import { WithdrawOfferDialog } from "@/components/offers/withdraw-offer-dialog";
 import { OfferStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { serverApi } from "@/lib/api.server";
 import { formatDate, formatMoment, formatMoney } from "@/lib/format";
 import { offerHint } from "@/lib/offer-view";
 import { companyOffersHref, type CompanyOffersFilter } from "@/lib/offers-filter";
@@ -27,16 +25,7 @@ import { companyOffersHref, type CompanyOffersFilter } from "@/lib/offers-filter
  * клиента, — у остальных вместо кнопок подсказка о том, что происходит
  * с заказом (`offerHint`).
  */
-export async function CompanyOffersList({ filter }: { filter: CompanyOffersFilter }) {
-  const page = await serverApi.get<Paginated<CompanyOfferItem>>("/company/offers", {
-    query: {
-      status: filter.status,
-      page: filter.page,
-      // Размер страницы задаётся явно, а не берётся из умолчания backend:
-      // иначе смена умолчания на сервере молча меняла бы вид экрана.
-      pageSize: DEFAULT_PAGE_SIZE,
-    },
-  });
+export function CompanyOffersList({ filter, page }: { filter: CompanyOffersFilter; page: Paginated<CompanyOfferItem> }) {
 
   if (page.total === 0) {
     return filter.status === null ? (
@@ -96,7 +85,7 @@ function CompanyOfferRow({ offer }: { offer: CompanyOfferItem }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link
-            href={`/orders/${order.id}`}
+            href={`/orders/view/?id=${encodeURIComponent(order.id)}`}
             className="focus-visible:ring-ring/50 font-heading text-base font-semibold hover:underline focus-visible:ring-3 focus-visible:outline-none"
           >
             {order.title}

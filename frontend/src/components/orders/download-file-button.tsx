@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type { DownloadLink } from "@/lib/types";
 
 import { Button } from "@/components/ui/button";
+import { DeleteFileButton } from "@/components/demo/delete-file-button";
 import { ApiRequestError } from "@/lib/api";
 import { browserApi } from "@/lib/api.client";
 
@@ -34,7 +35,13 @@ export function DownloadFileButton({
 
     try {
       const link = await browserApi.get<DownloadLink>(`/documents/${fileId}/download`);
-      window.location.href = link.url;
+      const anchor = document.createElement("a");
+      anchor.href = link.url;
+      anchor.download = link.originalName;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      if (link.url.startsWith("blob:")) setTimeout(() => URL.revokeObjectURL(link.url), 60_000);
     } catch (error) {
       toast.error("Не удалось скачать файл", { description: describe(error) });
     } finally {
@@ -43,7 +50,7 @@ export function DownloadFileButton({
   }
 
   return (
-    <Button
+    <span className="inline-flex flex-wrap gap-1"><Button
       variant="ghost"
       size="sm"
       disabled={pending}
@@ -52,7 +59,7 @@ export function DownloadFileButton({
     >
       <Download className="size-4" aria-hidden />
       {pending ? "Готовим…" : "Скачать"}
-    </Button>
+    </Button><DeleteFileButton fileId={fileId} fileName={fileName} /></span>
   );
 }
 

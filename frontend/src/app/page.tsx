@@ -1,21 +1,17 @@
 import { ArrowRight, Check, FileText, ShieldCheck, Zap } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { Logo } from "@/components/brand/logo";
 import { AppPreview } from "@/components/landing/app-preview";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { dealRoute, demoAccountsSummary } from "@/lib/landing";
-import { getHomeHref } from "@/lib/navigation";
-import { getSessionClaims } from "@/lib/session.server";
+import { dealRoute } from "@/lib/landing";
 import { cn } from "@/lib/utils";
 
 /**
  * Лендинг (ТЗ §7). Публичная страница, доступна без авторизации.
- * Вошедшего пользователя сразу отправляем в его кабинет.
  *
  * Палитра и шрифты — общие с кабинетом (`globals.css`, корневой layout).
  * Своё здесь только чертёжная сетка первого экрана и тёмные полосы
@@ -74,13 +70,7 @@ const roles = [
   },
 ];
 
-export default async function LandingPage() {
-  const claims = await getSessionClaims();
-
-  if (claims) {
-    redirect(getHomeHref(claims.role));
-  }
-
+export default function LandingPage() {
   return (
     <div className="bg-background text-foreground flex min-h-screen flex-col">
       <header className="border-border bg-background/85 sticky top-0 z-20 border-b backdrop-blur">
@@ -104,7 +94,7 @@ export default async function LandingPage() {
               asChild
               className="bg-foreground text-background hover:bg-foreground/85 hidden h-11 px-4 text-sm sm:inline-flex"
             >
-              <Link href="/register">Регистрация</Link>
+              <Link href="/login">Открыть демо</Link>
             </Button>
           </div>
         </div>
@@ -131,18 +121,18 @@ export default async function LandingPage() {
 
               <div className="mt-9 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
                 <Button asChild className="h-14 px-7 text-base font-bold">
-                  <Link href="/register">
+                  <Link href="/login">
                     Разместить заказ
                     <ArrowRight className="size-[1.125rem]" />
                   </Link>
                 </Button>
                 <Button variant="outline" asChild className="border-foreground h-14 px-7 text-base">
-                  <Link href="/register">Я строительная компания</Link>
+                  <Link href="/login">Я строительная компания</Link>
                 </Button>
               </div>
 
               <p className="text-muted-foreground font-mono mt-5 text-sm text-balance">
-                Публичная демоверсия — на странице входа готовые аккаунты {demoAccountsSummary()}
+                Демо без регистрации — клиент и две компании. Изменения сохраняются в вашем браузере.
               </p>
             </div>
 
@@ -167,8 +157,8 @@ export default async function LandingPage() {
                 проекта. Оригинальная клиентская версия не публикуется из-за договорных ограничений.
               </p>
               <p className="text-brand-ink-muted mt-3.5 max-w-2xl leading-relaxed text-pretty">
-                На странице входа есть готовые аккаунты {demoAccountsSummary()} — можно
-                пройти сделку целиком, от публикации заказа до приёмки работы.
+                Сейчас можно создать заказ, отправить предложение от компании и выбрать
+                исполнителя. Сдача работ, документы и остальные разделы появятся после завершения переноса демо.
               </p>
             </div>
 
@@ -184,7 +174,7 @@ export default async function LandingPage() {
                 asChild
                 className="border-brand-ink-muted/45 text-brand-ink-foreground hover:bg-brand-ink-foreground/10 hover:text-brand-ink-foreground h-14 bg-transparent px-7 text-base"
               >
-                <Link href="/register">Зарегистрироваться</Link>
+                <Link href="/login">Зарегистрироваться</Link>
               </Button>
             </div>
           </div>
@@ -318,7 +308,7 @@ export default async function LandingPage() {
                     asChild
                     className="border-foreground mt-7 h-12 w-fit px-5 text-[0.95rem]"
                   >
-                    <Link href="/register">
+                    <Link href="/login">
                       {ctaLabel}
                       <ArrowRight className="size-4" />
                     </Link>

@@ -1,3 +1,4 @@
+import { DEMO_FEATURES } from "@/lib/demo/features";
 import Link from "next/link";
 
 import { formatOrderNumber, isPendingOffer, type OfferDto, type OrderDetail } from "@/lib/types";
@@ -97,14 +98,14 @@ export function CompanyOfferCard({
           </p>
         ) : null}
 
-        {pending ? (
+        {DEMO_FEATURES.editOffer && pending ? (
           <div className="flex flex-wrap gap-2">
             <OfferDialog order={order} offer={offer} />
             <WithdrawOfferDialog offerId={offer.id} orderLabel={orderLabel} />
           </div>
         ) : null}
 
-        {canResubmit ? (
+        {DEMO_FEATURES.editOffer && canResubmit ? (
           <div className="flex flex-wrap gap-2">
             <OfferDialog order={order} offer={offer} />
           </div>

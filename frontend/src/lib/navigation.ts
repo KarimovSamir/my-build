@@ -113,6 +113,7 @@ const ORDER_DETAIL = /^\/orders\/(?!new$)[^/]+$/;
  *   именно оттуда, и без этого на карточке не подсвечено вообще ничего.
  */
 export function isNavItemActive(href: string, pathname: string, role: Role): boolean {
+  pathname = pathname.replace(/\/+$/, "") || "/";
   if (href === "/orders") {
     return pathname === "/orders" || ORDER_DETAIL.test(pathname);
   }

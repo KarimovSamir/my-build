@@ -1,18 +1,14 @@
+import { NotificationBell } from "./notification-bell";
 import { MapPin } from "lucide-react";
 
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
-import { NotificationBell } from "@/components/layout/notification-bell";
-import { ConnectionStatus } from "@/components/realtime/connection-status";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Separator } from "@/components/ui/separator";
 import type { CurrentUser } from "@/lib/session";
 
 /**
- * Шапка кабинета: крошки слева, колокольчик и город/страна справа (ТЗ §7).
- *
- * Число непрочитанных колокольчик берёт из `UnreadProvider` — оно живёт
- * в каркасе и меняется по событию `notification:created` (ТЗ §8).
+ * Шапка кабинета: крошки, переключатель темы и город/страна.
  */
 export function AppHeader({ user }: { user: CurrentUser }) {
   const location = [user.city, user.country].filter(Boolean).join(", ");
@@ -25,14 +21,8 @@ export function AppHeader({ user }: { user: CurrentUser }) {
         <Breadcrumbs role={user.role} />
       </div>
 
-      {/* Появляется только при обрыве: экран молчит одинаково и когда ничего
-          не произошло, и когда обновления перестали доезжать. */}
-      <ConnectionStatus />
-
-      <ThemeToggle />
-
       <NotificationBell />
-
+      <ThemeToggle />
       {location ? (
         <>
           <Separator orientation="vertical" className="hidden h-6 sm:block" />

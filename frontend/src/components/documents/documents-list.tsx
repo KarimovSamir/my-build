@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import {
-  DEFAULT_PAGE_SIZE,
   formatOrderNumber,
   type DocumentListItem,
   type Paginated,
@@ -13,7 +12,6 @@ import { EmptyCard, OutOfRange, PaginationBar } from "@/components/list-parts";
 import { DownloadFileButton } from "@/components/orders/download-file-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { serverApi } from "@/lib/api.server";
 import { documentOwnerLabel } from "@/lib/document-view";
 import {
   documentsHref,
@@ -29,24 +27,16 @@ import {
  * Скачивание — тот же `DownloadFileButton`, что и в заказе: подпись живёт
  * пять минут и запрашивается по нажатию.
  */
-export async function DocumentsList({
+export function DocumentsList({
   filter,
   viewer,
+  page,
 }: {
   filter: DocumentsFilter;
   /** Роль смотрящего: от неё зависит, какие файлы называются своими. */
   viewer: Role;
+  page: Paginated<DocumentListItem>;
 }) {
-  const page = await serverApi.get<Paginated<DocumentListItem>>("/documents", {
-    query: {
-      ownerType: filter.ownerType,
-      orderId: filter.orderId,
-      page: filter.page,
-      // Размер страницы задаётся явно, а не берётся из умолчания backend:
-      // иначе смена умолчания на сервере молча меняла бы вид экрана.
-      pageSize: DEFAULT_PAGE_SIZE,
-    },
-  });
 
   if (page.total === 0) {
     return isEmptyDocumentsFilter(filter) ? (
@@ -116,7 +106,7 @@ function DocumentRow({
       */}
       <span className="order-1 flex w-full items-center justify-between gap-3 sm:order-none sm:w-auto sm:justify-end">
         <Link
-          href={`/orders/${document.orderId}`}
+          href={`/orders/view/?id=${encodeURIComponent(document.orderId)}`}
           className="hover:text-foreground focus-visible:ring-ring/50 text-secondary-foreground min-w-0 rounded text-sm break-words underline-offset-4 transition-colors hover:underline focus-visible:ring-3 focus-visible:outline-none sm:max-w-3xs"
         >
           {/* Разделитель стоит внутри моноширинного куска: иначе он отрывался бы

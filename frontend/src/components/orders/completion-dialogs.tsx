@@ -39,12 +39,15 @@ import {
 export function ConfirmWorkDialog({
   orderId,
   orderLabel,
+  round,
 }: {
   orderId: string;
   orderLabel: string;
+  round: number;
 }) {
   return (
     <CompletionDecision
+      round={round}
       trigger={
         <Button>
           <CircleCheckBig className="size-4" aria-hidden />
@@ -73,12 +76,15 @@ export function ConfirmWorkDialog({
 export function DisputeWorkDialog({
   orderId,
   orderLabel,
+  round,
 }: {
   orderId: string;
   orderLabel: string;
+  round: number;
 }) {
   return (
     <CompletionDecision
+      round={round}
       trigger={
         <Button variant="outline">
           <RotateCcw className="size-4" aria-hidden />
@@ -105,6 +111,7 @@ export function DisputeWorkDialog({
 
 /** Общая обвязка: одно поле, проверка, запрос, тост, обновление карточки. */
 function CompletionDecision({
+  round,
   trigger,
   title,
   description,
@@ -121,6 +128,7 @@ function CompletionDecision({
   successText,
   fallbackError,
 }: {
+  round: number;
   trigger: ReactNode;
   title: string;
   description: string;
@@ -139,6 +147,7 @@ function CompletionDecision({
 }) {
   const sync = useOrderSync();
   const [open, setOpen] = useState(false);
+  const [seenRound, setSeenRound] = useState(round);
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | undefined>(undefined);
   const [formError, setFormError] = useState<string[] | null>(null);
@@ -148,6 +157,7 @@ function CompletionDecision({
   function handleOpenChange(next: boolean) {
     if (next) {
       setComment("");
+      setSeenRound(round);
       setError(undefined);
       setFormError(null);
     }
@@ -167,7 +177,7 @@ function CompletionDecision({
     setPending(true);
 
     try {
-      const order = await browserApi.post<OrderDetail>(path, toBody(comment.trim()));
+      const order = await browserApi.post<OrderDetail>(path, { ...toBody(comment.trim()), seenRound });
 
       toast.success(successTitle, { description: successText });
       setOpen(false);

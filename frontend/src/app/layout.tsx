@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Literata, Manrope } from "next/font/google";
 
+import { DemoProvider } from "@/components/demo/provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -56,7 +57,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-full flex-col">
         <ThemeProvider>
-          {children}
+          <DemoProvider>{children}</DemoProvider>
           <Toaster position="top-right" richColors />
         </ThemeProvider>
       </body>
