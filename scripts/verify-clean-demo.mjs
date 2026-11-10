@@ -9,7 +9,7 @@ const tempRoot = join(root, 'tmp');
 await mkdir(tempRoot, { recursive: true });
 const staging = await mkdtemp(join(tempRoot, 'demo-clean-'));
 assert(process.env.npm_execpath, 'Run through npm run verify:demo:clean');
-const env = { ...process.env, NEXT_TELEMETRY_DISABLED: '1' };
+const env = { ...process.env, NODE_ENV: 'production', NEXT_TELEMETRY_DISABLED: '1' };
 for (const key of Object.keys(env)) {
   if (/SUPABASE|DATABASE_URL|DIRECT_URL|^NEXT_PUBLIC_(API|WS)_URL$|MYBUILD_WORKSPACE_ROOT/.test(key)) delete env[key];
 }
@@ -25,16 +25,15 @@ async function npm(args) {
   });
 }
 try {
-  for (const path of ['package.json', 'package-lock.json', 'scripts', 'shared/src', 'shared/package.json', 'shared/tsconfig.json', 'shared/tsconfig.build.json',
+  for (const path of ['package.json', 'package-lock.json', 'vercel.json', 'scripts', 'shared/src', 'shared/package.json', 'shared/tsconfig.json', 'shared/tsconfig.build.json',
     'frontend/src', 'frontend/public', 'frontend/package.json', 'frontend/tsconfig.json', 'frontend/next.config.ts', 'frontend/postcss.config.mjs']) {
     await cp(join(root, path), join(staging, path), { recursive: true });
   }
-  await npm(['ci', '--ignore-scripts', '--workspace', 'shared', '--workspace', 'frontend', '--include-workspace-root', '--no-audit', '--no-fund']);
+  await npm(['run', 'install:demo', '--', '--no-audit', '--no-fund']);
   for (const path of ['backend', 'frontend/.env', 'node_modules/@prisma/client']) {
     assert(!(await access(join(staging, path)).then(() => true, () => false)), `Unexpected backend input: ${path}`);
   }
-  await npm(['run', 'build:demo']);
-  await npm(['run', 'verify:demo']);
+  await npm(['run', 'build:vercel']);
   const report = JSON.parse(await readFile(join(staging, 'tmp/demo-audit.json'), 'utf8'));
   await writeFile(join(tempRoot, 'demo-clean-audit.json'), JSON.stringify({ ...report, cleanInstall: true, backendPresent: false, legacyEnvironmentSentinelsAbsent: true }, null, 2) + '\n');
   console.log('Clean install, build and HTTP verification passed without backend, Prisma Client or .env. Report: tmp/demo-clean-audit.json');

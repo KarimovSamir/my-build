@@ -72,7 +72,7 @@ src/lib/demo/files.ts        проверка содержимого и SHA-256 
 src/lib/demo/selectors.ts    представления данных для экранов
 src/lib/api.client.ts        вход форм в локальный транспорт
 src/lib/types.ts             реэкспорт типов shared
-public/_headers             HTTP-политика для Pages и локального preview
+public/_headers             HTTP-политика локального preview (совместимая с Pages)
 public/demo/room-plan.dxf    скачиваемый пример
 ```
 
@@ -106,5 +106,8 @@ Vitest проверяет логику и сбои хранения с fake-inde
 `verify:demo` сканирует готовые ресурсы и проверяет HTTP без браузера.
 `verify:demo:clean` повторяет установку, сборку и HTTP-проверки без backend
 и `.env`. Отчёты — `tmp/demo-audit.json` и `tmp/demo-clean-audit.json`.
-CSP в `_headers` применяется preview и целевым Pages; `next dev` работает
-по своим правилам, поэтому ручную приёмку проводят на `preview:demo`.
+Целевой хостинг — существующий Vercel: конфигурация в корневом `vercel.json`,
+команда `npm run build:vercel`. Она проверяет соответствие заголовков Vercel
+и локального `_headers`, затем собирает и проверяет экспорт. `next dev` работает
+по своим правилам, поэтому локальную приёмку проводят на `preview:demo`.
+Настройки публикации — в [инструкции](../docs/autonomous-demo-publish.md).

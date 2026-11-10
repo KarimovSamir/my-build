@@ -29,16 +29,18 @@
     "db:wipe": "npm run db:wipe -w backend",
     "db:reset": "npm run db:reset -w backend",
     "build:demo": "npm run build -w shared && node scripts/build-demo.mjs",
+    "build:vercel": "node scripts/verify-vercel-config.mjs && npm run build:demo && npm run verify:demo",
     "preview:demo": "node scripts/preview-demo.mjs",
     "verify:demo": "node scripts/audit-demo.mjs && node scripts/verify-demo.mjs",
     "test:demo-tools": "node --test scripts/demo-headers.test.mjs",
     "verify:demo:clean": "node scripts/verify-clean-demo.mjs",
-    "install:demo": "npm ci --ignore-scripts --workspace shared --workspace frontend --include-workspace-root"
+    "package:demo": "npm run build:demo && npm run verify:demo && powershell -NoProfile -File scripts/package-demo.ps1",
+    "install:demo": "npm ci --ignore-scripts --include=dev --workspace shared --workspace frontend --include-workspace-root"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
   },
   "engines": {
-    "node": "^22.12 || >=24"
+    "node": "24.x"
   }
 }
