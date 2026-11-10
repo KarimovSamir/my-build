@@ -26,7 +26,7 @@ const segmentLabels: Record<string, string> = {
   orders: "Все заказы",
   new: "Создать заказ",
   available: "Доступные заказы",
-  offers: "Мои предложения",
+  offers: "Мои проекты",
   contractors: "Подрядчики",
   documents: "Документы",
   notifications: "Уведомления",
@@ -81,7 +81,7 @@ export function buildBreadcrumbs(pathname: string, role: Role | null): Crumb[] {
  * Компания попадает на `/orders/{id}` по своему предложению, но самого раздела
  * у неё не существует — `proxy.ts` увёл бы её оттуда на ленту. Поэтому крошка
  * ведёт туда же, что подсвечено в меню на этой странице (`isNavItemActive`):
- * в «Мои предложения». Разойдись они — шапка и меню называли бы разные места.
+ * в «Мои проекты». Разойдись они — шапка и меню называли бы разные места.
  */
 function companySection(href: string, role: Role | null): { label: string; href: string } | null {
   if (role !== Role.COMPANY || href !== "/orders") return null;

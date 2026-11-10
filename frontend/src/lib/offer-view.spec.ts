@@ -37,7 +37,7 @@ describe("offerHint", () => {
   it.each([OfferStatus.REJECTED, OfferStatus.WITHDRAWN])(
     "после статуса %s отправляет в ленту, пока отправить заново нельзя",
     (status) => {
-      // Права на новое предложение у списка «Мои предложения» нет: там заказ
+      // Права на новое предложение у списка «Мои проекты» нет: там заказ
       // приходит строкой списка, без `canSubmitOffer`.
       expect(offerHint(offerIn(status), ORDER_ID)?.link?.href).toBe("/available");
     },

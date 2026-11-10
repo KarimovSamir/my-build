@@ -40,7 +40,7 @@ export function AvailableOrdersList({ filter, page }: { filter: AvailableFilter;
         description="Здесь появятся заказы, по которым клиенты ищут исполнителя."
       >
         <Button variant="outline" asChild>
-          <Link href="/offers">Мои предложения</Link>
+          <Link href="/offers">Мои проекты</Link>
         </Button>
       </EmptyCard>
     ) : (

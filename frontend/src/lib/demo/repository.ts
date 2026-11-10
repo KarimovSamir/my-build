@@ -4,6 +4,7 @@ import { applyCommand, type CommandEnvelope } from "./operations";
 export const DEMO_DATABASE = "mybuild-autonomous-demo";
 const STORE = "world";
 const KEY = "current";
+export const DEMO_TRANSACTION_TIMEOUT_MS = 15_000;
 
 export class DemoRepository {
   private connection: Promise<IDBDatabase> | null = null;
@@ -25,6 +26,7 @@ export class DemoRepository {
         settled = true;
         clearTimeout(timeout);
         db.onversionchange = () => { db.close(); this.connection = null; };
+        db.onclose = () => { this.connection = null; };
         resolve(db);
       };
     });
@@ -40,6 +42,11 @@ export class DemoRepository {
       const request = store.get(KEY);
       let result: DemoState;
       let failure: unknown;
+      const timeout = setTimeout(() => {
+        failure = new Error("Хранилище браузера не отвечает. Не удалось подтвердить сохранение. Повторите открытие демо.");
+        try { tx.abort(); } catch { /* A closed transaction can no longer be aborted. */ }
+        reject(failure);
+      }, DEMO_TRANSACTION_TIMEOUT_MS);
       request.onsuccess = () => {
         try {
           const saved: unknown = request.result;
@@ -49,8 +56,8 @@ export class DemoRepository {
         } catch (error) { failure = error; tx.abort(); }
       };
       // Resolve only after commit, never after a successful put request.
-      tx.oncomplete = () => resolve(result);
-      tx.onabort = () => reject(failure ?? tx.error ?? new Error("Не удалось сохранить изменения. Проверьте свободное место в браузере."));
+      tx.oncomplete = () => { clearTimeout(timeout); resolve(result); };
+      tx.onabort = () => { clearTimeout(timeout); reject(failure ?? tx.error ?? new Error("Не удалось сохранить изменения. Проверьте свободное место в браузере.")); };
       tx.onerror = () => { failure ??= tx.error; };
     });
   }

@@ -50,8 +50,8 @@ export function DemoOrders({ mode }: { mode: "orders" | "available" | "offers" }
   if (actor.role !== Role.COMPANY) return <DeferredSection message="Этот раздел доступен профилю компании." />;
   if (mode === "offers") {
     const filter = parseCompanyOffersFilter(params);
-    return <><PageHeader title="Мои предложения" description="Условия, выполнение и результаты ваших заказов" />
-      <StatusTabs label="Статус предложения" tabs={[{ label: "Все предложения", href: companyOffersHref(), active: !filter.status },
+    return <><PageHeader title="Мои проекты" description="Условия, выполнение и результаты ваших заказов" />
+      <StatusTabs label="Статус предложения" tabs={[{ label: "Все проекты", href: companyOffersHref(), active: !filter.status },
         ...OFFER_STATUS_TABS.map((status) => ({ label: offerStatusLabels[status], href: companyOffersHref({ status }), active: filter.status === status }))]} />
       <CompanyOffersList filter={filter} page={selectOffers(state, actor.id, filter)} /></>;
   }

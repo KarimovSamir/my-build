@@ -4,9 +4,14 @@ import { once } from 'node:events';
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { headersFor, parseHeaders } from './demo-headers.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const output = join(root, 'frontend', 'out');
+const rules = parseHeaders(await readFile(join(output, '_headers'), 'utf8'));
+function checkHeaders(response, pathname) {
+  for (const [key, value] of Object.entries(headersFor(rules, pathname))) assert.equal(response.headers.get(key), value, `${pathname}: ${key}`);
+}
 const routes = ['', 'login', 'orders', 'orders/new', 'orders/view', 'available', 'offers',
   'contractors', 'contractors/view', 'documents', 'notifications', 'settings',
   'register', 'forgot-password', 'reset-password', 'callback', 'callback/complete', 'verify-email', 'no-role'];
@@ -46,17 +51,31 @@ try {
   for (const route of routes) {
     const response = await fetch(`${base}/${route}${route ? '/' : ''}?id=sample-4`);
     assert.equal(response.status, 200, route);
+    checkHeaders(response, `/${route}${route ? '/' : ''}`);
     assert.match(response.headers.get('content-type'), /text\/html/);
     const html = await response.text();
     assert.match(html, /<html/);
     for (const match of html.matchAll(/(?:src|href)="(\/_next\/[^"?#]+)[^"]*"/g)) resources.add(match[1]);
   }
-  for (const asset of resources) assert.equal((await fetch(`${base}${asset}`)).status, 200, asset);
+  for (const asset of resources) {
+    const response = await fetch(`${base}${asset}`);
+    assert.equal(response.status, 200, asset); checkHeaders(response, asset);
+  }
   const sample = await fetch(`${base}/demo/room-plan.dxf`);
   assert.equal(sample.status, 200);
+  checkHeaders(sample, '/demo/room-plan.dxf');
+  assert.equal(sample.headers.get('content-type'), 'application/dxf');
   assert.deepEqual(Buffer.from(await sample.arrayBuffer()), await readFile(join(root, 'frontend/public/demo/room-plan.dxf')));
   assert.equal((await fetch(`${base}/orders/?id=unknown`)).status, 200);
-  assert.equal((await fetch(`${base}/does-not-exist/`)).status, 404);
+  const missing = await fetch(`${base}/does-not-exist/`);
+  assert.equal(missing.status, 404); checkHeaders(missing, '/does-not-exist/');
+  assert.match(await missing.text(), /<html/);
+  assert.equal((await fetch(`${base}/_headers`)).status, 404);
+  assert.equal((await fetch(`${base}/.env`)).status, 404);
+  const head = await fetch(`${base}/orders/`, { method: 'HEAD' });
+  assert.equal(head.status, 200); assert.equal(await head.text(), ''); checkHeaders(head, '/orders/');
+  const post = await fetch(`${base}/orders/`, { method: 'POST' });
+  assert.equal(post.status, 405); checkHeaders(post, '/orders/');
   const redirect = await fetch(`${base}/orders/view?id=sample-4`, { redirect: 'manual' });
   assert.equal(redirect.status, 308);
   assert.equal(redirect.headers.get('location'), '/orders/view/?id=sample-4');

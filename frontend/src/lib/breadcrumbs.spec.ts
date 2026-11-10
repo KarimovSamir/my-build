@@ -67,7 +67,7 @@ describe("buildBreadcrumbs", () => {
     // Та же ссылка подсвечена в меню на этой странице (`isNavItemActive`).
     expect(trail(`/orders/${ORDER_ID}`, Role.COMPANY)).toEqual([
       ["Главная", "/available"],
-      ["Мои предложения", "/offers"],
+      ["Мои проекты", "/offers"],
       ["Заказ", null],
     ]);
   });

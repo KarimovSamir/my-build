@@ -54,7 +54,7 @@ const companyNavigation: NavSection[] = [
   {
     items: [
       { href: "/available", label: "Доступные заказы", icon: Search },
-      { href: "/offers", label: "Мои предложения", icon: ListChecks },
+      { href: "/offers", label: "Мои проекты", icon: ListChecks },
     ],
   },
   {
@@ -109,7 +109,7 @@ const ORDER_DETAIL = /^\/orders\/(?!new$)[^/]+$/;
  * Два случая, которые не сводятся к сравнению строк:
  * - `/orders` не подсвечивается на `/orders/new` — иначе подсвечены два пункта;
  * - карточка заказа `/orders/<id>` общая для обеих ролей, но в меню компании
- *   раздела `/orders` нет. Подсвечиваем ей «Мои предложения»: заказ она видит
+ *   раздела `/orders` нет. Подсвечиваем ей «Мои проекты»: заказ она видит
  *   именно оттуда, и без этого на карточке не подсвечено вообще ничего.
  */
 export function isNavItemActive(href: string, pathname: string, role: Role): boolean {

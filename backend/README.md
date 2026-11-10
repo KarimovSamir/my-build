@@ -1,8 +1,13 @@
 # MyBuild — backend
 
-NestJS 12 (TypeScript, ESM) + Prisma + Supabase Postgres. Единственная точка
-входа к данным приложения: браузер обращается к Supabase напрямую только за
-авторизацией, всё остальное идёт сюда.
+NestJS 12 (TypeScript, ESM) + Prisma + Supabase Postgres. Сохранённая серверная
+реализация проекта: REST, JWT, файлы и WebSocket. Автономный frontend работает
+с IndexedDB и не вызывает этот backend; для просмотра демо запуск сервера,
+Supabase и переменные из этого документа не нужны.
+
+В серверной архитектуре API является точкой входа к данным, а Supabase Auth
+обслуживает авторизацию. Готового переключателя текущего frontend на эту
+архитектуру нет.
 
 Обзор проекта целиком, стек и схема доменной модели — в корневом
 [`README.md`](../README.md).
@@ -14,7 +19,6 @@ NestJS 12 (TypeScript, ESM) + Prisma + Supabase Postgres. Единственна
 ```bash
 npm install                 # из корня
 cp backend/env.example backend/.env   # заполнить значения
-npm run dev                 # backend + frontend вместе
 npm run dev:api             # только backend
 ```
 

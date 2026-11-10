@@ -19,7 +19,7 @@ import { offerHint } from "@/lib/offer-view";
 import { companyOffersHref, type CompanyOffersFilter } from "@/lib/offers-filter";
 
 /**
- * Мои предложения (ТЗ §5, §7).
+ * Мои проекты (ТЗ §5, §7).
  *
  * Изменить и отозвать можно только предложение, которое ещё ждёт выбора
  * клиента, — у остальных вместо кнопок подсказка о том, что происходит
@@ -30,7 +30,7 @@ export function CompanyOffersList({ filter, page }: { filter: CompanyOffersFilte
   if (page.total === 0) {
     return filter.status === null ? (
       <EmptyCard
-        title="Предложений пока нет"
+        title="Проектов пока нет"
         description="Найдите заказ в ленте и предложите свою цену и срок."
       >
         <Button asChild>
@@ -39,8 +39,8 @@ export function CompanyOffersList({ filter, page }: { filter: CompanyOffersFilte
       </EmptyCard>
     ) : (
       <EmptyCard
-        title={`Нет предложений в статусе «${offerStatusLabels[filter.status]}»`}
-        description="Выберите другую вкладку, чтобы увидеть остальные предложения."
+        title={`Нет проектов в статусе «${offerStatusLabels[filter.status]}»`}
+        description="Выберите другую вкладку, чтобы увидеть остальные проекты."
       >
         <Button variant="outline" asChild>
           <Link href={companyOffersHref()}>Показать все</Link>
@@ -54,7 +54,7 @@ export function CompanyOffersList({ filter, page }: { filter: CompanyOffersFilte
       {page.items.length === 0 ? (
         <OutOfRange
           href={companyOffersHref({ status: filter.status })}
-          label="На этой странице предложений нет"
+          label="На этой странице проектов нет"
         />
       ) : (
         <ul className="divide-border divide-y">

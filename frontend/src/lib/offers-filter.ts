@@ -1,5 +1,5 @@
 /**
- * Фильтр списка «Мои предложения» компании (`/offers`, ТЗ §5).
+ * Фильтр списка «Мои проекты» компании (`/offers`, ТЗ §5).
  *
  * Поиска здесь нет — как и на backend: список разбирается вкладками статусов.
  */
@@ -14,7 +14,7 @@ import {
 } from "./list-params";
 
 export interface CompanyOffersFilter {
-  /** null — вкладка «Все предложения». */
+  /** null — вкладка «Все проекты». */
   status: OfferStatus | null;
   page: number;
 }

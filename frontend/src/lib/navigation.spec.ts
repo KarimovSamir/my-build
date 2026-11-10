@@ -61,14 +61,14 @@ describe("isNavItemActive", () => {
     expect(isNavItemActive("/orders/new", "/orders", Role.CLIENT)).toBe(false);
   });
 
-  it("у компании на карточке заказа подсвечиваются «Мои предложения»", () => {
+  it("у компании на карточке заказа подсвечиваются «Мои проекты»", () => {
     // Раздела `/orders` в её меню нет, и без этой ветки на карточке заказа
     // не подсвечено вообще ничего.
     expect(isNavItemActive("/offers", ORDER, Role.COMPANY)).toBe(true);
     expect(isNavItemActive("/available", ORDER, Role.COMPANY)).toBe(false);
   });
 
-  it("у клиента «Мои предложения» не подсвечиваются нигде", () => {
+  it("у клиента «Мои проекты» не подсвечиваются нигде", () => {
     // Раздел чужой: правило про карточку заказа действует только для компании.
     expect(isNavItemActive("/offers", ORDER, Role.CLIENT)).toBe(false);
   });

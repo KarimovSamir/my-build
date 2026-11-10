@@ -1,0 +1,16 @@
+# Static Cloudflare Pages responses; no Functions or Next server required.
+# Inline scripts are required by Next's exported hydration data and next-themes.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; frame-ancestors 'none'; worker-src 'none'
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  X-Robots-Tag: noindex, nofollow
+
+# Only content-hashed Next assets receive long-lived browser caching.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/demo/*
+  Content-Disposition: attachment
