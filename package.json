@@ -32,7 +32,7 @@
     "build:vercel": "node scripts/verify-vercel-config.mjs && npm run build:demo && npm run verify:demo",
     "preview:demo": "node scripts/preview-demo.mjs",
     "verify:demo": "node scripts/audit-demo.mjs && node scripts/verify-demo.mjs",
-    "test:demo-tools": "node --test scripts/demo-headers.test.mjs",
+    "test:demo-tools": "node --test scripts/demo-headers.test.mjs scripts/vercel-headers.test.mjs",
     "verify:demo:clean": "node scripts/verify-clean-demo.mjs",
     "package:demo": "npm run build:demo && npm run verify:demo && powershell -NoProfile -File scripts/package-demo.ps1",
     "install:demo": "npm ci --ignore-scripts --include=dev --workspace shared --workspace frontend --include-workspace-root"
